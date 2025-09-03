@@ -6,9 +6,12 @@ A Jupyter-based project for analyzing and backtesting forex trading data, starti
 
 ```
 forex-backtester/
-├── old/                     # Legacy backtesting implementation
+├── old/                     # Legacy backtesting implementation with my 900+ trades
 │   ├── eurusd.csv           # Sample EUR/USD exchange rate data
 │   └── lab.ipynb            # Previous analysis notebook
+├── new/                     # Enhanced backtesting with the more detailed trading data
+│   ├── eurusd.csv           # EUR/USD data with extended analysis columns
+│   └── lab.ipynb            # Current analysis notebook
 ├── pyproject.toml           # Poetry configuration and dependencies
 ├── Makefile                 # Build automation commands
 └── README.md                # This file
