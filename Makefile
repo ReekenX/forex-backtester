@@ -1,7 +1,7 @@
 .PHONY: run install clean
 
 run:
-	poetry run jupyter notebook forex_analysis.ipynb
+	poetry run jupyter notebook old_backtesting.ipynb
 
 install:
 	poetry install
