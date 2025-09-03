@@ -47,27 +47,32 @@ poetry run jupyter lab
 
 ### Data Format
 
-The CSV data files follow this structure:
+The project uses two data formats for trading analysis:
+
+#### Legacy Format (old/eurusd.csv)
 - **Date**: Trading date (YYYY-MM-DD format)
-- **Open**: Opening price
-- **High**: Highest price during the period
-- **Low**: Lowest price during the period
-- **Close**: Closing price
-- **Volume**: Trading volume
+- **Trade**: Trade identifier (e.g., #1, #2)
+- **Direction**: Trade direction (Buy/Sell)
+- **EMA**: EMA signal (Buy/Sell)
+- **SL**: Stop Loss value
+- **Pullback**: Pullback value
+- **TP**: Take Profit value
+- **BOS/CH**: Market structure type (BOS - Break of Structure / CH - Change of Character)
 
-Example:
-```csv
-Date,Open,High,Low,Close,Volume
-2024-01-02,1.1034,1.1089,1.1028,1.1085,45230
-```
+#### Enhanced Format (new/eurusd.csv)
+Includes all legacy fields plus additional analysis columns:
+- **Weekday**: Day of the week (eg. Monday)
+- **Hour**: Trading hour
+- **30M Leg**: 30-minute timeframe leg analysis ("Above H" and "Above L" – buy trend, "Below H" and "Below L" – sell trend)
+- **HH Until News**: Time until news event in hours
+- **News Event**: Associated news event title (eg. PMI)
 
-## Features
+#### Rules For Backtesting
 
-The project is being restructured to provide enhanced backtesting capabilities. The legacy implementation in the `old/` folder includes:
-- CSV data loading using pandas
-- Data table display
-- Summary statistics
-- Data type information
+- **Trade**: Trade identifier is useless, do not use it for any backtesting
+- **Pullback**: Pullback value can't be filtered because it is unknown until trade has been executed. Pullback value means that once trade signal is received, SL value is recorded, but how big the pullback will be - is unknown. If Pullback matches SL value - it means that trade was instant loss. If Pullback value is less than SL value, it means that at some point in time, before reaching TP - this entry got "discount".
+- **TP**: Take Profit value is unknown, do not filter strategy on that
+- **News Event**: Associated news event titles list could be long, so just filter for blank value (means that there are no event near by) and any value (means that there is a news incoming) 
 
 ## Dependencies
 
@@ -80,13 +85,3 @@ The project is being restructured to provide enhanced backtesting capabilities. 
 - `make run`: Launch JupyterLab environment
 - `make install`: Install all Poetry dependencies
 - `make clean`: Remove Python cache files and Jupyter checkpoints
-
-## Future Enhancements
-
-This project can be extended with:
-- Technical indicators calculation
-- Trading strategy backtesting
-- Performance metrics and reporting
-- Data visualization with matplotlib/plotly
-- Multiple currency pair support
-- Real-time data integration
