@@ -1,0 +1,18 @@
+Date,Trade,Weekday,Hour,Direction,EMA,SL,Pullback,TP,BOS/CH,"30M
+Leg","HH Until
+News","News
+Event"
+2025-09-01,#1,Monday,10,Buy,Buy,3.4,3.4,0,CH,Above H,,
+2025-09-01,#2,Monday,10,Sell,Buy,5.7,5.7,0,BOS,Above H,,
+2025-09-01,#3,Monday,11,Buy,Buy,5.1,4.4,15,CH,Above H,,
+2025-09-01,#4,Monday,13,Buy,Sell,2.6,0.5,10,BOS,Below H,,
+2025-09-01,#5,Monday,15,Sell,Sell,1.4,1.2,8,BOS,Below L,,
+2025-09-01,#6,Monday,16,Sell,Sell,2.0,2.0,0,CH,Below L,,
+2025-09-01,#7,Monday,16,Buy,Sell,6.2,6.2,0,CH,Below L,,
+2025-09-01,#8,Monday,18,Sell,Sell,2.0,0.9,8,BOS,Below L,,
+2025-09-01,#9,Monday,18,Sell,Sell,4.0,1.5,5,BOS,Below L,,
+2025-09-01,#10,Monday,18,Sell,Sell,2.6,0.0,4,BOS,Below L,,
+2025-09-02,#1,Tuesday,11,Sell,Sell,2.3,2.3,0,BOS,Below L,6,PMI
+2025-09-02,#2,Tuesday,11,Buy,Sell,11.1,11.1,0,CH,Below L,6,PMI
+2025-09-02,#3,Tuesday,15,Sell,Buy,7.0,4.2,35,CH,Below L,2,PMI
+2025-09-02,#4,Tuesday,16,Sell,Buy,8.5,8.5,0,BOS,Above L,1,PMI
