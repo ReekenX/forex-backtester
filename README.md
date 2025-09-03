@@ -6,12 +6,12 @@ A Jupyter-based project for analyzing and backtesting forex trading data, starti
 
 ```
 forex-backtester/
-├── data/                      # Directory containing forex data files
-│   └── eurusd.csv            # Sample EUR/USD exchange rate data
-├── forex_analysis.ipynb      # Main Jupyter notebook for data analysis
-├── pyproject.toml            # Poetry configuration and dependencies
-├── Makefile                  # Build automation commands
-└── README.md                 # This file
+├── old/                     # Legacy backtesting implementation
+│   ├── eurusd.csv           # Sample EUR/USD exchange rate data
+│   └── lab.ipynb            # Previous analysis notebook
+├── pyproject.toml           # Poetry configuration and dependencies
+├── Makefile                 # Build automation commands
+└── README.md                # This file
 ```
 
 ## Requirements
@@ -33,26 +33,21 @@ forex-backtester/
 
 ## Usage
 
-### Running the Jupyter Notebook
+### Running Jupyter
 
-The easiest way to start the notebook:
+Launch JupyterLab to work with notebooks:
 ```bash
 make run
 ```
 
-Alternatively, you can use Poetry directly:
-```bash
-poetry run jupyter notebook forex_analysis.ipynb
-```
-
-Or launch JupyterLab for a more feature-rich environment:
+Or use Poetry directly:
 ```bash
 poetry run jupyter lab
 ```
 
 ### Data Format
 
-The CSV data files in the `data/` directory follow this structure:
+The CSV data files follow this structure:
 - **Date**: Trading date (YYYY-MM-DD format)
 - **Open**: Opening price
 - **High**: Highest price during the period
@@ -68,7 +63,7 @@ Date,Open,High,Low,Close,Volume
 
 ## Features
 
-The current notebook provides:
+The project is being restructured to provide enhanced backtesting capabilities. The legacy implementation in the `old/` folder includes:
 - CSV data loading using pandas
 - Data table display
 - Summary statistics
@@ -82,7 +77,7 @@ The current notebook provides:
 
 ## Makefile Commands
 
-- `make run`: Launch Jupyter notebook with the main analysis file
+- `make run`: Launch JupyterLab environment
 - `make install`: Install all Poetry dependencies
 - `make clean`: Remove Python cache files and Jupyter checkpoints
 
