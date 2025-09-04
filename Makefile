@@ -1,7 +1,7 @@
 .PHONY: run install clean
 
 run:
-	poetry run jupyter notebook old/lab.ipynb
+	poetry run jupyter notebook new/lab.ipynb
 
 install:
 	poetry install
