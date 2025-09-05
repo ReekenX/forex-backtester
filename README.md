@@ -88,3 +88,16 @@ Includes all legacy fields plus additional analysis columns:
 - `make run`: Launch JupyterLab environment
 - `make install`: Install all Poetry dependencies
 - `make clean`: Remove Python cache files and Jupyter checkpoints
+
+### Commit Convention
+
+Use conventional commits for automatic versioning:
+- `feat:` - New feature (bumps minor version)
+- `fix:` - Bug fix (bumps patch version)
+- `chore:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:` - Other changes
+
+There is a hook to check for that automatically:
+
+```bash
+cp .git-pre-commit-hook .git/hooks/commit-msg
+```

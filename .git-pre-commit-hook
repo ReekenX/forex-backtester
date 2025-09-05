@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# Get the commit message from the file passed as argument
+COMMIT_MSG_FILE=$1
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Define the regex pattern for conventional commits
+PATTERN="^(feat|fix|chore|docs|style|refactor|perf|test):.+"
+
+# Check if the commit message matches the pattern
+if ! echo "$COMMIT_MSG" | grep -qE "$PATTERN"; then
+    echo "❌ Commit message does not follow conventional commit format!"
+    echo ""
+    echo "Valid format: <type>: <description>"
+    echo ""
+    echo "Allowed types:"
+    echo "  feat:     New feature (bumps minor version)"
+    echo "  fix:      Bug fix (bumps patch version)"
+    echo "  chore:    Other changes"
+    echo "  docs:     Documentation only changes"
+    echo "  style:    Code style changes (formatting, etc)"
+    echo "  refactor: Code refactoring"
+    echo "  perf:     Performance improvements"
+    echo "  test:     Adding or updating tests"
+    echo ""
+    echo "Your commit message: $COMMIT_MSG"
+    exit 1
+fi
+
+echo "✅ Commit message follows conventional commit format"
+exit 0
