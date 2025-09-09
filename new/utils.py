@@ -142,6 +142,61 @@ def display_profitable_strategies(strategy_results):
         print()  # Add spacing
 
 
+def analyze_pullback_profitability(df):
+    """
+    Analyze how pullback size affects trade profitability.
+    
+    Args:
+        df (pd.DataFrame): Trading data with Pullback, TP, and SL columns
+    
+    Returns:
+        pd.DataFrame: Table showing profitability statistics for different pullback sizes
+    """
+    import pandas as pd
+    
+    # Define pullback thresholds to analyze
+    pullback_thresholds = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+    
+    results = []
+    
+    for threshold in pullback_thresholds:
+        # Filter trades with pullback >= threshold
+        filtered_df = df[df['Pullback'] >= threshold]
+        
+        # Count total trades
+        total_trades = len(filtered_df)
+        
+        # Count profitable trades (TP > SL)
+        profitable_trades = len(filtered_df[filtered_df['TP'] > filtered_df['SL']])
+        
+        # Calculate percentage
+        if total_trades > 0:
+            percentage = (profitable_trades / total_trades) * 100
+        else:
+            percentage = 0
+        
+        results.append({
+            'Pullback': f'{threshold} pip{"s" if threshold != 1 else ""}',
+            'All Trades': total_trades,
+            'Profitable Trades': profitable_trades,
+            'Percentage': f'{percentage:.1f}%'
+        })
+    
+    # Also add a row for all trades (no pullback filter)
+    all_trades = len(df)
+    all_profitable = len(df[df['TP'] > df['SL']])
+    all_percentage = (all_profitable / all_trades * 100) if all_trades > 0 else 0
+    
+    results.insert(0, {
+        'Pullback': 'All (No Filter)',
+        'All Trades': all_trades,
+        'Profitable Trades': all_profitable,
+        'Percentage': f'{all_percentage:.1f}%'
+    })
+    
+    return pd.DataFrame(results)
+
+
 def analyze_entry_timing(df):
     """
     Analyze different entry timing strategies and their success rates.
