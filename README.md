@@ -99,5 +99,5 @@ Use conventional commits for automatic versioning:
 There is a hook to check for that automatically:
 
 ```bash
-cp .git-pre-commit-hook .git/hooks/commit-msg
+ln -s $(realpath .git-hooks-commit-msg) .git/hooks/commit-msg
 ```
