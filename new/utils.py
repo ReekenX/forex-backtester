@@ -98,6 +98,48 @@ def calculate_profitable_trades(df):
     return df_results.sort_values('Value_num', ascending=False).drop(columns='Value_num').reset_index(drop=True)
 
 
+def display_profitable_strategies(strategy_results):
+    """
+    Display detailed results for all or selected strategies.
+    
+    Args:
+        strategy_results (dict): Dictionary of strategy performance DataFrames
+    """
+    from IPython.display import display, HTML
+    
+    # Filter for profitable strategies (positive outcome at 1:1 RRR)
+    profitable_strategies = []
+    for name, df in strategy_results.items():
+        outcome_str = df['1:1 RRR'].iloc[5]
+        outcome = int(outcome_str.replace('R', ''))
+        if outcome > 0:
+            profitable_strategies.append((name, df))
+    
+    display(HTML(f"<h2>💰 Profitable Strategies ({len(profitable_strategies)} of {len(strategy_results)})</h2>"))
+    strategies_to_display = profitable_strategies
+    
+    # Display each strategy's results
+    for strategy_name, summary_df in strategies_to_display:
+        # Style the DataFrame for better readability
+        styled_df = summary_df.style.set_properties(
+            subset=[strategy_name], 
+            **{'width': '250px', 'font-weight': 'bold'}
+        )
+        
+        # Highlight positive outcomes in green, negative in red
+        for col in ['1:1 RRR', '1:2 RRR', '1:3 RRR']:
+            outcome_str = summary_df[col].iloc[5]
+            outcome = int(outcome_str.replace('R', ''))
+            color = 'green' if outcome > 0 else 'red' if outcome < 0 else 'gray'
+            styled_df = styled_df.set_properties(
+                subset=[col],
+                **{'color': color if summary_df.index[5] == 'Outcome' else 'white'}
+            )
+        
+        display(styled_df)
+        print()  # Add spacing
+
+
 def analyze_entry_timing(df):
     """
     Analyze different entry timing strategies and their success rates.
@@ -151,7 +193,7 @@ def analyze_entry_timing(df):
         sl_col = method_config['sl_col']
         
         # With Extra calculation
-        with_extra_filter = ((df['SL'] != df['Pullback']) | (df['Extra'] != 0))
+        with_extra_filter = ((df['SL'] != df['Pullback']) | ((df['Extra'] != 0) & (df['Extra'] < 1)))
         with_extra_profitable = df[with_extra_filter & (df['TP'] > df[sl_col])]
         
         # 1:3 RRR with Extra
@@ -159,13 +201,13 @@ def analyze_entry_timing(df):
         
         results.append({
             'Idea': method_name,
-            'Count': f"{wins}W - {losses}L",
-            'Percentage': percentage(wins, total_trades),
+            'Notation': f"{wins}W - {losses}L",
+            'Win Rate': percentage(wins, total_trades),
             'With Extra': percentage(len(with_extra_profitable), total_trades),
-            'Extra & 1:3 RRR': percentage(len(rrr3_with_extra), total_trades)
+            'With Extra & 1:3 RRR': percentage(len(rrr3_with_extra), total_trades)
         })
     
     # Convert to DataFrame and sort by win percentage
     df_results = pd.DataFrame(results)
-    df_results['Value_num'] = df_results['Percentage'].str.rstrip('%').astype(float)
+    df_results['Value_num'] = df_results['Win Rate'].str.rstrip('%').astype(float)
     return df_results.sort_values('Value_num', ascending=False).drop(columns='Value_num').reset_index(drop=True)
