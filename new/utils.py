@@ -213,7 +213,7 @@ def analyze_entry_timing(df):
     return df_results.sort_values('Value_num', ascending=False).drop(columns='Value_num').reset_index(drop=True)
 
 
-def calculate_rrr_stats(data_df, strategy_name):
+def calculate_rrr_stats(data_df, strategy_name, sl_column='SL'):
     """
     Calculate comprehensive Risk-Reward Ratio statistics for a trading strategy.
     
@@ -224,6 +224,11 @@ def calculate_rrr_stats(data_df, strategy_name):
     Args:
         data_df (pd.DataFrame): Filtered DataFrame containing trades for this strategy
         strategy_name (str): Name of the strategy for labeling
+        sl_column (str): Column to use for stop loss calculations. Options:
+            - 'SL': Default 1M confirmation candle stop loss
+            - 'SL 5M CC': 5M confirmation candle stop loss
+            - 'SL 5M Stop': 5M stop entry stop loss
+            - 'SL Breakout': 5M breakout stop loss
     
     Returns:
         pd.DataFrame: Statistics table with the following metrics:
@@ -232,6 +237,7 @@ def calculate_rrr_stats(data_df, strategy_name):
             - Win Rate: Percentage of winning trades
             - Edge: Win rate minus breakeven rate for the RRR
             - Outcome: Net result in R-multiples (profit factor)
+            - Entry: Entry method used for the strategy
     """
     total_trades = len(data_df)
     
@@ -248,7 +254,7 @@ def calculate_rrr_stats(data_df, strategy_name):
     # Handle empty strategy results
     if total_trades == 0:
         summary_data = {
-            strategy_name: ['Total trades', 'Wins', 'Losses', 'Win Rate', 'Edge', 'Outcome']
+            strategy_name: ['Total trades', 'Wins', 'Losses', 'Win Rate', 'Edge', 'Outcome', 'Entry']
         }
         for ratio, _ in rrr_configs:
             summary_data[f'1:{ratio} RRR'] = [0, 0, 0, '0.0%', '0.0%', '0R']
@@ -256,12 +262,19 @@ def calculate_rrr_stats(data_df, strategy_name):
     
     # Calculate statistics for each RRR level
     summary_data = {
-        strategy_name: ['Total trades', 'Wins', 'Losses', 'Win Rate', 'Edge', 'Outcome']
+        strategy_name: ['Total trades', 'Wins', 'Losses', 'Win Rate', 'Edge', 'Outcome', 'Entry']
     }
+    entry_names = {
+        'SL': '1M CC',
+        'SL 5M CC': '5M CC',
+        'SL 5M Stop': '5M Stop',
+        'SL Breakout': '5M Breakout'
+    }
+    entry_str = entry_names[sl_column]
     
     for ratio, breakeven_rate in rrr_configs:
         # Find profitable trades for this RRR
-        profitable = data_df[data_df['TP'] > ratio * data_df['SL']]
+        profitable = data_df[data_df['TP'] > ratio * data_df[sl_column]]
         wins = len(profitable)
         losses = total_trades - wins
         win_rate = (wins / total_trades) * 100
@@ -279,7 +292,8 @@ def calculate_rrr_stats(data_df, strategy_name):
             losses,
             f"{win_rate:.1f}%",
             f"{edge:.1f}%",
-            f"{outcome}R"
+            f"{outcome}R",
+            entry_str
         ]
     
     return pd.DataFrame(summary_data)
@@ -370,11 +384,9 @@ def create_strategy_library():
     # Day of week analysis
     # weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
     # for day in weekdays:
-    #     strategy_configs.append(
-    #         (f"{day} Only", 
-    #          lambda df, d=day: df[df['Weekday'] == d], 
-    #          f"Trades on {day}")
-    #     )
+        # strategy_configs.append(
+        #     (f"{day} Only", lambda df, d=day: df[df['Weekday'] == d], f"Trades on {day}")
+        # )
     
     # ========== HIGHER TIMEFRAME TREND ==========
     # 30-minute timeframe trend alignment
@@ -413,21 +425,23 @@ def evaluate_all_strategies(df, strategies):
         dict: Dictionary mapping strategy names to their performance DataFrames
     """
     strategy_results = {}
+    sl_columns = ['SL', 'SL 5M CC', 'SL 5M Stop', 'SL Breakout']
     
-    for strategy in strategies:
-        # Apply strategy filter
-        filtered_df = strategy.apply(df)
-        
-        # Calculate RRR statistics
-        summary_df = calculate_rrr_stats(filtered_df, strategy.name)
-        
-        # Store results
-        strategy_results[strategy.name] = summary_df
+    for sl_column in sl_columns:
+        for strategy in strategies:
+            # Apply strategy filter
+            filtered_df = strategy.apply(df)
+            
+            # Calculate RRR statistics
+            summary_df = calculate_rrr_stats(filtered_df, strategy.name, sl_column)
+            
+            # Store results
+            strategy_results[strategy.name] = summary_df
     
     return strategy_results
 
 
-def get_top_strategies(strategy_results, rrr_column, top_n=5):
+def get_top_strategies(strategy_results, rrr_column):
     """
     Extract top performing strategies for a specific RRR.
     
@@ -449,12 +463,14 @@ def get_top_strategies(strategy_results, rrr_column, top_n=5):
         win_rate = df[rrr_column].iloc[3]
         edge = df[rrr_column].iloc[4]
         outcome_str = df[rrr_column].iloc[5]
+        entry_str = df[rrr_column].iloc[6]
         
         # Parse outcome value for sorting
         outcome = int(outcome_str.replace('R', ''))
         
         strategy_performance.append({
             'Strategy': strategy_name,
+            'Entry': entry_str,
             'Trades': total_trades,
             'Wins': wins,
             'Losses': losses,
@@ -469,7 +485,7 @@ def get_top_strategies(strategy_results, rrr_column, top_n=5):
         strategy_performance, 
         key=lambda x: x['outcome_value'], 
         reverse=True
-    )[:top_n]
+    )
     
     # Remove sorting key from display
     for strat in top_strategies:
