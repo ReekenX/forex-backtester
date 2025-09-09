@@ -60,16 +60,15 @@ def calculate_profitable_trades(df):
     # Define trading strategies with their filters
     strategies = {
         'Total': lambda d: d[(d['SL'] != d['Pullback'])],
-        'With Extra': lambda d: d[((d['SL'] != d['Pullback']) | 
-                                  ((d['SL'] == d['Pullback']) & (d['Extra'] > 0)))],
-        'With EMA': lambda d: d[(d['SL'] != d['Pullback']) & (d['EMA'] == d['Direction'])],
-        'Against EMA': lambda d: d[(d['SL'] != d['Pullback']) & (d['EMA'] != d['Direction'])],
+        'With Extra 1 pip': lambda d: d[((d['SL'] != d['Pullback']) | ((d['SL'] == d['Pullback']) & (d['Extra'] < 1)))],
+        'With Extra 2 pips': lambda d: d[((d['SL'] != d['Pullback']) | ((d['SL'] == d['Pullback']) & (d['Extra'] < 2)))],
+        'With Extra 3 pips': lambda d: d[((d['SL'] != d['Pullback']) | ((d['SL'] == d['Pullback']) & (d['Extra'] < 3)))],
+        'With EMA Direction': lambda d: d[(d['SL'] != d['Pullback']) & (d['EMA'] == d['Direction'])],
+        'Against EMA Direction': lambda d: d[(d['SL'] != d['Pullback']) & (d['EMA'] != d['Direction'])],
         'Just BOS Trades': lambda d: d[(d['SL'] != d['Pullback']) & (d['BOS/CH'] == 'BOS')],
         'Just CH Trades': lambda d: d[(d['SL'] != d['Pullback']) & (d['BOS/CH'] == 'CH')],
-        'With EMA + BOS': lambda d: d[(d['SL'] != d['Pullback']) & 
-                                      (d['EMA'] == d['Direction']) & (d['BOS/CH'] == 'BOS')],
-        'With EMA + CH': lambda d: d[(d['SL'] != d['Pullback']) & 
-                                     (d['EMA'] == d['Direction']) & (d['BOS/CH'] == 'CH')],
+        'With EMA + BOS': lambda d: d[(d['SL'] != d['Pullback']) & (d['EMA'] == d['Direction']) & (d['BOS/CH'] == 'BOS')],
+        'With EMA + CH': lambda d: d[(d['SL'] != d['Pullback']) & (d['EMA'] == d['Direction']) & (d['BOS/CH'] == 'CH')],
     }
     
     results = {'Data': list(strategies.keys())}
@@ -80,9 +79,12 @@ def calculate_profitable_trades(df):
         for strategy_name, filter_func in strategies.items():
             filtered = filter_func(df)
             
-            if strategy_name == 'With Extra':
-                # Special handling for 'With Extra' strategy
-                profitable = filtered[filtered['TP'] >= (filtered['SL'] + filtered['Extra'].fillna(0)) * rrr]
+            if strategy_name == 'With Extra 1 pip':
+                profitable = filtered[filtered['TP'] >= (filtered['SL'] + 1) * rrr]
+            elif strategy_name == 'With Extra 2 pips':
+                profitable = filtered[filtered['TP'] >= (filtered['SL'] + 2) * rrr]
+            elif strategy_name == 'With Extra 3 pips':
+                profitable = filtered[filtered['TP'] >= (filtered['SL'] + 3) * rrr]
             else:
                 profitable = filtered[filtered['TP'] >= filtered['SL'] * rrr]
             
