@@ -211,3 +211,268 @@ def analyze_entry_timing(df):
     df_results = pd.DataFrame(results)
     df_results['Value_num'] = df_results['Win Rate'].str.rstrip('%').astype(float)
     return df_results.sort_values('Value_num', ascending=False).drop(columns='Value_num').reset_index(drop=True)
+
+
+def calculate_rrr_stats(data_df, strategy_name):
+    """
+    Calculate comprehensive Risk-Reward Ratio statistics for a trading strategy.
+    
+    This function evaluates a strategy's performance across different RRR targets
+    and calculates key metrics including win rate, edge over breakeven, and
+    expected outcome in R-multiples.
+    
+    Args:
+        data_df (pd.DataFrame): Filtered DataFrame containing trades for this strategy
+        strategy_name (str): Name of the strategy for labeling
+    
+    Returns:
+        pd.DataFrame: Statistics table with the following metrics:
+            - Total trades: Number of trades in the strategy
+            - Wins/Losses: Count of profitable vs unprofitable trades
+            - Win Rate: Percentage of winning trades
+            - Edge: Win rate minus breakeven rate for the RRR
+            - Outcome: Net result in R-multiples (profit factor)
+    """
+    total_trades = len(data_df)
+    
+    # RRR configurations with their breakeven win rates
+    # For 1:1 RRR, you need 50% wins to break even
+    # For 1:2 RRR, you need 33.3% wins to break even
+    # For 1:3 RRR, you need 25% wins to break even
+    rrr_configs = [
+        (1, 50.0),   # 1:1 RRR
+        (2, 33.3),   # 1:2 RRR
+        (3, 25.0),   # 1:3 RRR
+    ]
+    
+    # Handle empty strategy results
+    if total_trades == 0:
+        summary_data = {
+            strategy_name: ['Total trades', 'Wins', 'Losses', 'Win Rate', 'Edge', 'Outcome']
+        }
+        for ratio, _ in rrr_configs:
+            summary_data[f'1:{ratio} RRR'] = [0, 0, 0, '0.0%', '0.0%', '0R']
+        return pd.DataFrame(summary_data)
+    
+    # Calculate statistics for each RRR level
+    summary_data = {
+        strategy_name: ['Total trades', 'Wins', 'Losses', 'Win Rate', 'Edge', 'Outcome']
+    }
+    
+    for ratio, breakeven_rate in rrr_configs:
+        # Find profitable trades for this RRR
+        profitable = data_df[data_df['TP'] > ratio * data_df['SL']]
+        wins = len(profitable)
+        losses = total_trades - wins
+        win_rate = (wins / total_trades) * 100
+        
+        # Edge is how much better we perform than breakeven
+        edge = win_rate - breakeven_rate
+        
+        # Calculate expected outcome in R-multiples
+        # Winners make 'ratio' R, losers lose 1R
+        outcome = (wins * ratio) - losses
+        
+        summary_data[f'1:{ratio} RRR'] = [
+            total_trades,
+            wins,
+            losses,
+            f"{win_rate:.1f}%",
+            f"{edge:.1f}%",
+            f"{outcome}R"
+        ]
+    
+    return pd.DataFrame(summary_data)
+
+
+class Strategy:
+    """
+    Encapsulates a trading strategy with its filter logic and metadata.
+    
+    Attributes:
+        name (str): Strategy identifier
+        filter_func (callable): Function that filters trades based on strategy rules
+        description (str): Human-readable description of the strategy
+    """
+    
+    def __init__(self, name, filter_func, description=""):
+        """
+        Initialize a trading strategy.
+        
+        Args:
+            name (str): Strategy name
+            filter_func (callable): Lambda or function that takes df and returns filtered df
+            description (str): Optional description of the strategy
+        """
+        self.name = name
+        self.filter_func = filter_func
+        self.description = description
+    
+    def apply(self, df):
+        """
+        Apply the strategy filter to a dataframe of trades.
+        
+        Args:
+            df (pd.DataFrame): Trading data
+            
+        Returns:
+            pd.DataFrame: Filtered trades matching strategy criteria
+        """
+        return self.filter_func(df)
+
+
+def create_strategy_library():
+    """
+    Create a comprehensive library of trading strategies for backtesting.
+    
+    This function generates strategies across multiple categories:
+    1. Technical Indicators (EMA, BOS/CH)
+    2. Risk Management (Stop Loss levels)
+    3. Market Structure (Trend alignment)
+    4. Time-based (Weekdays, News events)
+    5. Combined filters (Multi-factor strategies)
+    
+    Returns:
+        list: List of Strategy objects ready for backtesting
+    """
+    strategy_configs = []
+    
+    # ========== TECHNICAL INDICATOR STRATEGIES ==========
+    # EMA (Exponential Moving Average) based strategies
+    strategy_configs.extend([
+        ("EMA + Trade Direction", lambda df: df[df['EMA'] == df['Direction']], "Trade with EMA trend"),
+        ("EMA + Opposite Trade Direction", lambda df: df[df['EMA'] != df['Direction']], "Counter-trend trades"),
+        ("EMA + BOS", lambda df: df[(df['EMA'] == df['Direction']) & (df['BOS/CH'] == 'BOS')], "Trend + Break of Structure"),
+        ("EMA + CH", lambda df: df[(df['EMA'] == df['Direction']) & (df['BOS/CH'] == 'CH')], "Trend + Change of Character"),
+    ])
+    
+    # Market Structure strategies
+    strategy_configs.extend([
+        ("BOS", lambda df: df[df['BOS/CH'] == 'BOS'], "Break of Structure trades only"),
+        ("CH", lambda df: df[df['BOS/CH'] == 'CH'], "Change of Character trades only"),
+    ])
+    
+    # ========== RISK MANAGEMENT STRATEGIES ==========
+    # Stop Loss size filtering
+    strategy_configs.extend([
+        ("Conservative: SL <= 2 pips", lambda df: df[df['SL'] <= 2], "Very tight stop losses"),
+        ("Moderate Risk: SL 3-6 pips", lambda df: df[(df['SL'] >= 3) & (df['SL'] <= 6)], "Medium stop losses"),
+        ("Aggressive: SL >= 7 pips", lambda df: df[df['SL'] >= 7], "Wide stop losses"),
+    ])
+    
+    # Risk-adjusted market structure combinations
+    strategy_configs.extend([
+        ("BOS + Conservative SL", lambda df: df[(df['BOS/CH'] == 'BOS') & (df['SL'] <= 2)], "BOS with tight stops"),
+        ("BOS + Moderate SL", lambda df: df[(df['BOS/CH'] == 'BOS') & (df['SL'] >= 3) & (df['SL'] <= 6)], "BOS with medium stops"),
+    ])
+    
+    # ========== TIME-BASED STRATEGIES ==========
+    # Day of week analysis
+    # weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    # for day in weekdays:
+    #     strategy_configs.append(
+    #         (f"{day} Only", 
+    #          lambda df, d=day: df[df['Weekday'] == d], 
+    #          f"Trades on {day}")
+    #     )
+    
+    # ========== HIGHER TIMEFRAME TREND ==========
+    # 30-minute timeframe trend alignment
+    strategy_configs.extend([
+        ("With 30M Trend", lambda df: df[(df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))], "Higher timeframe uptrend"),
+    ])
+    
+    # ========== NEWS EVENT STRATEGIES ==========
+    strategy_configs.extend([
+        ("No News Events", lambda df: df[df['News Event'].isna()], "Avoid news volatility"),
+        ("News Event Present", lambda df: df[~df['News Event'].isna()], "Trade during news"),
+        ("News in 2+ Hours", lambda df: df[(~df['News Event'].isna()) & (df['Hours Until News'] >= 2)], "Trade before news impact"),
+    ])
+    
+    # ========== COMBINED MULTI-FACTOR STRATEGIES ==========
+    # These combine multiple indicators for potentially higher probability setups
+    # strategy_configs.extend([
+    #     ("EMA + BOS + Low Risk", lambda df: df[(df['EMA'] == df['Direction']) & (df['BOS/CH'] == 'BOS') & (df['SL'] <= 3)], "Triple confirmation setup"),
+    #     ("BOS + Bullish 30M + No News", lambda df: df[(df['BOS/CH'] == 'BOS') & (df['30M Leg'].isin(['Above H', 'Above L'])) & (df['News Event'].isna())], "Clean trend continuation"),
+    #     ("Strong Alignment + EMA", lambda df: df[((df['30M Leg'] == 'Above H') & (df['Direction'] == 'Buy') & (df['EMA'] == 'Buy')) | ((df['30M Leg'] == 'Below L') & (df['Direction'] == 'Sell') & (df['EMA'] == 'Sell'))], "Full trend confluence"),
+    # ])
+    
+    # Convert configurations to Strategy objects
+    return [Strategy(name, func, desc) for name, func, desc in strategy_configs]
+
+
+def evaluate_all_strategies(df, strategies):
+    """
+    Run backtesting on all strategies and compile results.
+    
+    Args:
+        df (pd.DataFrame): Trading data
+        strategies (list): List of Strategy objects
+        
+    Returns:
+        dict: Dictionary mapping strategy names to their performance DataFrames
+    """
+    strategy_results = {}
+    
+    for strategy in strategies:
+        # Apply strategy filter
+        filtered_df = strategy.apply(df)
+        
+        # Calculate RRR statistics
+        summary_df = calculate_rrr_stats(filtered_df, strategy.name)
+        
+        # Store results
+        strategy_results[strategy.name] = summary_df
+    
+    return strategy_results
+
+
+def get_top_strategies(strategy_results, rrr_column, top_n=5):
+    """
+    Extract top performing strategies for a specific RRR.
+    
+    Args:
+        strategy_results (dict): Dictionary of strategy results
+        rrr_column (str): Column name for RRR (e.g., '1:2 RRR')
+        top_n (int): Number of top strategies to return
+        
+    Returns:
+        pd.DataFrame: Top strategies ranked by outcome
+    """
+    strategy_performance = []
+    
+    for strategy_name, df in strategy_results.items():
+        # Extract performance metrics
+        total_trades = df[rrr_column].iloc[0]
+        wins = df[rrr_column].iloc[1]
+        losses = df[rrr_column].iloc[2]
+        win_rate = df[rrr_column].iloc[3]
+        edge = df[rrr_column].iloc[4]
+        outcome_str = df[rrr_column].iloc[5]
+        
+        # Parse outcome value for sorting
+        outcome = int(outcome_str.replace('R', ''))
+        
+        strategy_performance.append({
+            'Strategy': strategy_name,
+            'Trades': total_trades,
+            'Wins': wins,
+            'Losses': losses,
+            'Win Rate': win_rate,
+            'Edge': edge,
+            'Outcome': outcome_str,
+            'outcome_value': outcome
+        })
+    
+    # Sort by outcome and get top N
+    top_strategies = sorted(
+        strategy_performance, 
+        key=lambda x: x['outcome_value'], 
+        reverse=True
+    )[:top_n]
+    
+    # Remove sorting key from display
+    for strat in top_strategies:
+        del strat['outcome_value']
+    
+    return pd.DataFrame(top_strategies)
