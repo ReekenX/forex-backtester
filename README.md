@@ -91,13 +91,25 @@ Includes all legacy fields plus additional analysis columns:
 
 ### Commit Convention
 
-Use conventional commits for automatic versioning:
-- `feat:` - New feature (bumps minor version)
-- `fix:` - Bug fix (bumps patch version)
-- `chore:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:` - Other changes
+Use conventional commits with the following types:
+- `feat:` - New feature
+- `fix:` - Bug fix
+- `chore:` - Other changes
+- `docs:` - Documentation only changes
+- `style:` - Code style changes (formatting, etc)
+- `refactor:` - Code refactoring
+- `perf:` - Performance improvements
+- `test:` - Adding or updating tests
 
 There is a hook to check for that automatically:
 
 ```bash
 ln -s $(realpath .git-hooks-commit-msg) .git/hooks/commit-msg
 ```
+
+Examples of good commit messages:
+
+- fix: commit msg hook not called
+- feat: add trading data with 100 trades
+- refactor: cleanup codebase and add code comments
+- fix: nan values in the CSV causes some formulas to crash
