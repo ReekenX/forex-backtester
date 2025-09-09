@@ -475,7 +475,7 @@ def get_top_strategies(strategy_results, rrr_column):
         outcome = int(outcome_str.replace('R', ''))
         
         strategy_performance.append({
-            'Strategy': strategy_name,
+            'Strategy': strategy_name.split('[')[0].strip(),
             'Entry': entry_str,
             'Trades': total_trades,
             'Wins': wins,
