@@ -486,9 +486,15 @@ def get_top_strategies(strategy_results, rrr_column):
             'outcome_value': outcome
         })
     
+    # Filter out strategies with negative Edge
+    filtered_strategies = [
+        strat for strat in strategy_performance 
+        if not strat['Edge'].startswith('-')
+    ]
+    
     # Sort by outcome and get top N
     top_strategies = sorted(
-        strategy_performance, 
+        filtered_strategies, 
         key=lambda x: x['outcome_value'], 
         reverse=True
     )
