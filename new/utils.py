@@ -426,6 +426,12 @@ def evaluate_all_strategies(df, strategies):
     """
     strategy_results = {}
     sl_columns = ['SL', 'SL 5M CC', 'SL 5M Stop', 'SL Breakout']
+    entry_names = {
+        'SL': '1M CC',
+        'SL 5M CC': '5M CC',
+        'SL 5M Stop': '5M Stop',
+        'SL Breakout': '5M Breakout'
+    }
     
     for sl_column in sl_columns:
         for strategy in strategies:
@@ -436,7 +442,7 @@ def evaluate_all_strategies(df, strategies):
             summary_df = calculate_rrr_stats(filtered_df, strategy.name, sl_column)
             
             # Store results
-            strategy_results[strategy.name] = summary_df
+            strategy_results[strategy.name + '[' + entry_names[sl_column] + ']'] = summary_df
     
     return strategy_results
 
