@@ -121,8 +121,10 @@ def display_profitable_strategies(strategy_results):
     # Display each strategy's results
     for strategy_name, summary_df in strategies_to_display:
         # Style the DataFrame for better readability
+        # Use the first column of the DataFrame (which contains the strategy name)
+        first_column = summary_df.columns[0]
         styled_df = summary_df.style.set_properties(
-            subset=[strategy_name], 
+            subset=[first_column], 
             **{'width': '250px', 'font-weight': 'bold'}
         )
         
