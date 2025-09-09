@@ -449,6 +449,40 @@ def create_strategy_library():
     # 30-minute timeframe trend alignment
     strategy_configs.extend([
         ("With 30M Trend", lambda df: df[(df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))], "Higher timeframe uptrend"),
+        
+        # 30M Trend + Technical Indicators
+        ("30M Trend + EMA", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['EMA'] == df['Direction'])], "30M trend with EMA confirmation"),
+        ("30M Trend + BOS", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['BOS/CH'] == 'BOS')], "30M trend with Break of Structure"),
+        ("30M Trend + CH", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['BOS/CH'] == 'CH')], "30M trend with Change of Character"),
+        ("30M Trend + EMA + BOS", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['EMA'] == df['Direction']) & (df['BOS/CH'] == 'BOS')], "Triple confirmation: 30M + EMA + BOS"),
+        ("30M Trend + EMA + CH", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['EMA'] == df['Direction']) & (df['BOS/CH'] == 'CH')], "Triple confirmation: 30M + EMA + CH"),
+        
+        # 30M Trend + Risk Management (Stop Loss Filters)
+        ("30M Trend + SL < 10 pips", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['SL'] < 10)], "30M trend excluding large stops"),
+        ("30M Trend + SL < 15 pips", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['SL'] < 15)], "30M trend excluding very large stops"),
+        ("30M Trend + SL > 3 pips", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['SL'] > 3)], "30M trend excluding tiny stops"),
+        ("30M Trend + SL > 5 pips", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['SL'] > 5)], "30M trend excluding small stops"),
+        ("30M Trend + 3 < SL < 10", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['SL'] > 3) & (df['SL'] < 10)], "30M trend with medium stops only"),
+        ("30M Trend + 5 < SL < 15", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['SL'] > 5) & (df['SL'] < 15)], "30M trend with moderate stops"),
+        
+        # Complex Multi-Factor with 30M Trend
+        ("30M Trend + BOS + SL < 10", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['BOS/CH'] == 'BOS') & (df['SL'] < 10)], "30M + BOS with risk control"),
+        ("30M Trend + CH + SL < 10", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['BOS/CH'] == 'CH') & (df['SL'] < 10)], "30M + CH with risk control"),
+        ("30M Trend + EMA + SL < 10", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['EMA'] == df['Direction']) & (df['SL'] < 10)], "30M + EMA with risk control"),
+        ("30M Trend + EMA + BOS + SL < 10", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['EMA'] == df['Direction']) & (df['BOS/CH'] == 'BOS') & (df['SL'] < 10)], "Full confluence with risk limit"),
+        
+        # 30M Trend + Pullback Analysis
+        ("30M Trend + Pullback > 2", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['Pullback'] > 2)], "30M trend with decent pullback"),
+        ("30M Trend + Pullback > 3", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['Pullback'] > 3)], "30M trend with strong pullback"),
+        
+        # 30M Trend + News Filters
+        ("30M Trend + No News", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & df['News Event'].isna()], "30M trend avoiding news"),
+        ("30M Trend + News > 2hrs", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (~df['News Event'].isna()) & (df['Hours Until News'] >= 2)], "30M trend with safe news distance"),
+        
+        # Additional Combined Strategies
+        ("30M Trend + EMA + 3 < SL < 10", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['EMA'] == df['Direction']) & (df['SL'] > 3) & (df['SL'] < 10)], "30M + EMA with optimal stops"),
+        ("30M Trend + BOS + Pullback > 2", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['BOS/CH'] == 'BOS') & (df['Pullback'] > 2)], "30M + BOS with pullback filter"),
+        ("30M Trend + CH + No News", lambda df: df[((df['30M Leg'].isin(['Above H', 'Above L']) & (df['Direction'] == 'Buy')) | (df['30M Leg'].isin(['Below H', 'Below L']) & (df['Direction'] == 'Sell'))) & (df['BOS/CH'] == 'CH') & df['News Event'].isna()], "30M + CH in clean conditions")
     ])
     
     # ========== NEWS EVENT STRATEGIES ==========
@@ -559,5 +593,63 @@ def get_top_strategies(strategy_results, rrr_column):
     # Remove sorting key from display
     for strat in top_strategies:
         del strat['outcome_value']
+    
+    return pd.DataFrame(top_strategies)
+
+
+def get_top_strategies_by_edge(strategy_results, rrr_column):
+    """
+    Extract top performing strategies for a specific RRR, sorted by Edge.
+    
+    Args:
+        strategy_results (dict): Dictionary of strategy results
+        rrr_column (str): Column name for RRR (e.g., '1:2 RRR')
+        
+    Returns:
+        pd.DataFrame: Top strategies ranked by edge
+    """
+    strategy_performance = []
+    
+    for strategy_name, df in strategy_results.items():
+        # Extract performance metrics
+        total_trades = df[rrr_column].iloc[0]
+        wins = df[rrr_column].iloc[1]
+        losses = df[rrr_column].iloc[2]
+        win_rate = df[rrr_column].iloc[3]
+        edge = df[rrr_column].iloc[4]
+        outcome_str = df[rrr_column].iloc[5]
+        entry_str = df[rrr_column].iloc[6]
+        
+        # Parse edge value for sorting
+        edge_value = float(edge.replace('%', ''))
+        
+        strategy_performance.append({
+            'Strategy': strategy_name.split('[')[0].strip(),
+            'Entry': entry_str,
+            'Trades': total_trades,
+            'Wins': wins,
+            'Losses': losses,
+            'Win Rate': win_rate,
+            'Edge': edge,
+            'Outcome': outcome_str,
+            'edge_value': edge_value
+        })
+    
+    # Filter out strategies with negative Edge
+    filtered_strategies = [
+        strat for strat in strategy_performance 
+        if strat['edge_value'] > 0
+    ]
+    
+    # Sort by edge and get top strategies
+    top_strategies = sorted(
+        filtered_strategies, 
+        key=lambda x: x['edge_value'], 
+        reverse=True
+    )
+    
+    # Remove sorting key from display
+    for strat in top_strategies:
+        del strat['edge_value']
     
     return pd.DataFrame(top_strategies)
