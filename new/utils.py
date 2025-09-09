@@ -96,3 +96,76 @@ def calculate_profitable_trades(df):
     df_results = pd.DataFrame(results)
     df_results['Value_num'] = df_results['1:1 RRR'].str.rstrip('%').astype(float)
     return df_results.sort_values('Value_num', ascending=False).drop(columns='Value_num').reset_index(drop=True)
+
+
+def analyze_entry_timing(df):
+    """
+    Analyze different entry timing strategies and their success rates.
+    
+    This function compares various entry methods:
+    - 1M Confirmation Candle: Entry on 1-minute candle confirmation
+    - 5M Confirmation Candle: Entry on 5-minute candle confirmation  
+    - 5M Stop: Entry with 5-minute stop loss level
+    - 5M Breakout: Entry on 5-minute confirmation candle that I built indicator for
+    
+    Args:
+        df (pd.DataFrame): Trading data with entry signals
+    
+    Returns:
+        pd.DataFrame: Entry timing statistics sorted by success rate
+    """
+    # Calculate winning trades for each entry method
+    entry_methods = {
+        '1M Confirmation Candle': {
+            'filter': lambda d: d['SL'] != 0,
+            'profitable': lambda d: d[(d['SL'] != d['Pullback']) & (d['TP'] > d['SL'])],
+            'sl_col': 'SL'
+        },
+        '5M Confirmation Candle': {
+            'filter': lambda d: d['SL 5M CC'] != 0,
+            'profitable': lambda d: d[(d['SL'] != d['Pullback']) & (d['TP'] > d['SL 5M CC'])],
+            'sl_col': 'SL 5M CC'
+        },
+        '5M Stop': {
+            'filter': lambda d: d['SL 5M Stop'] != 0,
+            'profitable': lambda d: d[(d['SL'] != d['Pullback']) & (d['TP'] > d['SL 5M Stop'])],
+            'sl_col': 'SL 5M Stop'
+        },
+        '5M Breakout': {
+            'filter': lambda d: d['SL Breakout'] != 0,
+            'profitable': lambda d: d[(d['SL'] != d['Pullback']) & (d['TP'] > d['SL Breakout'])],
+            'sl_col': 'SL Breakout'
+        }
+    }
+    
+    results = []
+    for method_name, method_config in entry_methods.items():
+        # Get relevant trades for this method
+        relevant_trades = df[method_config['filter'](df)]
+        profitable_trades = method_config['profitable'](df)
+        total_trades = len(relevant_trades)
+        wins = len(profitable_trades)
+        losses = total_trades - wins
+        
+        # Calculate metrics for different scenarios
+        sl_col = method_config['sl_col']
+        
+        # With Extra calculation
+        with_extra_filter = ((df['SL'] != df['Pullback']) | (df['Extra'] != 0))
+        with_extra_profitable = df[with_extra_filter & (df['TP'] > df[sl_col])]
+        
+        # 1:3 RRR with Extra
+        rrr3_with_extra = df[with_extra_filter & (df['TP'] > df[sl_col] * 3)]
+        
+        results.append({
+            'Idea': method_name,
+            'Count': f"{wins}W - {losses}L",
+            'Percentage': percentage(wins, total_trades),
+            'With Extra': percentage(len(with_extra_profitable), total_trades),
+            'Extra & 1:3 RRR': percentage(len(rrr3_with_extra), total_trades)
+        })
+    
+    # Convert to DataFrame and sort by win percentage
+    df_results = pd.DataFrame(results)
+    df_results['Value_num'] = df_results['Percentage'].str.rstrip('%').astype(float)
+    return df_results.sort_values('Value_num', ascending=False).drop(columns='Value_num').reset_index(drop=True)
