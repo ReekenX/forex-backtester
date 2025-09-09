@@ -65,7 +65,7 @@ The project uses two data formats for trading analysis:
 #### Enhanced Format (new/eurusd.csv)
 Includes all legacy fields plus additional analysis columns:
 - **Weekday**: Day of the week (eg. Monday)
-- **Hour**: Trading hour in Lithuanian timezone (valeus from 10 to 18 to cover entire London session)
+- **Hour**: Trading hour in Lithuanian timezone (values from 10 to 18 to cover entire London session)
 - **30M Leg**: 30-minute timeframe leg analysis ("Above H" and "Above L" – buy trend, "Below H" and "Below L" – sell trend)
 - **HH Until News**: Time until news event in hours
 - **News Event**: Associated news event title (eg. PMI)
