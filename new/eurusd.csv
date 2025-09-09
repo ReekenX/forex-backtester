@@ -1,4 +1,71 @@
 Date,Trade,Weekday,Hour,Direction,EMA,SL,Pullback,SL 5M CC,SL 5M Stop,SL Breakout,TP,Extra,BOS/CH,30M Leg,Hours Until News,News Event
+2025-08-19,#1,Tuesday,10,Buy,Buy,5.3,1.8,6.9,6.5,6.9,5,,BOS,Above H,5,CPI
+2025-08-19,#2,Tuesday,11,Buy,Buy,4.7,3.7,5.2,,5.2,16,,CH,Above H,4,CPI
+2025-08-19,#3,Tuesday,13,Buy,Buy,3.7,0.9,4.7,4.3,7.7,11,,BOS,Above H,2,CPI
+2025-08-19,#4,Tuesday,14,Buy,Buy,2.6,,4.5,4.9,4.3,,,BOS,Above H,1,CPI
+2025-08-19,#5,Tuesday,14,Sell,Buy,3.0,3.0,,,,40,1.5,BOS,Above H,1,CPI
+2025-08-19,#6,Tuesday,16,Sell,Sell,4.7,1.6,8.2,,8.2,33,,BOS,Above H,,
+2025-08-19,#7,Tuesday,18,Buy,Sell,5.0,,7.3,6.2,7.3,6,,CH,Below H,,
+2025-08-20,#1,Wednesday,10,Buy,Buy,3.4,3.4,,,,6,0.1,BOS,Above L,,
+2025-08-20,#2,Wednesday,11,Sell,Sell,4.9,4.9,2.8,4.8,3.9,,,BOS,Below L,,
+2025-08-20,#3,Wednesday,13,Buy,Buy,3.0,1.6,3.0,4.9,3.6,12,,BOS,Above L,,
+2025-08-20,#4,Wednesday,13,Buy,Buy,1.7,,3.6,3.6,3.6,12,,BOS,Above L,,
+2025-08-20,#5,Wednesday,13,Buy,Buy,1.3,1.3,,,,,,BOS,Above L,,
+2025-08-20,#6,Wednesday,13,Sell,Buy,3.5,3.5,2.2,,4.1,,,BOS,Above L,,
+2025-08-20,#7,Wednesday,14,Sell,Buy,3.5,1.5,3.5,4.6,4.8,6,,CH,Above L,,
+2025-08-20,#8,Wednesday,14,Sell,Buy,3.6,3.6,7.4,7.3,6.3,,,BOS,Above L,,
+2025-08-20,#9,Wednesday,16,Buy,Buy,4.0,4.0,2.2,8.1,2.7,,,BOS,Above L,,
+2025-08-20,#10,Wednesday,17,Buy,Buy,4.1,4.1,,,,,,CH,Above L,,
+2025-08-20,#11,Wednesday,17,Sell,Buy,7.9,7.9,,,,,,CH,Above L,,
+2025-08-21,#1,Thursday,10,Sell,Sell,1.5,1.5,,,,,,CH,Below L,1,PMI
+2025-08-21,#2,Thursday,11,Buy,Buy,4.9,4.9,,,,,,BOS,Above L,1,PMI
+2025-08-21,#3,Thursday,11,Sell,Buy,5.5,5.5,4.2,6.8,6.8,,,CH,Above L,4,Unemployments Claims
+2025-08-21,#4,Thursday,13,Buy,Buy,5.0,5.0,4.8,6.1,,,,CH,Above L,2,Unemployments Claims
+2025-08-21,#5,Thursday,13,Sell,Sell,1.5,1.5,,,,,,BOS,Above L,2,Unemployments Claims
+2025-08-21,#6,Thursday,13,Sell,Sell,3.4,3.4,3.6,2.8,3.6,,,BOS,Above L,2,Unemployments Claims
+2025-08-21,#7,Thursday,14,Buy,Sell,1.8,1.8,,,,,,CH,Above L,1,Unemployments Claims
+2025-08-21,#8,Thursday,14,Sell,Sell,4.4,0.3,5.1,5.5,5.1,7,,BOS,Above L,1,Unemployments Claims
+2025-08-21,#9,Thursday,15,Buy,Sell,7.3,7.3,,,7.3,,,CH,Above L,1,PMI
+2025-08-21,#10,Thursday,17,Sell,Sell,7.8,7.5,5.6,7.2,7.2,20,,BOS,Below L,,
+2025-08-21,#11,Thursday,18,Sell,Sell,5.2,5.2,,,,,,BOS,Below L,,
+2025-08-21,#12,Thursday,18,Buy,Sell,6.7,6.5,2.4,2.4,2.4,10,,CH,Below L,,
+2025-08-22,#1,Friday,10,Buy,Sell,6.3,2.2,6.8,6.8,6.8,63,,CH,Below L,7,Speaks
+2025-08-22,#2,Friday,13,Buy,Sell,4.0,1.7,5.1,5.1,6.2,40,,BOS,Below L,4,Speaks
+2025-08-22,#3,Friday,14,Buy,Sell,3.2,0.6,5.7,6.1,5.7,32,,BOS,Below L,3,Speaks
+2025-08-22,#4,Friday,15,Buy,Buy,3.2,0.6,4.5,5.6,4.5,15,,BOS,Above L,2,Speaks
+2025-08-22,#5,Friday,16,Buy,Buy,2.9,2.9,,,,,,BOS,Above L,1,Speaks
+2025-08-22,#6,Friday,16,Sell,Sell,7.2,3.9,5.5,3.9,5.5,,,CH,Above L,1,Speaks
+2025-08-22,#7,Friday,18,Buy,Buy,5.3,5.3,,,,21,3.6,BOS,Above L,,
+2025-08-25,#1,Monday,10,Sell,Buy,4.6,1.8,5.7,6.4,6.6,,,CH,Below L,,
+2025-08-25,#2,Monday,10,Sell,Buy,3.9,3.4,5.2,5.5,6.2,,,BOS,Below L,,
+2025-08-25,#3,Monday,14,Sell,Sell,1.7,1.7,,,,,,BOS,Below L,,
+2025-08-25,#4,Monday,14,Buy,Sell,1.3,1.3,,,,15,1.0,BOS,Above L,,
+2025-08-25,#5,Monday,15,Buy,Sell,2.9,0.8,5.4,5.9,6.0,14,,BOS,Above L,,
+2025-08-25,#6,Monday,16,Buy,Buy,4.0,3.2,6.5,6.6,6.5,6,,BOS,Above L,,
+2025-08-25,#7,Monday,17,Buy,Buy,4.0,3.0,8.4,8.8,8.4,,,BOS,Above L,,
+2025-08-25,#8,Monday,18,Sell,Sell,7.6,2.1,7.7,11.8,6.6,76,,BOS,Below L,,
+2025-08-26,#1,Tuesday,10,Sell,Sell,5.7,0.4,7.5,8.9,9.4,,,CH,Above L,,
+2025-08-26,#2,Tuesday,15,Buy,Buy,2.7,2.7,2.7,4.8,2.9,,,BOS,Above L,,
+2025-08-26,#3,Tuesday,15,Sell,Buy,3.3,3.3,,,,16,0.1,CH,Above L,,
+2025-08-26,#4,Tuesday,16,Sell,Buy,4.5,0.6,8.3,9.1,8.3,6,,BOS,Above L,,
+2025-08-26,#5,Tuesday,17,Buy,Buy,9.7,,11.8,12.6,13.1,18,,CH,Above L,,
+2025-08-26,#6,Tuesday,18,Buy,Sell,7.8,2.8,9.4,11.1,9.4,10,,BOS,Above L,,
+2025-08-27,#1,Wednesday,12,Sell,Sell,4.4,4.4,,,4.7,15,1.3,BOS,Below L,,
+2025-08-27,#2,Wednesday,13,Buy,Sell,6.1,6.1,7.1,7.4,7.3,6,2.9,CH,Below L,,
+2025-08-27,#3,Wednesday,15,Sell,Buy,3.3,3.3,,,2.3,,,CH,Below L,,
+2025-08-27,#4,Wednesday,16,Buy,Buy,7.8,7.1,5.8,3.3,16.5,11,,BOS,Below L,,
+2025-08-27,#5,Wednesday,17,Buy,Sell,2.6,2.6,3.8,5.1,3.8,55,2.9,BOS,Below L,,
+2025-08-27,#6,Wednesday,17,Sell,Buy,6.2,6.2,11.5,,11.5,,,CH,Below L,,
+2025-08-27,#7,Wednesday,18,Buy,Buy,5.3,2.4,5.3,7.1,5.3,34,,BOS,Above L,,
+2025-08-28,#1,Thursday,10,Buy,Sell,4.9,4.9,4.9,5.0,,6,0.3,CH,Above L,5,Unemployments Claims
+2025-08-28,#2,Thursday,11,Sell,Buy,6.9,2.7,8.1,8.1,13.1,14,,CH,Above L,4,Unemployments Claims
+2025-08-28,#3,Thursday,11,Sell,Sell,3.0,3.0,,,,,,BOS,Above L,4,Unemployments Claims
+2025-08-28,#4,Thursday,12,Buy,Buy,2.8,0.3,5.7,5.8,4.5,18,,BOS,Above L,3,Unemployments Claims
+2025-08-28,#5,Thursday,14,Sell,Buy,4.2,4.2,,,,,,CH,Above H,1,Unemployments Claims
+2025-08-28,#6,Thursday,15,Buy,Buy,10.9,5.3,14.8,13.5,14.8,16,,CH,Above H,,
+2025-08-28,#7,Thursday,15,Buy,Buy,10.3,10.3,,,,,,CH,Above H,,
+2025-08-28,#8,Thursday,16,Sell,Sell,4.8,4.8,5.8,,,,,BOS,Below H,,
+2025-08-28,#9,Thursday,18,Buy,Sell,8.6,5.9,8.7,10.0,8.6,30,,CH,Above H,,
 2025-08-29,#1,Friday,10,Buy,Sell,4.0,2.0,5.4,4.6,4.0,25,,CH,Below H,5,Core PCE
 2025-08-29,#2,Friday,12,Buy,Buy,5.9,1.1,7.4,7.4,7.4,6,,BOS,Below H,3,Core PCE
 2025-08-29,#3,Friday,14,Sell,Sell,3.9,2.1,4.6,4.8,4.8,13,,BOS,Below H,1,Core PCE
