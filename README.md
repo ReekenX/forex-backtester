@@ -1,6 +1,8 @@
 # Forex Backtester
 
-A Jupyter-based project for analyzing and backtesting forex trading data, starting with EUR/USD currency pairs.
+A Jupyter-based project for analyzing and backtesting forex trading data.
+
+Trading data is 5 minute timeframe, only EURUSD currency traded only during London session.
 
 ## Project Structure
 
