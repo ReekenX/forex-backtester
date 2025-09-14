@@ -261,7 +261,6 @@ def analyze_entry_timing(df):
             'Notation': f"{wins}W - {losses}L",
             'Win Rate': percentage(wins, total_trades),
             'With Extra': percentage(len(with_extra_profitable), total_trades),
-            'With Extra & 1:3 RRR': percentage(len(rrr3_with_extra), total_trades)
         })
     
     # Convert to DataFrame and sort by win percentage
@@ -516,7 +515,7 @@ def evaluate_all_strategies(df, strategies):
         dict: Dictionary mapping strategy names to their performance DataFrames
     """
     strategy_results = {}
-    sl_columns = ['SL', 'SL 5M CC', 'SL 5M Stop', 'SL Breakout']
+    sl_columns = ['SL'] #, 'SL 5M CC', 'SL 5M Stop', 'SL Breakout']
     entry_names = {
         'SL': '1M CC',
         'SL 5M CC': '5M CC',
