@@ -145,71 +145,107 @@ def display_profitable_strategies(strategy_results):
 def analyze_pullback_profitability(df):
     """
     Analyze how pullback size affects trade profitability.
-    
+
+    Creates multiple tables showing profitability statistics for different pullback sizes,
+    similar to the "What type of entry is the best?" table format.
+
     Args:
         df (pd.DataFrame): Trading data with Pullback, TP, and SL columns
-    
+
     Returns:
-        pd.DataFrame: Table showing profitability statistics for different pullback sizes
+        dict: Dictionary of DataFrames, one for each pullback threshold
     """
     import pandas as pd
-    
+
     # Define pullback thresholds to analyze
-    pullback_thresholds = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
-    
-    results = []
-    
-    for threshold in pullback_thresholds:
-        # Filter trades with pullback >= threshold
-        filtered_df = df[df['Pullback'] >= threshold]
-        
-        # Count total trades
+    pullback_configs = [
+        ('No Pullback', lambda d: d, 'No pullback filter'),
+        ('Pullback >= 0.5 pips', lambda d: d[d['Pullback'] >= 0.5], 'Minimum 0.5 pip pullback'),
+        ('Pullback >= 1.0 pip', lambda d: d[d['Pullback'] >= 1.0], 'Minimum 1.0 pip pullback'),
+        ('Pullback >= 1.5 pips', lambda d: d[d['Pullback'] >= 1.5], 'Minimum 1.5 pip pullback'),
+        ('Pullback >= 2.0 pips', lambda d: d[d['Pullback'] >= 2.0], 'Minimum 2.0 pip pullback'),
+    ]
+
+    # RRR configurations with their breakeven win rates
+    rrr_configs = [
+        (1, 50.0),   # 1:1 RRR - need 50% to break even
+        (2, 33.3),   # 1:2 RRR - need 33.3% to break even
+        (3, 25.0),   # 1:3 RRR - need 25% to break even
+    ]
+
+    # Create a DataFrame for each pullback threshold
+    pullback_tables = {}
+
+    for pullback_name, filter_func, description in pullback_configs:
+        # Filter trades for this pullback threshold
+        filtered_df = filter_func(df)
+
+        # Total trades includes ALL trades (including where SL == Pullback)
         total_trades = len(filtered_df)
-        
-        # Count profitable trades (TP > SL)
-        profitable_trades = len(filtered_df[filtered_df['TP'] > filtered_df['SL']])
-        
-        # Calculate percentage
-        if total_trades > 0:
-            percentage = (profitable_trades / total_trades) * 100
-        else:
-            percentage = 0
-        
-        results.append({
-            'Pullback': f'{threshold} pip{"s" if threshold != 1 else ""}',
-            'All Trades': total_trades,
-            'Profitable Trades': profitable_trades,
-            'Percentage': f'{percentage:.1f}%'
-        })
-    
-    # Also add a row for all trades (no pullback filter)
-    all_trades = len(df)
-    all_profitable = len(df[df['TP'] > df['SL']])
-    all_percentage = (all_profitable / all_trades * 100) if all_trades > 0 else 0
-    
-    results.insert(0, {
-        'Pullback': 'All (No Filter)',
-        'All Trades': all_trades,
-        'Profitable Trades': all_profitable,
-        'Percentage': f'{all_percentage:.1f}%'
-    })
-    
-    return pd.DataFrame(results)
+
+        # Initialize the summary data structure
+        summary_data = {
+            pullback_name: ['Total trades', 'Wins', 'Losses', 'Win Rate', 'Edge', 'Outcome']
+        }
+
+        # Calculate statistics for each RRR
+        for ratio, breakeven_rate in rrr_configs:
+            rrr_label = f'1:{ratio} RRR'
+
+            if total_trades > 0:
+                # Calculate wins for this RRR ratio
+                # Wins must have: SL != Pullback (valid entry) AND TP >= ratio * SL (profitable)
+                profitable = filtered_df[
+                    (filtered_df['SL'] != filtered_df['Pullback']) &
+                    (filtered_df['TP'] >= (ratio * filtered_df['SL']))
+                ]
+                wins = len(profitable)
+                losses = total_trades - wins  # This includes trades where SL == Pullback as losses
+                win_rate = (wins / total_trades * 100)
+
+                # Calculate edge (win rate - breakeven rate)
+                edge = win_rate - breakeven_rate
+
+                # Calculate outcome in R-multiples
+                outcome = (wins * ratio) - losses
+
+                summary_data[rrr_label] = [
+                    total_trades,
+                    wins,
+                    losses,
+                    f'{win_rate:.1f}%',
+                    f'{edge:.1f}%',
+                    f'{outcome}R'
+                ]
+            else:
+                # Empty strategy
+                summary_data[rrr_label] = [
+                    0,
+                    0,
+                    0,
+                    '0.0%',
+                    '0.0%',
+                    '0R'
+                ]
+
+        pullback_tables[pullback_name] = pd.DataFrame(summary_data)
+
+    return pullback_tables
 
 
 def analyze_entry_timing(df):
     """
     Analyze different entry timing strategies and their success rates.
-    
+
     This function compares various entry methods:
     - 1M Confirmation Candle: Entry on 1-minute candle confirmation
-    - 5M Confirmation Candle: Entry on 5-minute candle confirmation  
+    - 5M Confirmation Candle: Entry on 5-minute candle confirmation
     - 5M Stop: Entry with 5-minute stop loss level
     - 5M Breakout: Entry on 5-minute confirmation candle that I built indicator for
-    
+
     Args:
         df (pd.DataFrame): Trading data with entry signals
-    
+
     Returns:
         pd.DataFrame: Entry timing statistics sorted by success rate
     """
@@ -236,7 +272,7 @@ def analyze_entry_timing(df):
             'sl_col': 'SL Breakout'
         }
     }
-    
+
     results = []
     for method_name, method_config in entry_methods.items():
         # Get relevant trades for this method
@@ -245,28 +281,135 @@ def analyze_entry_timing(df):
         total_trades = len(relevant_trades)
         wins = len(profitable_trades)
         losses = total_trades - wins
-        
-        # Calculate metrics for different scenarios
-        sl_col = method_config['sl_col']
-        
-        # With Extra calculation
-        with_extra_filter = ((df['SL'] != df['Pullback']) | ((df['Extra'] != 0) & (df['Extra'] < 1)))
-        with_extra_profitable = df[with_extra_filter & (df['TP'] > df[sl_col])]
-        
-        # 1:3 RRR with Extra
-        rrr3_with_extra = df[with_extra_filter & (df['TP'] > df[sl_col] * 3)]
-        
+
         results.append({
             'Idea': method_name,
             'Notation': f"{wins}W - {losses}L",
             'Win Rate': percentage(wins, total_trades),
-            'With Extra': percentage(len(with_extra_profitable), total_trades),
         })
-    
+
     # Convert to DataFrame and sort by win percentage
     df_results = pd.DataFrame(results)
     df_results['Value_num'] = df_results['Win Rate'].str.rstrip('%').astype(float)
     return df_results.sort_values('Value_num', ascending=False).drop(columns='Value_num').reset_index(drop=True)
+
+
+def analyze_entry_timing_detailed(df):
+    """
+    Analyze different entry timing strategies with detailed statistics including RRR analysis.
+
+    Returns 4 separate DataFrames, one for each entry method, showing:
+    - Total trades
+    - Wins
+    - Losses
+    - Win Rate
+    - Edge (for each RRR)
+    - Outcome (for each RRR)
+    - Entry method
+
+    Args:
+        df (pd.DataFrame): Trading data with entry signals
+
+    Returns:
+        dict: Dictionary containing 4 DataFrames, one for each entry method
+    """
+    import pandas as pd
+
+    # Entry methods configuration with entry type descriptions
+    entry_methods = {
+        '5M Stop': {
+            'filter': lambda d: d['SL 5M Stop'] != 0,
+            'sl_col': 'SL 5M Stop',
+            'entry_type': '5M Stop Entry'
+        },
+        '5M Breakout': {
+            'filter': lambda d: d['SL Breakout'] != 0,
+            'sl_col': 'SL Breakout',
+            'entry_type': '5M Breakout Entry'
+        },
+        '5M Confirmation Candle': {
+            'filter': lambda d: d['SL 5M CC'] != 0,
+            'sl_col': 'SL 5M CC',
+            'entry_type': '5M CC Entry'
+        },
+        '1M Confirmation Candle': {
+            'filter': lambda d: d['SL'] != 0,
+            'sl_col': 'SL',
+            'entry_type': '1M CC Entry'
+        }
+    }
+
+    # RRR configurations with their breakeven win rates
+    rrr_configs = [
+        (1, 50.0),   # 1:1 RRR - need 50% to break even
+        (2, 33.3),   # 1:2 RRR - need 33.3% to break even
+        (3, 25.0),   # 1:3 RRR - need 25% to break even
+    ]
+
+    # Create a DataFrame for each entry method
+    entry_tables = {}
+
+    for method_name, method_config in entry_methods.items():
+        # Get relevant trades for this method (same as original analyze_entry_timing)
+        relevant_trades = df[method_config['filter'](df)]
+        sl_col = method_config['sl_col']
+
+        # Use all relevant trades for total count (matching original logic)
+        total_trades = len(relevant_trades)
+
+        # Initialize the summary data structure
+        summary_data = {
+            method_name: ['Total trades', 'Wins', 'Losses', 'Win Rate', 'Edge', 'Outcome']
+        }
+
+        # Calculate statistics for each RRR
+        for ratio, breakeven_rate in rrr_configs:
+            rrr_label = f'1:{ratio} RRR'
+
+            if total_trades > 0:
+                # Calculate wins for this RRR ratio
+                # Apply the same filters as original analyze_entry_timing:
+                # 1. SL != Pullback (valid entry)
+                # 2. TP > ratio * SL (profitable for this RRR)
+
+                valid_wins = relevant_trades[
+                    (relevant_trades['SL'] != relevant_trades['Pullback']) &
+                    (relevant_trades['TP'] > (ratio * relevant_trades[sl_col]))
+                ]
+                wins = len(valid_wins)
+                losses = total_trades - wins
+                win_rate = (wins / total_trades * 100)
+
+                # Calculate edge (win rate - breakeven rate)
+                edge = win_rate - breakeven_rate
+
+                # Calculate outcome in R-multiples
+                # For each win, you gain 'ratio' R
+                # For each loss, you lose 1 R
+                outcome = (wins * ratio) - losses
+
+                summary_data[rrr_label] = [
+                    total_trades,
+                    wins,
+                    losses,
+                    f'{win_rate:.1f}%',
+                    f'{edge:.1f}%',
+                    f'{outcome}R'
+                ]
+            else:
+                # Empty strategy
+                summary_data[rrr_label] = [
+                    0,
+                    0,
+                    0,
+                    '0.0%',
+                    '0.0%',
+                    '0R'
+                ]
+
+        entry_tables[method_name] = pd.DataFrame(summary_data)
+
+    return entry_tables
 
 
 def calculate_rrr_stats(data_df, strategy_name, sl_column='SL'):
@@ -515,7 +658,7 @@ def evaluate_all_strategies(df, strategies):
         dict: Dictionary mapping strategy names to their performance DataFrames
     """
     strategy_results = {}
-    sl_columns = ['SL'] #, 'SL 5M CC', 'SL 5M Stop', 'SL Breakout']
+    sl_columns = ['SL', 'SL 5M CC', 'SL 5M Stop', 'SL Breakout']
     entry_names = {
         'SL': '1M CC',
         'SL 5M CC': '5M CC',
