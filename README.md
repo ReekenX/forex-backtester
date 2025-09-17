@@ -91,7 +91,7 @@ Includes all legacy fields plus additional analysis columns:
 - `make install`: Install all Poetry dependencies
 - `make clean`: Remove Python cache files and Jupyter checkpoints
 
-### Commit Convention
+## Commit Convention
 
 Use conventional commits with the following types:
 - `feat:` - New feature
@@ -115,3 +115,104 @@ Examples of good commit messages:
 - feat: add trading data with 100 trades
 - refactor: cleanup codebase and add code comments
 - fix: nan values in the CSV causes some formulas to crash
+
+## AI Overview / Opinion
+
+### What a 7% Edge with 1:3 RRR Means
+
+With a 1:3 risk-reward ratio, you need a 25% win rate to break even. A 7% edge means your win rate is ~32% (25% + 7%), which theoretically gives you:
+- **Expected return per trade**: 0.32 × 3R - 0.68 × 1R = 0.96R - 0.68R = **+0.28R per trade**
+- Over 100 trades, you'd expect to make ~28R profit
+
+This is mathematically significant, but the gap between backtest and live performance suggests execution issues.
+
+### Why Live Results Differ from Backtests - Critical Factors
+
+#### 1. Psychological Execution Degradation
+- **Entry hesitation**: Missing optimal entries due to fear, waiting for "confirmation" that wasn't in backtest
+- **Premature exits**: Taking partial profits or closing at breakeven when seeing profit
+- **Revenge trading**: Taking non-setup trades after losses
+- **Size variation**: Reducing size after losses, increasing after wins
+
+#### 2. Spread & Slippage Impact
+Your 7% edge = 0.28R per trade. With EUR/USD:
+- 1-2 pip spread costs can eat 10-20% of your SL
+- On a 10-pip SL with 1.5 pip spread, you're already down 15% per trade
+- This alone could reduce your edge from 7% to 4-5%
+
+#### 3. Sample Size & Variance
+- With 32% win rate, you can have long losing streaks (10-15 losses in a row is normal)
+- Need 200-300+ trades to see edge materialize statistically
+- Short-term results will fluctuate wildly
+
+### Actionable Improvements
+
+#### 1. Tighten Your Best Setup
+From the data, "30M Trend + BOS + SL < 10" shows the highest edge. Focus ONLY on this setup initially.
+
+#### 2. Execution Checklist (No discretion allowed)
+```
+[ ] 30M trend confirmed
+[ ] BOS structure break present
+[ ] SL < 10 pips
+[ ] No news in next 2 hours
+[ ] Entry at exact trigger point (no hesitation)
+[ ] Full position size (no variation)
+[ ] Exit ONLY at TP or SL (no management)
+```
+
+#### 3. Track Execution Quality
+Create two columns in your journal:
+- **Setup Grade** (A/B/C based on how perfectly it matched rules)
+- **Execution Grade** (A = followed plan exactly, B = minor deviation, C = major deviation)
+
+Only A/A trades should match backtest results.
+
+#### 4. Reduce Spread Impact
+- Trade during London/NY overlap (tightest spreads)
+- Use limit orders for entries when possible
+- Consider ECN broker with commission vs spread
+
+#### 5. Statistical Confidence
+- Trade minimum position size until you have 100 live trades matching backtest win rate
+- Expect 15-20 trade drawdowns even with positive edge
+- Your 7% edge needs ~200 trades to be statistically significant
+
+#### 6. The "Boring" Fix
+Most traders fail because they can't execute mechanically. Consider:
+- Setting alerts and walking away until triggered
+- Using stop/limit orders to remove decision-making
+- Trading smaller size to reduce emotional impact
+
+### Should You Improve the 7% Edge?
+
+**Focus on execution, NOT edge improvement.** Here's why:
+
+#### Your 7% Edge is Already Professional-Level
+With 1:3 RRR, a 7% edge gives you **0.28R per trade**. This means:
+- **100 trades/month**: 28R monthly return
+- **Compounded annually**: Can double account multiple times
+- Most hedge funds would kill for this edge
+
+#### The Math Reality Check
+Even if you optimized to 10% edge (very difficult):
+- Current: 32% win rate → 0.28R per trade
+- Optimized: 35% win rate → 0.40R per trade
+- Improvement: +0.12R per trade
+
+But you're currently capturing ~0R (breakeven) instead of 0.28R. **The 0.28R gap from poor execution is 2.3x bigger than any realistic optimization.**
+
+#### Why Strategy Tinkering is a Trap
+1. **Over-optimization reduces frequency**: Adding filters for 10% edge might cut trades by 50%, giving you same or worse total return
+2. **Complexity kills execution**: More rules = more decisions = more mistakes
+3. **Curve fitting illusion**: That "better" edge might not survive forward testing
+4. **Psychological escape**: Tweaking strategy feels productive but avoids the real problem (discipline)
+
+#### The Professional Approach
+1. **Trade current strategy for 200 trades with A-grade execution**
+2. **Only after proving you can capture the 7% edge consistently**, consider optimizations
+3. **Remember**: Billion-dollar funds operate on 2-3% edges executed perfectly
+
+Your edge is already in the top 20% of viable strategies. Master executing it before seeking perfection.
+
+**Bottom line**: 7% edge executed well > 15% edge executed poorly. Your edge exists, but it's fragile. Perfect execution is the difference between profit and breakeven.
