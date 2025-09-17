@@ -216,3 +216,53 @@ But you're currently capturing ~0R (breakeven) instead of 0.28R. **The 0.28R gap
 Your edge is already in the top 20% of viable strategies. Master executing it before seeking perfection.
 
 **Bottom line**: 7% edge executed well > 15% edge executed poorly. Your edge exists, but it's fragile. Perfect execution is the difference between profit and breakeven.
+
+### Additional Setup Data to Track for Edge Improvement
+
+Looking at the current data fields, these additional setup characteristics could reveal hidden edge improvements:
+
+#### 1. Multiple Timeframe Structure
+- **1H Trend Direction** - Aligns with higher timeframe bias
+- **4H Structure** - BOS/CH on 4H (major structure shifts)
+- **Daily Candle Context** - Inside day / Engulfing / Doji / Trend day
+- **Weekly Level Distance** - Pips to nearest weekly S/R
+
+#### 2. Momentum & Strength Metrics
+- **Move Strength to BOS** - How many pips was the move that created the BOS?
+- **Pullback Depth %** - What % did price retrace before entry signal?
+- **Candle Close Strength** - How far into the range did signal candle close? (0-100%)
+- **Consecutive Candles** - How many same-direction candles before signal?
+
+#### 3. Price Action Quality
+- **Wick Ratio** - Signal candle wick vs body ratio
+- **Pre-BOS Consolidation** - How many candles consolidated before breakout?
+- **Clean vs Messy** - Was the BOS clean or through multiple wicks?
+- **Touches Before Break** - How many times was level tested before BOS?
+
+#### 4. Market Phase
+- **Range-bound vs Trending** - Last 50 candles ATR/Range ratio
+- **Time Since Last Major High/Low** - Hours since significant pivot
+- **Friday/Monday** - These days often behave differently
+- **Month-End/Start** - First/last 3 days of month (flows affect price)
+
+#### 5. Relative Extremes
+- **RSI (14) on 30M** - Overbought/oversold context
+- **Distance from 50 EMA** - In pips (mean reversion potential)
+- **Day's Range Position** - Entry in bottom/middle/top third of day's range
+- **20-Day Range %** - Where is current price in 20-day range?
+
+#### Most Likely to Improve Your Edge
+
+Based on the current 7% edge with "30M Trend + BOS + SL < 10", prioritize:
+
+1. **1H Trend Direction** - Could filter out counter-trend trades
+2. **Move Strength to BOS** - Stronger moves might have better follow-through
+3. **Pullback Depth %** - Sweet spot between too deep (momentum lost) and too shallow (no discount)
+4. **Time Since Last Major High/Low** - Fresh breaks vs late entries
+
+Start logging these 4 fields. After 100+ trades, patterns might emerge like:
+- "When 1H trend aligns, edge jumps to 12%"
+- "BOS moves > 15 pips have 40% win rate vs 32%"
+- "30-50% pullbacks perform best, 70%+ pullbacks are losers"
+
+This data-driven approach will reveal which market conditions your setup thrives in.
