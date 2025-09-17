@@ -508,6 +508,96 @@ def analyze_entry_timing_detailed(df):
     return entry_tables
 
 
+def calculate_rrr_stats_with_extra(data_df, strategy_name, sl_column='SL', extra_pips=1):
+    """
+    Calculate RRR statistics with Extra pip adjustment for trades.
+
+    This function applies the Extra pip logic: trades with SL == Pullback are included
+    if their Extra value is less than the specified extra_pips threshold.
+
+    Args:
+        data_df (pd.DataFrame): Filtered DataFrame containing trades for this strategy
+        strategy_name (str): Name of the strategy for labeling
+        sl_column (str): Column to use for stop loss calculations
+        extra_pips (int): Number of extra pips to consider (default 1)
+
+    Returns:
+        pd.DataFrame: Statistics table with Extra pip adjustments
+    """
+    # Keep the same total trades as the original strategy
+    # but adjust the win calculation based on Extra pip logic
+    total_trades = len(data_df)
+
+    # RRR configurations with their breakeven win rates
+    rrr_configs = [
+        (1, 50.0),   # 1:1 RRR
+        (2, 33.3),   # 1:2 RRR
+        (3, 25.0),   # 1:3 RRR
+    ]
+
+    # Handle empty strategy results
+    if total_trades == 0:
+        summary_data = {
+            strategy_name + f' (+{extra_pips}p)': ['Total trades', 'Wins', 'Losses', 'Win Rate', 'Edge', 'Outcome', 'Entry']
+        }
+        for ratio, _ in rrr_configs:
+            summary_data[f'1:{ratio} RRR'] = [0, 0, 0, '0.0%', '0.0%', '0R']
+        return pd.DataFrame(summary_data)
+
+    # Calculate statistics for each RRR level
+    summary_data = {
+        strategy_name + f' (+{extra_pips}p)': ['Total trades', 'Wins', 'Losses', 'Win Rate', 'Edge', 'Outcome', 'Entry']
+    }
+    entry_names = {
+        'SL': '1M CC',
+        'SL 5M CC': '5M CC',
+        'SL 5M Stop': '5M Stop',
+        'SL Breakout': '5M Breakout'
+    }
+    entry_str = entry_names[sl_column]
+
+    for ratio, breakeven_rate in rrr_configs:
+        # Calculate wins including Extra pip logic:
+        # A trade wins if either:
+        # 1. SL != Pullback AND TP >= ratio * SL (normal win)
+        # 2. SL == Pullback AND Extra < extra_pips AND TP >= ratio * (SL + extra_pips) (win with extra pip)
+
+        normal_wins = data_df[
+            (data_df['SL'] != data_df['Pullback']) &
+            (data_df['TP'] >= ratio * data_df[sl_column])
+        ]
+
+        extra_wins = data_df[
+            (data_df['SL'] == data_df['Pullback']) &
+            (data_df['Extra'] < extra_pips) &
+            (data_df['TP'] >= ratio * (data_df[sl_column] + extra_pips))
+        ]
+
+        # Combine wins (use index to avoid duplicates)
+        all_win_indices = set(normal_wins.index) | set(extra_wins.index)
+        wins = len(all_win_indices)
+        losses = total_trades - wins
+        win_rate = (wins / total_trades) * 100
+
+        # Edge is how much better we perform than breakeven
+        edge = win_rate - breakeven_rate
+
+        # Calculate expected outcome in R-multiples
+        outcome = (wins * ratio) - losses
+
+        summary_data[f'1:{ratio} RRR'] = [
+            total_trades,
+            wins,
+            losses,
+            f"{win_rate:.1f}%",
+            f"{edge:.1f}%",
+            f"{outcome}R",
+            entry_str
+        ]
+
+    return pd.DataFrame(summary_data)
+
+
 def calculate_rrr_stats(data_df, strategy_name, sl_column='SL'):
     """
     Calculate comprehensive Risk-Reward Ratio statistics for a trading strategy.
@@ -742,14 +832,15 @@ def create_strategy_library():
     return [Strategy(name, func, desc) for name, func, desc in strategy_configs]
 
 
-def evaluate_all_strategies(df, strategies):
+def evaluate_all_strategies(df, strategies, include_extra_pip=False):
     """
     Run backtesting on all strategies and compile results.
-    
+
     Args:
         df (pd.DataFrame): Trading data
         strategies (list): List of Strategy objects
-        
+        include_extra_pip (bool): Whether to include Extra 1 pip analysis
+
     Returns:
         dict: Dictionary mapping strategy names to their performance DataFrames
     """
@@ -761,18 +852,21 @@ def evaluate_all_strategies(df, strategies):
         'SL 5M Stop': '5M Stop',
         'SL Breakout': '5M Breakout'
     }
-    
+
     for sl_column in sl_columns:
         for strategy in strategies:
             # Apply strategy filter
             filtered_df = strategy.apply(df)
-            
-            # Calculate RRR statistics
+
+            # Calculate normal RRR statistics
             summary_df = calculate_rrr_stats(filtered_df, strategy.name, sl_column)
-            
-            # Store results
             strategy_results[strategy.name + '[' + entry_names[sl_column] + ']'] = summary_df
-    
+
+            # If requested, also calculate with Extra 1 pip
+            if include_extra_pip:
+                summary_df_extra = calculate_rrr_stats_with_extra(filtered_df, strategy.name, sl_column, extra_pips=1)
+                strategy_results[strategy.name + ' [Extra 1 pip][' + entry_names[sl_column] + ']'] = summary_df_extra
+
     return strategy_results
 
 
@@ -861,8 +955,17 @@ def get_top_strategies_by_edge(strategy_results, rrr_column):
         # Parse edge value for sorting
         edge_value = float(edge.replace('%', ''))
 
+        # Check if this is an Extra 1 pip strategy
+        if '[Extra 1 pip]' in strategy_name:
+            # Extract the base strategy name (before [Extra 1 pip])
+            base_name = strategy_name.split('[Extra 1 pip]')[0].strip()
+            display_name = base_name + ' [Extra 1 pip]'
+        else:
+            # Regular strategy - remove entry type bracket
+            display_name = strategy_name.split('[')[0].strip()
+
         strategy_performance.append({
-            'Strategy': strategy_name.split('[')[0].strip(),
+            'Strategy': display_name,
             'Entry': entry_str,
             'Trades': total_trades,
             'Wins': wins,

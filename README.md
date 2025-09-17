@@ -67,6 +67,7 @@ The project uses two data formats for trading analysis:
 #### Enhanced Format (new/eurusd.csv)
 Includes all legacy fields plus additional analysis columns:
 - **Weekday**: Day of the week (eg. Monday)
+- **Extra**: Extra pips that was needed to make this trade profitable. Example: 3.0 pips SL, 3 pips Pullback and TP of 10 pips still means lost trade. But if Extra column has value like 0.1, it means that SL of 3.1 (3.0 + 0.1) would had been profitable and would had reached 2R (10 / 3.1)
 - **Hour**: Trading hour in Lithuanian timezone (values from 10 to 18 to cover entire London session)
 - **30M Leg**: 30-minute timeframe leg analysis ("Above H" and "Above L" – buy trend, "Below H" and "Below L" – sell trend)
 - **HH Until News**: Time until news event in hours
