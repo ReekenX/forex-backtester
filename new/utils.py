@@ -233,6 +233,102 @@ def analyze_pullback_profitability(df):
     return pullback_tables
 
 
+def analyze_sl_reduction_profitability(df):
+    """
+    Analyze how reducing stop loss size affects trade profitability.
+
+    This function tests the impact of tightening stop losses by 1-2 pips on trade outcomes.
+    For example, if SL=3 and TP=5, the trade would normally be a loss with 1:1 RRR (TP < SL).
+    But with a 1 pip reduction (SL becomes 2), the trade becomes profitable (TP=5 >= 2*1).
+
+    Args:
+        df (pd.DataFrame): Trading data with SL, TP, and Pullback columns
+
+    Returns:
+        dict: Dictionary of DataFrames showing profitability for each SL reduction strategy
+    """
+    import pandas as pd
+
+    # Define SL reduction configurations
+    sl_reduction_configs = [
+        ('No adjustment', lambda sl: sl, 0, 'Original stop loss values'),
+        ('1 pip reduction', lambda sl: sl - 1, 1, 'Stop loss reduced by 1 pip'),
+        ('2 pips reduction', lambda sl: sl - 2, 2, 'Stop loss reduced by 2 pips'),
+    ]
+
+    # RRR configurations with their breakeven win rates
+    rrr_configs = [
+        (1, 50.0),   # 1:1 RRR - need 50% to break even
+        (2, 33.3),   # 1:2 RRR - need 33.3% to break even
+        (3, 25.0),   # 1:3 RRR - need 25% to break even
+    ]
+
+    # Create a DataFrame for each SL reduction strategy
+    sl_reduction_tables = {}
+
+    for config_name, sl_adjust_func, reduction_amount, description in sl_reduction_configs:
+        # Work with all trades
+        working_df = df.copy()
+
+        # Apply SL adjustment (but ensure SL doesn't go below 0)
+        adjusted_sl = sl_adjust_func(working_df['SL'])
+        adjusted_sl = adjusted_sl.clip(lower=0.1)  # Minimum 0.1 pip SL to avoid division by zero
+
+        # Total trades for this configuration
+        total_trades = len(working_df)
+
+        # Initialize the summary data structure
+        summary_data = {
+            config_name: ['Total trades', 'Wins', 'Losses', 'Win Rate', 'Edge', 'Outcome']
+        }
+
+        # Calculate statistics for each RRR
+        for ratio, breakeven_rate in rrr_configs:
+            rrr_label = f'1:{ratio} RRR'
+
+            if total_trades > 0:
+                # Calculate wins for this RRR ratio with adjusted SL
+                # A trade wins if:
+                # 1. SL != Pullback (valid entry)
+                # 2. TP >= ratio * adjusted_sl (profitable with the adjusted stop loss)
+                profitable = working_df[
+                    (working_df['SL'] != working_df['Pullback']) &
+                    (working_df['TP'] >= (ratio * adjusted_sl))
+                ]
+                wins = len(profitable)
+                losses = total_trades - wins
+                win_rate = (wins / total_trades * 100)
+
+                # Calculate edge (win rate - breakeven rate)
+                edge = win_rate - breakeven_rate
+
+                # Calculate outcome in R-multiples
+                outcome = (wins * ratio) - losses
+
+                summary_data[rrr_label] = [
+                    total_trades,
+                    wins,
+                    losses,
+                    f'{win_rate:.1f}%',
+                    f'{edge:.1f}%',
+                    f'{outcome}R'
+                ]
+            else:
+                # Empty strategy
+                summary_data[rrr_label] = [
+                    0,
+                    0,
+                    0,
+                    '0.0%',
+                    '0.0%',
+                    '0R'
+                ]
+
+        sl_reduction_tables[config_name] = pd.DataFrame(summary_data)
+
+    return sl_reduction_tables
+
+
 def analyze_entry_timing(df):
     """
     Analyze different entry timing strategies and their success rates.
