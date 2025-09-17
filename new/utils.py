@@ -838,16 +838,16 @@ def get_top_strategies(strategy_results, rrr_column):
 def get_top_strategies_by_edge(strategy_results, rrr_column):
     """
     Extract top performing strategies for a specific RRR, sorted by Edge.
-    
+
     Args:
         strategy_results (dict): Dictionary of strategy results
         rrr_column (str): Column name for RRR (e.g., '1:2 RRR')
-        
+
     Returns:
         pd.DataFrame: Top strategies ranked by edge
     """
     strategy_performance = []
-    
+
     for strategy_name, df in strategy_results.items():
         # Extract performance metrics
         total_trades = df[rrr_column].iloc[0]
@@ -857,10 +857,10 @@ def get_top_strategies_by_edge(strategy_results, rrr_column):
         edge = df[rrr_column].iloc[4]
         outcome_str = df[rrr_column].iloc[5]
         entry_str = df[rrr_column].iloc[6]
-        
+
         # Parse edge value for sorting
         edge_value = float(edge.replace('%', ''))
-        
+
         strategy_performance.append({
             'Strategy': strategy_name.split('[')[0].strip(),
             'Entry': entry_str,
@@ -872,22 +872,107 @@ def get_top_strategies_by_edge(strategy_results, rrr_column):
             'Outcome': outcome_str,
             'edge_value': edge_value
         })
-    
+
     # Filter out strategies with negative Edge
     filtered_strategies = [
-        strat for strat in strategy_performance 
+        strat for strat in strategy_performance
         if strat['edge_value'] > 0
     ]
-    
+
     # Sort by edge and get top strategies
     top_strategies = sorted(
-        filtered_strategies, 
-        key=lambda x: x['edge_value'], 
+        filtered_strategies,
+        key=lambda x: x['edge_value'],
         reverse=True
     )
-    
+
     # Remove sorting key from display
     for strat in top_strategies:
         del strat['edge_value']
-    
+
     return pd.DataFrame(top_strategies)
+
+
+def style_table(table_df, first_column_width='250px', highlight_column=None, highlight_color='green'):
+    """
+    Apply consistent styling to a DataFrame for display.
+
+    Args:
+        table_df (pd.DataFrame): DataFrame to style
+        first_column_width (str): Width for the first column (default '250px')
+        highlight_column (str): Optional column to highlight
+        highlight_color (str): Color for highlighted column (default 'green')
+
+    Returns:
+        pandas.io.formats.style.Styler: Styled DataFrame ready for display
+    """
+    first_column = table_df.columns[0]
+    styled_df = table_df.style.set_properties(
+        subset=[first_column],
+        **{'width': first_column_width, 'font-weight': 'bold'}
+    )
+
+    if highlight_column and highlight_column in table_df.columns:
+        styled_df = styled_df.set_properties(
+            subset=[highlight_column],
+            **{'color': highlight_color}
+        )
+
+    return styled_df
+
+
+def display_tables_with_insights(tables_dict, insights_html):
+    """
+    Display multiple tables with consistent styling and insights.
+
+    Args:
+        tables_dict (dict): Dictionary of table names to DataFrames
+        insights_html (str): HTML string with insights to display after tables
+    """
+    from IPython.display import display, HTML
+
+    for table_name, table_df in tables_dict.items():
+        display(style_table(table_df))
+        print()  # Add spacing between tables
+
+    if insights_html:
+        display(HTML(insights_html))
+
+
+def analyze_entry_timing_styled(df):
+    """
+    Wrapper for analyze_entry_timing_detailed that returns styled tables.
+
+    Args:
+        df (pd.DataFrame): Trading data
+
+    Returns:
+        styled tables ready for display
+    """
+    return analyze_entry_timing_detailed(df)
+
+
+def analyze_pullback_profitability_styled(df):
+    """
+    Wrapper for analyze_pullback_profitability that returns styled tables.
+
+    Args:
+        df (pd.DataFrame): Trading data
+
+    Returns:
+        dict of styled tables ready for display
+    """
+    return analyze_pullback_profitability(df)
+
+
+def analyze_sl_reduction_profitability_styled(df):
+    """
+    Wrapper for analyze_sl_reduction_profitability that returns styled tables.
+
+    Args:
+        df (pd.DataFrame): Trading data
+
+    Returns:
+        dict of styled tables ready for display
+    """
+    return analyze_sl_reduction_profitability(df)
