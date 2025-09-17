@@ -658,7 +658,7 @@ def evaluate_all_strategies(df, strategies):
         dict: Dictionary mapping strategy names to their performance DataFrames
     """
     strategy_results = {}
-    sl_columns = ['SL', 'SL 5M CC', 'SL 5M Stop', 'SL Breakout']
+    sl_columns = ['SL'] #, 'SL 5M CC', 'SL 5M Stop', 'SL Breakout']
     entry_names = {
         'SL': '1M CC',
         'SL 5M CC': '5M CC',
