@@ -32,73 +32,6 @@ def load_and_clean_data(filepath='./eurusd.csv'):
     return df
 
 
-def percentage(value, total):
-    """
-    Calculate percentage of value over total.
-    
-    Args:
-        value (int/float): The numerator value
-        total (int/float): The denominator value
-    
-    Returns:
-        str: Formatted percentage string (e.g., "45.5%")
-    """
-    if total == 0:
-        return "0.0%"
-    return f"{value / total * 100:.1f}%"
-
-
-def calculate_profitable_trades(df):
-    """
-    Calculate profitability statistics for different trading strategies.
-    
-    Args:
-        df (pd.DataFrame): Trading data
-    
-    Returns:
-        pd.DataFrame: Profitability statistics for various strategies
-    """
-    # Define trading strategies with their filters
-    strategies = {
-        'Total': lambda d: d[(d['SL'] != d['Pullback'])],
-        'With Extra 1 pip': lambda d: d[((d['SL'] != d['Pullback']) | ((d['SL'] == d['Pullback']) & (d['Extra'] < 1)))],
-        'With Extra 2 pips': lambda d: d[((d['SL'] != d['Pullback']) | ((d['SL'] == d['Pullback']) & (d['Extra'] < 2)))],
-        'With Extra 3 pips': lambda d: d[((d['SL'] != d['Pullback']) | ((d['SL'] == d['Pullback']) & (d['Extra'] < 3)))],
-        'With EMA Direction': lambda d: d[(d['SL'] != d['Pullback']) & (d['EMA'] == d['Direction'])],
-        'Against EMA Direction': lambda d: d[(d['SL'] != d['Pullback']) & (d['EMA'] != d['Direction'])],
-        'Just BOS Trades': lambda d: d[(d['SL'] != d['Pullback']) & (d['BOS/CH'] == 'BOS')],
-        'Just CH Trades': lambda d: d[(d['SL'] != d['Pullback']) & (d['BOS/CH'] == 'CH')],
-        'With EMA + BOS': lambda d: d[(d['SL'] != d['Pullback']) & (d['EMA'] == d['Direction']) & (d['BOS/CH'] == 'BOS')],
-        'With EMA + CH': lambda d: d[(d['SL'] != d['Pullback']) & (d['EMA'] == d['Direction']) & (d['BOS/CH'] == 'CH')],
-    }
-    
-    results = {'Data': list(strategies.keys())}
-    
-    # Calculate for each Risk-Reward Ratio
-    for rrr in [1, 2, 3]:
-        rrr_results = []
-        for strategy_name, filter_func in strategies.items():
-            filtered = filter_func(df)
-            
-            if strategy_name == 'With Extra 1 pip':
-                profitable = filtered[filtered['TP'] >= (filtered['SL'] + 1) * rrr]
-            elif strategy_name == 'With Extra 2 pips':
-                profitable = filtered[filtered['TP'] >= (filtered['SL'] + 2) * rrr]
-            elif strategy_name == 'With Extra 3 pips':
-                profitable = filtered[filtered['TP'] >= (filtered['SL'] + 3) * rrr]
-            else:
-                profitable = filtered[filtered['TP'] >= filtered['SL'] * rrr]
-            
-            rrr_results.append(percentage(len(profitable), len(df)))
-        
-        results[f'1:{rrr} RRR'] = rrr_results
-    
-    # Create DataFrame and sort by best 1:1 RRR performance
-    df_results = pd.DataFrame(results)
-    df_results['Value_num'] = df_results['1:1 RRR'].str.rstrip('%').astype(float)
-    return df_results.sort_values('Value_num', ascending=False).drop(columns='Value_num').reset_index(drop=True)
-
-
 def display_profitable_strategies(strategy_results):
     """
     Display detailed results for all or selected strategies.
@@ -120,7 +53,7 @@ def display_profitable_strategies(strategy_results):
     strategies_to_display = profitable_strategies
     
     # Display each strategy's results
-    for strategy_name, summary_df in strategies_to_display:
+    for _, summary_df in strategies_to_display:
         # Style the DataFrame for better readability
         # Use the first column of the DataFrame (which contains the strategy name)
         first_column = summary_df.columns[0]
@@ -177,7 +110,7 @@ def analyze_pullback_profitability(df):
     # Create a DataFrame for each pullback threshold
     pullback_tables = {}
 
-    for pullback_name, filter_func, description in pullback_configs:
+    for pullback_name, filter_func, _ in pullback_configs:
         # Filter trades for this pullback threshold
         filtered_df = filter_func(df)
 
@@ -272,7 +205,7 @@ def analyze_sl_reduction_profitability(df):
     # Create a DataFrame for each SL reduction strategy
     sl_reduction_tables = {}
 
-    for config_name, sl_adjust_func, reduction_amount, description in sl_reduction_configs:
+    for config_name, sl_adjust_func, _, _ in sl_reduction_configs:
         # Work with all trades
         working_df = df.copy()
 
@@ -335,62 +268,6 @@ def analyze_sl_reduction_profitability(df):
         sl_reduction_tables[config_name] = pd.DataFrame(summary_data)
 
     return sl_reduction_tables
-
-
-def analyze_entry_timing(df):
-    """
-    Analyze different entry timing strategies and their success rates.
-
-    This function compares various entry methods:
-    - 1M Confirmation Candle: Entry on 1-minute candle confirmation
-    - 5M Confirmation Candle: Entry on 5-minute candle confirmation
-    - 5M Stop: Entry with 5-minute stop loss level
-    - 5M Breakout: Entry on 5-minute confirmation candle that I built indicator for
-
-    Args:
-        df (pd.DataFrame): Trading data with entry signals
-
-    Returns:
-        pd.DataFrame: Entry timing statistics sorted by success rate
-    """
-    # Calculate winning trades for each entry method
-    entry_methods = {
-        '1M Confirmation Candle': {
-            'filter': lambda d: d['SL'] != 0,
-            'profitable': lambda d: d[(d['SL'] != d['Pullback']) & (d['TP'] > d['SL'])],
-            'sl_col': 'SL'
-        },
-        '5M Confirmation Candle': {
-            'filter': lambda d: d['SL 5M CC'] != 0,
-            'profitable': lambda d: d[(d['SL'] != d['Pullback']) & (d['TP'] > d['SL 5M CC'])],
-            'sl_col': 'SL 5M CC'
-        },
-        '5M Stop': {
-            'filter': lambda d: d['SL 5M Stop'] != 0,
-            'profitable': lambda d: d[(d['SL'] != d['Pullback']) & (d['TP'] > d['SL 5M Stop'])],
-            'sl_col': 'SL 5M Stop'
-        }
-    }
-
-    results = []
-    for method_name, method_config in entry_methods.items():
-        # Get relevant trades for this method
-        relevant_trades = df[method_config['filter'](df)]
-        profitable_trades = method_config['profitable'](df)
-        total_trades = len(relevant_trades)
-        wins = len(profitable_trades)
-        losses = total_trades - wins
-
-        results.append({
-            'Idea': method_name,
-            'Notation': f"{wins}W - {losses}L",
-            'Win Rate': percentage(wins, total_trades),
-        })
-
-    # Convert to DataFrame and sort by win percentage
-    df_results = pd.DataFrame(results)
-    df_results['Value_num'] = df_results['Win Rate'].str.rstrip('%').astype(float)
-    return df_results.sort_values('Value_num', ascending=False).drop(columns='Value_num').reset_index(drop=True)
 
 
 def analyze_entry_timing_detailed(df):
@@ -957,65 +834,6 @@ def evaluate_all_strategies(df, strategies, include_extra_pip=False, include_max
     return strategy_results
 
 
-def get_top_strategies(strategy_results, rrr_column):
-    """
-    Extract top performing strategies for a specific RRR.
-    
-    Args:
-        strategy_results (dict): Dictionary of strategy results
-        rrr_column (str): Column name for RRR (e.g., '1:2 RRR')
-        top_n (int): Number of top strategies to return
-        
-    Returns:
-        pd.DataFrame: Top strategies ranked by outcome
-    """
-    strategy_performance = []
-    
-    for strategy_name, df in strategy_results.items():
-        # Extract performance metrics
-        total_trades = df[rrr_column].iloc[0]
-        wins = df[rrr_column].iloc[1]
-        losses = df[rrr_column].iloc[2]
-        win_rate = df[rrr_column].iloc[3]
-        edge = df[rrr_column].iloc[4]
-        outcome_str = df[rrr_column].iloc[5]
-        entry_str = df[rrr_column].iloc[6]
-        
-        # Parse outcome value for sorting
-        outcome = int(outcome_str.replace('R', ''))
-        
-        strategy_performance.append({
-            'Strategy': strategy_name.split('[')[0].strip(),
-            'Entry': entry_str,
-            'Trades': total_trades,
-            'Wins': wins,
-            'Losses': losses,
-            'Win Rate': win_rate,
-            'Edge': edge,
-            'Outcome': outcome_str,
-            'outcome_value': outcome
-        })
-    
-    # Filter out strategies with negative Edge
-    filtered_strategies = [
-        strat for strat in strategy_performance 
-        if not strat['Edge'].startswith('-')
-    ]
-    
-    # Sort by outcome and get top N
-    top_strategies = sorted(
-        filtered_strategies, 
-        key=lambda x: x['outcome_value'], 
-        reverse=True
-    )
-    
-    # Remove sorting key from display
-    for strat in top_strategies:
-        del strat['outcome_value']
-    
-    return pd.DataFrame(top_strategies)
-
-
 def get_top_strategies_by_edge(strategy_results, rrr_column):
     """
     Extract top performing strategies for a specific RRR, sorted by Edge.
@@ -1125,7 +943,7 @@ def display_tables_with_insights(tables_dict, insights_html):
     """
     from IPython.display import display, HTML
 
-    for table_name, table_df in tables_dict.items():
+    for _, table_df in tables_dict.items():
         display(style_table(table_df))
         print()  # Add spacing between tables
 
