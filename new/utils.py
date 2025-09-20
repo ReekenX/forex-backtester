@@ -255,11 +255,11 @@ def analyze_sl_reduction_profitability(df):
         ('No adjustment', lambda sl: sl, 0, 'Original stop loss values'),
         ('1 pip reduction', lambda sl: sl - 1, 1, 'Stop loss reduced by 1 pip'),
         ('2 pips reduction', lambda sl: sl - 2, 2, 'Stop loss reduced by 2 pips'),
-        ('1 pip reduction on max 4 pip SL', lambda sl: np.minimum(sl - 1, 4), 1, 'Stop loss reduced by 1 pip but max 4 pip'),
-        ('1 pip reduction on max 5 pip SL', lambda sl: np.minimum(sl - 1, 5), 1, 'Stop loss reduced by 1 pip but max 5 pip'),
-        ('1 pip reduction on max 6 pip SL', lambda sl: np.minimum(sl - 2, 6), 2, 'Stop loss reduced by 1 pip but max 6 pip'),
-        ('1 pip reduction on max 7 pip SL', lambda sl: np.minimum(sl - 2, 7), 2, 'Stop loss reduced by 1 pip but max 7 pip'),
-        ('1 pip reduction on max 8 pip SL', lambda sl: np.minimum(sl - 2, 8), 2, 'Stop loss reduced by 1 pip but max 8 pip'),
+        ('1 pip reduction or max 4 pip SL', lambda sl: np.where(sl > 5, 4, sl - 1), 1, 'Stop loss reduced by 1 pip but max 4 pip'),
+        ('1 pip reduction or max 5 pip SL', lambda sl: np.where(sl > 6, 5, sl - 1), 1, 'Stop loss reduced by 1 pip but max 5 pip'),
+        ('2 pips reduction or max 6 pip SL', lambda sl: np.where(sl > 8, 6, sl - 2), 2, 'Stop loss reduced by 2 pips but max 6 pip'),
+        ('2 pips reduction or max 7 pip SL', lambda sl: np.where(sl > 9, 7, sl - 2), 2, 'Stop loss reduced by 2 pips but max 7 pip'),
+        ('2 pips reduction or max 8 pip SL', lambda sl: np.where(sl > 10, 8, sl - 2), 2, 'Stop loss reduced by 2 pips but max 8 pip'),
     ]
 
     # RRR configurations with their breakeven win rates
@@ -278,7 +278,7 @@ def analyze_sl_reduction_profitability(df):
 
         # Apply SL adjustment (but ensure SL doesn't go below 0)
         adjusted_sl = sl_adjust_func(working_df['SL'])
-        adjusted_sl = adjusted_sl.clip(lower=1.1)  # Minimum 1.1 pip as it is broker limit
+        adjusted_sl = np.maximum(adjusted_sl, 1.1)  # Minimum 1.1 pip as it is broker limit
 
         # Total trades for this configuration
         total_trades = len(working_df)
