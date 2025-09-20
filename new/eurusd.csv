@@ -155,3 +155,16 @@ Date,Trade,Weekday,Hour,Direction,EMA,SL,Pullback,SL 5M CC,SL 5M Stop,TP,Extra,B
 2025-09-08,#11,Monday,16,Buy,Buy,2.5,2.5,3.4,5.0,5,,BOS,Above H,,
 2025-09-08,#12,Monday,18,Sell,Buy,4.6,4.6,,,,,BOS,Above H,,
 2025-09-08,#13,Monday,18,Buy,Buy,6.4,6.4,6.6,7.2,,,CH,Above H,,
+2025-09-09,#1,Tuesday,11,Sell,Sell,6.6,6.6,9.3,9.3,,,BOS,Below H,,
+2025-09-09,#2,Tuesday,11,Buy,Sell,7.1,2.6,8.1,8.2,14,,BOS,Below H,,
+2025-09-09,#3,Tuesday,12,Buy,Buy,3.7,3.7,3.8,4.4,,,BOS,Above H,,
+2025-09-09,#4,Tuesday,14,Sell,Sell,2.5,,5.5,5.7,23,,BOS,Below H,,
+2025-09-09,#5,Tuesday,16,Sell,Sell,3.5,3.5,3.4,4.8,,,BOS,Below H,,
+2025-09-09,#6,Tuesday,16,Buy,Buy,4.9,4.9,4.6,4.9,,,BOS,Below H,,
+2025-09-10,#1,Wednesday,12,Sell,Buy,6.2,6.2,7.8,9.2,,1.4,CH,Above L,3,PPI
+2025-09-10,#2,Wednesday,15,Buy,Sell,11.1,0.8,,15.4,36,,CH,Above L,,
+2025-09-10,#3,Wednesday,15,Buy,Sell,5.8,1.4,9.2,10.9,33,,BOS,Above L,,
+2025-09-10,#4,Wednesday,17,Buy,Buy,7.6,0.5,12.8,12.9,7,,BOS,Above H,,
+2025-09-11,#1,Thursday,15,Sell,Buy,3.5,3.5,,,,,BOS,Above L,1,Unemployments Claims
+2025-09-11,#2,Thursday,17,Buy,Buy,13.8,2.0,14.1,16.8,16,,BOS,Above L,,
+2025-09-11,#3,Thursday,18,Buy,Buy,6.5,2.0,6.4,7.6,7,,BOS,Above L,,
