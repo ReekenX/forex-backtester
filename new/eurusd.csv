@@ -139,3 +139,6 @@ Date,Trade,Weekday,Hour,Direction,EMA,SL,Pullback,SL 5M CC,SL 5M Stop,SL Breakou
 2025-09-04,#5,Thursday,14,Sell,Sell,3.9,3.9,3.6,4.4,3.6,,,BOS,Above L,1,ADP Non Farm
 2025-09-04,#6,Thursday,15,Buy,Sell,5.3,5.3,6.3,6.6,,10,,CH,Above L,1,Unemployments Claims
 2025-09-04,#7,Thursday,16,Sell,Sell,11.9,1.5,14.0,14.7,14.0,14,,CH,Above L,1,ISM
+2025-09-05,#1,Friday,11,Buy,Buy,2.4,2.0,2.8,2.6,2.8,24,,BOS,Above L,4,Unemployments Claims
+2025-09-05,#2,Friday,15,Sell,Buy,4.0,4.0,,5.8,,,,CH,Above H,1,Unemployments Claims
+2025-09-05,#3,Friday,17,Sell,Buy,14.2,3.0,16.4,17.2,23.7,22,,CH,Above H,,

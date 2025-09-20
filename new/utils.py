@@ -3,6 +3,7 @@ Utility functions for forex trading strategy analysis.
 """
 
 import pandas as pd
+import numpy as np
 
 
 def load_and_clean_data(filepath='./eurusd.csv'):
@@ -254,6 +255,11 @@ def analyze_sl_reduction_profitability(df):
         ('No adjustment', lambda sl: sl, 0, 'Original stop loss values'),
         ('1 pip reduction', lambda sl: sl - 1, 1, 'Stop loss reduced by 1 pip'),
         ('2 pips reduction', lambda sl: sl - 2, 2, 'Stop loss reduced by 2 pips'),
+        ('1 pip reduction on max 4 pip SL', lambda sl: np.minimum(sl - 1, 4), 1, 'Stop loss reduced by 1 pip but max 4 pip'),
+        ('1 pip reduction on max 5 pip SL', lambda sl: np.minimum(sl - 1, 5), 1, 'Stop loss reduced by 1 pip but max 5 pip'),
+        ('1 pip reduction on max 6 pip SL', lambda sl: np.minimum(sl - 2, 6), 2, 'Stop loss reduced by 1 pip but max 6 pip'),
+        ('1 pip reduction on max 7 pip SL', lambda sl: np.minimum(sl - 2, 7), 2, 'Stop loss reduced by 1 pip but max 7 pip'),
+        ('1 pip reduction on max 8 pip SL', lambda sl: np.minimum(sl - 2, 8), 2, 'Stop loss reduced by 1 pip but max 8 pip'),
     ]
 
     # RRR configurations with their breakeven win rates
@@ -272,7 +278,7 @@ def analyze_sl_reduction_profitability(df):
 
         # Apply SL adjustment (but ensure SL doesn't go below 0)
         adjusted_sl = sl_adjust_func(working_df['SL'])
-        adjusted_sl = adjusted_sl.clip(lower=0.1)  # Minimum 0.1 pip SL to avoid division by zero
+        adjusted_sl = adjusted_sl.clip(lower=1.1)  # Minimum 1.1 pip as it is broker limit
 
         # Total trades for this configuration
         total_trades = len(working_df)
@@ -290,9 +296,11 @@ def analyze_sl_reduction_profitability(df):
                 # Calculate wins for this RRR ratio with adjusted SL
                 # A trade wins if:
                 # 1. SL != Pullback (valid entry)
-                # 2. TP >= ratio * adjusted_sl (profitable with the adjusted stop loss)
+                # 2. Pullback < adjusted_sl (pullback is smaller than the new stop loss)
+                # 3. TP >= ratio * adjusted_sl (profitable with the adjusted stop loss)
                 profitable = working_df[
                     (working_df['SL'] != working_df['Pullback']) &
+                    (working_df['Pullback'] < adjusted_sl) &
                     (working_df['TP'] >= (ratio * adjusted_sl))
                 ]
                 wins = len(profitable)
@@ -845,7 +853,7 @@ def evaluate_all_strategies(df, strategies, include_extra_pip=False):
         dict: Dictionary mapping strategy names to their performance DataFrames
     """
     strategy_results = {}
-    sl_columns = ['SL'] #, 'SL 5M CC', 'SL 5M Stop', 'SL Breakout']
+    sl_columns = ['SL', 'SL 5M CC', 'SL 5M Stop', 'SL Breakout']
     entry_names = {
         'SL': '1M CC',
         'SL 5M CC': '5M CC',
@@ -1040,42 +1048,3 @@ def display_tables_with_insights(tables_dict, insights_html):
 
     if insights_html:
         display(HTML(insights_html))
-
-
-def analyze_entry_timing_styled(df):
-    """
-    Wrapper for analyze_entry_timing_detailed that returns styled tables.
-
-    Args:
-        df (pd.DataFrame): Trading data
-
-    Returns:
-        styled tables ready for display
-    """
-    return analyze_entry_timing_detailed(df)
-
-
-def analyze_pullback_profitability_styled(df):
-    """
-    Wrapper for analyze_pullback_profitability that returns styled tables.
-
-    Args:
-        df (pd.DataFrame): Trading data
-
-    Returns:
-        dict of styled tables ready for display
-    """
-    return analyze_pullback_profitability(df)
-
-
-def analyze_sl_reduction_profitability_styled(df):
-    """
-    Wrapper for analyze_sl_reduction_profitability that returns styled tables.
-
-    Args:
-        df (pd.DataFrame): Trading data
-
-    Returns:
-        dict of styled tables ready for display
-    """
-    return analyze_sl_reduction_profitability(df)
