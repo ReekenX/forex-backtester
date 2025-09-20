@@ -841,6 +841,10 @@ def get_top_strategies_by_edge(
     strategy_performance = []
 
     for strategy_name, df in strategy_results.items():
+        # Skip if column doesn't exist
+        if rrr_column not in df.columns:
+            continue
+
         # Extract performance metrics
         total_trades = df[rrr_column].iloc[0]
         wins = df[rrr_column].iloc[1]
@@ -850,8 +854,20 @@ def get_top_strategies_by_edge(
         outcome_str = df[rrr_column].iloc[5]
         entry_str = df[rrr_column].iloc[6]
 
-        # Parse edge value for sorting
-        edge_value = float(edge.replace('%', ''))
+        # Parse edge value for sorting - handle both string and numeric
+        try:
+            if isinstance(edge, str):
+                # Remove % sign and convert to float
+                edge_str = edge.strip()
+                if edge_str.endswith('%'):
+                    edge_value = float(edge_str[:-1])
+                else:
+                    edge_value = float(edge_str)
+            else:
+                edge_value = float(edge) if edge else 0.0
+        except (ValueError, TypeError, AttributeError):
+            # If parsing fails, set to 0
+            edge_value = 0.0
 
         # Clean up display name
         if '[Extra 1 pip]' in strategy_name:
@@ -877,6 +893,8 @@ def get_top_strategies_by_edge(
 
     # Filter positive edge strategies and sort
     filtered_strategies = [s for s in strategy_performance if s['edge_value'] > 0]
+
+    # Sort by edge_value in descending order
     top_strategies = sorted(filtered_strategies, key=lambda x: x['edge_value'], reverse=True)
 
     # Remove sorting key from display
