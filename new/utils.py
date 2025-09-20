@@ -768,13 +768,17 @@ def style_table(
     Returns:
         Styled DataFrame ready for display
     """
-    first_column = table_df.columns[0]
-    styled_df = table_df.style.set_properties(
+    # Adjust index to start from 1
+    table_df_copy = table_df.copy()
+    table_df_copy.index = range(1, len(table_df_copy) + 1)
+
+    first_column = table_df_copy.columns[0]
+    styled_df = table_df_copy.style.set_properties(
         subset=[first_column],
         **{'width': first_column_width, 'font-weight': 'bold'}
     )
 
-    if highlight_column and highlight_column in table_df.columns:
+    if highlight_column and highlight_column in table_df_copy.columns:
         styled_df = styled_df.set_properties(
             subset=[highlight_column],
             **{'color': highlight_color}
