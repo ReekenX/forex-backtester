@@ -304,7 +304,6 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         ('No Pullback', lambda d: d),
         ('Pullback >= 0.5 pips', lambda d: d[d['Pullback'] >= 0.5]),
         ('Pullback >= 1.0 pip', lambda d: d[d['Pullback'] >= 1.0]),
-        ('Pullback >= 1.5 pips', lambda d: d[d['Pullback'] >= 1.5]),
         ('Pullback >= 2.0 pips', lambda d: d[d['Pullback'] >= 2.0]),
     ]
 
@@ -452,10 +451,10 @@ def _create_risk_management_strategies() -> List[Tuple[str, Callable, str]]:
         ("Aggressive: SL >= 7 pips",
          lambda df: df[df['SL'] >= 7],
          "Wide stop losses"),
-        ("BOS + Conservative SL",
+        ("BOS + Conservative SL <= 2 pips",
          lambda df: df[(df['BOS/CH'] == 'BOS') & (df['SL'] <= 2)],
          "BOS with tight stops"),
-        ("BOS + Moderate SL",
+        ("BOS + Moderate SL 3-6 pips",
          lambda df: df[(df['BOS/CH'] == 'BOS') & (df['SL'] >= 3) & (df['SL'] <= 6)],
          "BOS with medium stops"),
     ]
@@ -782,45 +781,3 @@ def style_table(
         )
 
     return styled_df
-
-
-def display_profitable_strategies(
-    strategy_results: Dict[str, pd.DataFrame]
-) -> None:
-    """
-    Display detailed results for profitable strategies only.
-
-    Args:
-        strategy_results: Dictionary of strategy performance DataFrames
-    """
-    # Filter for profitable strategies (positive outcome at 1:1 RRR)
-    profitable_strategies = []
-    for name, df in strategy_results.items():
-        outcome_str = df['1:1 RRR'].iloc[5]
-        outcome = int(outcome_str.replace('R', ''))
-        if outcome > 0:
-            profitable_strategies.append((name, df))
-
-    display(HTML(f"<h2>💰 Profitable Strategies ({len(profitable_strategies)} of {len(strategy_results)})</h2>"))
-
-    # Display each strategy's results
-    for _, summary_df in profitable_strategies:
-        # Style the DataFrame for better readability
-        first_column = summary_df.columns[0]
-        styled_df = summary_df.style.set_properties(
-            subset=[first_column],
-            **{'width': '250px', 'font-weight': 'bold'}
-        )
-
-        # Highlight positive outcomes in green, negative in red
-        for col in ['1:1 RRR', '1:2 RRR', '1:3 RRR']:
-            outcome_str = summary_df[col].iloc[5]
-            outcome = int(outcome_str.replace('R', ''))
-            color = 'green' if outcome > 0 else 'red' if outcome < 0 else 'gray'
-            styled_df = styled_df.set_properties(
-                subset=[col],
-                **{'color': color if summary_df.index[5] == 'Outcome' else 'white'}
-            )
-
-        display(styled_df)
-        print()  # Add spacing
