@@ -255,11 +255,11 @@ def analyze_sl_reduction_profitability(df):
         ('No adjustment', lambda sl: sl, 0, 'Original stop loss values'),
         ('1 pip reduction', lambda sl: sl - 1, 1, 'Stop loss reduced by 1 pip'),
         ('2 pips reduction', lambda sl: sl - 2, 2, 'Stop loss reduced by 2 pips'),
-        ('1 pip reduction or max 4 pip SL', lambda sl: np.where(sl > 5, 4, sl - 1), 1, 'Stop loss reduced by 1 pip but max 4 pip'),
-        ('1 pip reduction or max 5 pip SL', lambda sl: np.where(sl > 6, 5, sl - 1), 1, 'Stop loss reduced by 1 pip but max 5 pip'),
-        ('2 pips reduction or max 6 pip SL', lambda sl: np.where(sl > 8, 6, sl - 2), 2, 'Stop loss reduced by 2 pips but max 6 pip'),
-        ('2 pips reduction or max 7 pip SL', lambda sl: np.where(sl > 9, 7, sl - 2), 2, 'Stop loss reduced by 2 pips but max 7 pip'),
-        ('2 pips reduction or max 8 pip SL', lambda sl: np.where(sl > 10, 8, sl - 2), 2, 'Stop loss reduced by 2 pips but max 8 pip'),
+        ('1 pip reduction or max 4 pip SL', lambda sl: np.where(sl > 4, 4, sl - 1), 1, 'Stop loss reduced by 1 pip but max 4 pip'),
+        ('1 pip reduction or max 5 pip SL', lambda sl: np.where(sl > 5, 5, sl - 1), 1, 'Stop loss reduced by 1 pip but max 5 pip'),
+        ('1 pip reduction or max 6 pip SL', lambda sl: np.where(sl > 6, 6, sl - 1), 1, 'Stop loss reduced by 1 pip but max 6 pip'),
+        ('1 pip reduction or max 7 pip SL', lambda sl: np.where(sl > 7, 7, sl - 1), 1, 'Stop loss reduced by 1 pip but max 7 pip'),
+        ('1 pip reduction or max 8 pip SL', lambda sl: np.where(sl > 8, 8, sl - 1), 1, 'Stop loss reduced by 1 pip but max 8 pip'),
     ]
 
     # RRR configurations with their breakeven win rates
@@ -595,6 +595,93 @@ def calculate_rrr_stats_with_extra(data_df, strategy_name, sl_column='SL', extra
     return pd.DataFrame(summary_data)
 
 
+def calculate_rrr_stats_max_5_pips(data_df, strategy_name, sl_column='SL'):
+    """
+    Calculate RRR statistics with max 5 pip stop loss adjustment for trades.
+
+    This function applies the max 5 pip SL logic: stop losses are capped at 5 pips,
+    and trades are only profitable if Pullback < adjusted_sl.
+
+    Args:
+        data_df (pd.DataFrame): Filtered DataFrame containing trades for this strategy
+        strategy_name (str): Name of the strategy for labeling
+        sl_column (str): Column to use for stop loss calculations
+
+    Returns:
+        pd.DataFrame: Statistics table with max 5 pip SL adjustments
+    """
+    import numpy as np
+
+    # Keep the same total trades as the original strategy
+    total_trades = len(data_df)
+
+    # RRR configurations with their breakeven win rates
+    rrr_configs = [
+        (1, 50.0),   # 1:1 RRR
+        (2, 33.3),   # 1:2 RRR
+        (3, 25.0),   # 1:3 RRR
+    ]
+
+    # Handle empty strategy results
+    if total_trades == 0:
+        summary_data = {
+            strategy_name + ' (max 5p SL)': ['Total trades', 'Wins', 'Losses', 'Win Rate', 'Edge', 'Outcome', 'Entry']
+        }
+        for ratio, _ in rrr_configs:
+            summary_data[f'1:{ratio} RRR'] = [0, 0, 0, '0.0%', '0.0%', '0R']
+        return pd.DataFrame(summary_data)
+
+    # Calculate statistics for each RRR level
+    summary_data = {
+        strategy_name + ' (max 5p SL)': ['Total trades', 'Wins', 'Losses', 'Win Rate', 'Edge', 'Outcome', 'Entry']
+    }
+    entry_names = {
+        'SL': '1M CC',
+        'SL 5M CC': '5M CC',
+        'SL 5M Stop': '5M Stop'
+    }
+    entry_str = entry_names[sl_column]
+
+    for ratio, breakeven_rate in rrr_configs:
+        # Apply max 5 pip SL logic (similar to analyze_sl_reduction_profitability)
+        # Cap SL at 5 pips maximum
+        adjusted_sl = np.where(data_df[sl_column] > 5, 5, data_df[sl_column])
+
+        # Calculate wins with max 5 pip SL logic:
+        # A trade wins if:
+        # 1. SL != Pullback (valid entry)
+        # 2. Pullback < adjusted_sl (pullback doesn't exceed adjusted stop)
+        # 3. TP >= ratio * adjusted_sl (profitable for this RRR)
+
+        wins_mask = (
+            (data_df['SL'] != data_df['Pullback']) &
+            (data_df['Pullback'] < adjusted_sl) &
+            (data_df['TP'] >= ratio * adjusted_sl)
+        )
+
+        wins = wins_mask.sum()
+        losses = total_trades - wins
+        win_rate = (wins / total_trades) * 100
+
+        # Edge is how much better we perform than breakeven
+        edge = win_rate - breakeven_rate
+
+        # Calculate expected outcome in R-multiples
+        outcome = (wins * ratio) - losses
+
+        summary_data[f'1:{ratio} RRR'] = [
+            total_trades,
+            wins,
+            losses,
+            f"{win_rate:.1f}%",
+            f"{edge:.1f}%",
+            f"{outcome}R",
+            entry_str
+        ]
+
+    return pd.DataFrame(summary_data)
+
+
 def calculate_rrr_stats(data_df, strategy_name, sl_column='SL'):
     """
     Calculate comprehensive Risk-Reward Ratio statistics for a trading strategy.
@@ -827,7 +914,7 @@ def create_strategy_library():
     return [Strategy(name, func, desc) for name, func, desc in strategy_configs]
 
 
-def evaluate_all_strategies(df, strategies, include_extra_pip=False):
+def evaluate_all_strategies(df, strategies, include_extra_pip=False, include_max_5_pip=False):
     """
     Run backtesting on all strategies and compile results.
 
@@ -835,6 +922,7 @@ def evaluate_all_strategies(df, strategies, include_extra_pip=False):
         df (pd.DataFrame): Trading data
         strategies (list): List of Strategy objects
         include_extra_pip (bool): Whether to include Extra 1 pip analysis
+        include_max_5_pip (bool): Whether to include max 5 pip SL analysis
 
     Returns:
         dict: Dictionary mapping strategy names to their performance DataFrames
@@ -860,6 +948,11 @@ def evaluate_all_strategies(df, strategies, include_extra_pip=False):
             if include_extra_pip:
                 summary_df_extra = calculate_rrr_stats_with_extra(filtered_df, strategy.name, sl_column, extra_pips=1)
                 strategy_results[strategy.name + ' [Extra 1 pip][' + entry_names[sl_column] + ']'] = summary_df_extra
+
+            # If requested, also calculate with max 5 pip SL
+            if include_max_5_pip:
+                summary_df_max5 = calculate_rrr_stats_max_5_pips(filtered_df, strategy.name, sl_column)
+                strategy_results[strategy.name + ' [Max 5p SL][' + entry_names[sl_column] + ']'] = summary_df_max5
 
     return strategy_results
 
@@ -954,6 +1047,10 @@ def get_top_strategies_by_edge(strategy_results, rrr_column):
             # Extract the base strategy name (before [Extra 1 pip])
             base_name = strategy_name.split('[Extra 1 pip]')[0].strip()
             display_name = base_name + ' [Extra 1 pip]'
+        elif '[Max 5p SL]' in strategy_name:
+            # Extract the base strategy name (before [Max 5p SL])
+            base_name = strategy_name.split('[Max 5p SL]')[0].strip()
+            display_name = base_name + ' [Max 5p SL]'
         else:
             # Regular strategy - remove entry type bracket
             display_name = strategy_name.split('[')[0].strip()
