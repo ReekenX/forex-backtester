@@ -20,8 +20,8 @@ def load_and_clean_data(filepath='./eurusd.csv'):
     
     # Define columns that should have NaN replaced with 0
     columns_to_fillna = [
-        'SL', 'TP', 'SL 5M CC', 'SL 5M Stop', 
-        'SL Breakout', 'Hours Until News', 'Extra'
+        'SL', 'TP', 'SL 5M CC', 'SL 5M Stop',
+        'Hours Until News', 'Extra'
     ]
     
     # Fill NaN values to prevent calculation errors
@@ -369,11 +369,6 @@ def analyze_entry_timing(df):
             'filter': lambda d: d['SL 5M Stop'] != 0,
             'profitable': lambda d: d[(d['SL'] != d['Pullback']) & (d['TP'] > d['SL 5M Stop'])],
             'sl_col': 'SL 5M Stop'
-        },
-        '5M Breakout': {
-            'filter': lambda d: d['SL Breakout'] != 0,
-            'profitable': lambda d: d[(d['SL'] != d['Pullback']) & (d['TP'] > d['SL Breakout'])],
-            'sl_col': 'SL Breakout'
         }
     }
 
@@ -425,11 +420,6 @@ def analyze_entry_timing_detailed(df):
             'filter': lambda d: d['SL 5M Stop'] != 0,
             'sl_col': 'SL 5M Stop',
             'entry_type': '5M Stop Entry'
-        },
-        '5M Breakout': {
-            'filter': lambda d: d['SL Breakout'] != 0,
-            'sl_col': 'SL Breakout',
-            'entry_type': '5M Breakout Entry'
         },
         '5M Confirmation Candle': {
             'filter': lambda d: d['SL 5M CC'] != 0,
@@ -559,8 +549,7 @@ def calculate_rrr_stats_with_extra(data_df, strategy_name, sl_column='SL', extra
     entry_names = {
         'SL': '1M CC',
         'SL 5M CC': '5M CC',
-        'SL 5M Stop': '5M Stop',
-        'SL Breakout': '5M Breakout'
+        'SL 5M Stop': '5M Stop'
     }
     entry_str = entry_names[sl_column]
 
@@ -621,7 +610,6 @@ def calculate_rrr_stats(data_df, strategy_name, sl_column='SL'):
             - 'SL': Default 1M confirmation candle stop loss
             - 'SL 5M CC': 5M confirmation candle stop loss
             - 'SL 5M Stop': 5M stop entry stop loss
-            - 'SL Breakout': 5M breakout stop loss
     
     Returns:
         pd.DataFrame: Statistics table with the following metrics:
@@ -660,8 +648,7 @@ def calculate_rrr_stats(data_df, strategy_name, sl_column='SL'):
     entry_names = {
         'SL': '1M CC',
         'SL 5M CC': '5M CC',
-        'SL 5M Stop': '5M Stop',
-        'SL Breakout': '5M Breakout'
+        'SL 5M Stop': '5M Stop'
     }
     entry_str = entry_names[sl_column]
     
@@ -853,12 +840,11 @@ def evaluate_all_strategies(df, strategies, include_extra_pip=False):
         dict: Dictionary mapping strategy names to their performance DataFrames
     """
     strategy_results = {}
-    sl_columns = ['SL', 'SL 5M CC', 'SL 5M Stop', 'SL Breakout']
+    sl_columns = ['SL', 'SL 5M CC', 'SL 5M Stop']
     entry_names = {
         'SL': '1M CC',
         'SL 5M CC': '5M CC',
-        'SL 5M Stop': '5M Stop',
-        'SL Breakout': '5M Breakout'
+        'SL 5M Stop': '5M Stop'
     }
 
     for sl_column in sl_columns:
