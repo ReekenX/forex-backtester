@@ -1,12 +1,15 @@
-.PHONY: run install clean
+.PHONY: run install clean format
 
 run:
-	poetry run jupyter notebook new/lab.ipynb
+	@poetry run jupyter notebook new/lab.ipynb
 
 install:
-	poetry install
+	@poetry install
 
 clean:
-	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	find . -type f -name "*.pyc" -delete
-	find . -type d -name ".ipynb_checkpoints" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type f -name "*.pyc" -delete
+	@find . -type d -name ".ipynb_checkpoints" -exec rm -rf {} + 2>/dev/null || true
+
+format:
+	@black .
