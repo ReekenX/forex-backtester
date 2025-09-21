@@ -13,7 +13,8 @@ forex-backtester/
 │   └── lab.ipynb            # Previous analysis notebook
 ├── new/                     # Enhanced backtesting with the more detailed trading data
 │   ├── eurusd.csv           # EUR/USD data with extended analysis columns
-│   └── lab.ipynb            # Current analysis notebook
+│   ├── lab.ipynb            # Current analysis notebook
+│   └── utils.py             # Helper functions for backtesting analysis
 ├── pyproject.toml           # Poetry configuration and dependencies
 ├── Makefile                 # Build automation commands
 └── README.md                # This file
@@ -40,14 +41,14 @@ forex-backtester/
 
 ### Running Jupyter
 
-Launch JupyterLab to work with notebooks:
+Launch Jupyter Notebook to work with the current analysis:
 ```bash
 make run
 ```
 
-Or use Poetry directly:
+This will open the `new/lab.ipynb` notebook directly. Alternatively, use Poetry:
 ```bash
-poetry run jupyter lab
+poetry run jupyter notebook new/lab.ipynb
 ```
 
 ### Data Format
@@ -88,9 +89,11 @@ Includes all legacy fields plus additional analysis columns:
 
 ## Makefile Commands
 
-- `make run`: Launch JupyterLab environment
+- `make run`: Launch Jupyter Notebook with new/lab.ipynb
 - `make install`: Install all Poetry dependencies
 - `make clean`: Remove Python cache files and Jupyter checkpoints
+- `make format`: Format code using Black
+- `make lint`: Lint and auto-fix code using Ruff
 
 ## Commit Convention
 
