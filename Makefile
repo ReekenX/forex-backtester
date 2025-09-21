@@ -1,4 +1,4 @@
-.PHONY: run install clean format
+.PHONY: run install clean format lint
 
 run:
 	@poetry run jupyter notebook new/lab.ipynb
@@ -13,3 +13,6 @@ clean:
 
 format:
 	@black .
+
+lint:
+	@ruff check . --fix

@@ -15,7 +15,6 @@ Main components:
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Callable, Optional
-from IPython.display import display, HTML
 
 # ============================================================================
 # CONSTANTS AND CONFIGURATIONS
@@ -1130,7 +1129,7 @@ def style_table(
     first_column_width: str = DEFAULT_COLUMN_WIDTH,
     highlight_column: Optional[str] = None,
     highlight_color: str = DEFAULT_HIGHLIGHT_COLOR,
-) -> pd.io.formats.style.Styler:
+):
     """
     Apply consistent styling to a DataFrame for display.
 
