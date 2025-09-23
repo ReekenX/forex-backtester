@@ -381,6 +381,57 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     return pullback_tables
 
 
+def analyze_hour_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+    """
+    Analyze which hours produce the most profitable trades.
+
+    Creates a table showing wins, losses, and win percentage for each trading hour.
+
+    Args:
+        df: Trading data with Hour and TP columns
+
+    Returns:
+        Dictionary containing the hour analysis DataFrame
+    """
+    # Extract hour if not already present
+    hour_df = df.copy()
+    if 'Hour' not in hour_df.columns:
+        # If no Hour column, try to extract from Date or Time columns
+        if 'Date' in hour_df.columns:
+            hour_df['Hour'] = pd.to_datetime(hour_df['Date']).dt.hour
+        else:
+            # Hour column should already exist in the data
+            raise ValueError("No Hour column found in data")
+
+    # Calculate wins (TP > 0 means profitable trade)
+    hour_df['Is_Win'] = hour_df['TP'] > 0
+
+    # Group by hour and calculate statistics
+    hour_stats = hour_df.groupby('Hour').agg(
+        Total_Trades=('Is_Win', 'count'),
+        Wins=('Is_Win', 'sum'),
+        Losses=('Is_Win', lambda x: (~x).sum())
+    ).reset_index()
+
+    # Calculate win percentage
+    hour_stats['Win_Percentage'] = (hour_stats['Wins'] / hour_stats['Total_Trades'] * 100).round(1)
+
+    # Format hour column for display
+    hour_stats['Hour_Display'] = hour_stats['Hour'].apply(lambda x: f"{x:02d}h")
+
+    # Format win percentage for display
+    hour_stats['Win_Percentage_Display'] = hour_stats['Win_Percentage'].apply(lambda x: f"{x:.1f}%")
+
+    # Prepare final table with proper column names
+    final_table = hour_stats[['Hour_Display', 'Total_Trades', 'Wins', 'Losses', 'Win_Percentage_Display']].copy()
+    final_table.columns = ['Hour', 'Total Trades', 'Wins', 'Losses', 'Win %']
+
+    # Sort by hour
+    final_table = final_table.sort_values(by='Hour').reset_index(drop=True)
+
+    return {"Hour Analysis": final_table}
+
+
 def analyze_sl_reduction_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze how reducing stop loss size affects trade profitability.
