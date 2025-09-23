@@ -30,8 +30,6 @@ RRR_CONFIGS: List[Tuple[int, float]] = [
 # Entry method mapping for display
 ENTRY_TYPE_NAMES: Dict[str, str] = {
     "SL": "1M CC",
-    "SL 5M CC": "5M CC",
-    "SL 5M Stop": "5M Stop",
 }
 
 # Table styling defaults
@@ -59,8 +57,7 @@ def load_and_clean_data(filepath: str = "./eurusd.csv") -> pd.DataFrame:
     columns_to_fillna = [
         "SL",
         "TP",
-        "SL 5M CC",
-        "SL 5M Stop",
+        "Hour",
         "Hours Until News",
         "Extra",
     ]
@@ -243,77 +240,6 @@ def calculate_rrr_stats(
 # ============================================================================
 # ANALYSIS FUNCTIONS
 # ============================================================================
-
-
-def analyze_entry_timing_detailed(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
-    """
-    Analyze different entry timing strategies with detailed statistics including RRR analysis.
-
-    Returns 3 DataFrames, one for each entry method:
-    - 5M Stop: Entry with 5-minute stop loss level
-    - 5M Confirmation Candle: Entry on 5-minute candle confirmation
-    - 1M Confirmation Candle: Entry on 1-minute candle confirmation
-
-    Args:
-        df: Trading data with entry signals
-
-    Returns:
-        Dictionary containing DataFrames for each entry method
-    """
-    entry_methods = {
-        "5M Stop": {"filter": lambda d: d["SL 5M Stop"] != 0, "sl_col": "SL 5M Stop"},
-        "5M Confirmation Candle": {
-            "filter": lambda d: d["SL 5M CC"] != 0,
-            "sl_col": "SL 5M CC",
-        },
-        "1M Confirmation Candle": {"filter": lambda d: d["SL"] != 0, "sl_col": "SL"},
-    }
-
-    entry_tables = {}
-
-    for method_name, method_config in entry_methods.items():
-        relevant_trades = df[method_config["filter"](df)]
-        sl_col = method_config["sl_col"]
-        total_trades = len(relevant_trades)
-
-        summary_data = {
-            method_name: [
-                "Total trades",
-                "Wins",
-                "Losses",
-                "Win Rate",
-                "Edge",
-                "Outcome",
-            ]
-        }
-
-        for ratio, breakeven_rate in RRR_CONFIGS:
-            if total_trades > 0:
-                valid_wins = relevant_trades[
-                    (relevant_trades["SL"] != relevant_trades["Pullback"])
-                    & (relevant_trades["TP"] > (ratio * relevant_trades[sl_col]))
-                ]
-                wins = len(valid_wins)
-                losses = total_trades - wins
-                win_rate = wins / total_trades * 100
-                edge = win_rate - breakeven_rate
-                outcome = (wins * ratio) - losses
-
-                summary_data[f"1:{ratio} RRR"] = [
-                    total_trades,
-                    wins,
-                    losses,
-                    f"{win_rate:.1f}%",
-                    f"{edge:.1f}%",
-                    f"{outcome}R",
-                ]
-            else:
-                summary_data[f"1:{ratio} RRR"] = [0, 0, 0, "0.0%", "0.0%", "0R"]
-
-        entry_tables[method_name] = pd.DataFrame(summary_data)
-
-    return entry_tables
-
 
 def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
