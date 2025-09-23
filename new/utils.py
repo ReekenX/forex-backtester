@@ -432,6 +432,55 @@ def analyze_hour_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     return {"Hour Analysis": final_table}
 
 
+def analyze_weekday_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+    """
+    Analyze which weekdays produce the most profitable trades.
+
+    Creates a table showing wins, losses, and win percentage for each weekday.
+
+    Args:
+        df: Trading data with Weekday and TP columns
+
+    Returns:
+        Dictionary containing the weekday analysis DataFrame
+    """
+    # Work with copy of data
+    weekday_df = df.copy()
+
+    # Check if Weekday column exists
+    if 'Weekday' not in weekday_df.columns:
+        raise ValueError("No Weekday column found in data")
+
+    # Calculate wins (TP > 0 means profitable trade)
+    weekday_df['Is_Win'] = weekday_df['TP'] > 0
+
+    # Group by weekday and calculate statistics
+    weekday_stats = weekday_df.groupby('Weekday').agg(
+        Total_Trades=('Is_Win', 'count'),
+        Wins=('Is_Win', 'sum'),
+        Losses=('Is_Win', lambda x: (~x).sum())
+    ).reset_index()
+
+    # Calculate win percentage
+    weekday_stats['Win_Percentage'] = (weekday_stats['Wins'] / weekday_stats['Total_Trades'] * 100).round(1)
+
+    # Format win percentage for display
+    weekday_stats['Win_Percentage_Display'] = weekday_stats['Win_Percentage'].apply(lambda x: f"{x:.1f}%")
+
+    # Prepare final table with proper column names
+    final_table = weekday_stats[['Weekday', 'Total_Trades', 'Wins', 'Losses', 'Win_Percentage_Display']].copy()
+    final_table.columns = ['Weekday', 'Total Trades', 'Wins', 'Losses', 'Win %']
+
+    # Define proper weekday order
+    weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+    # Sort by weekday order
+    final_table['Weekday'] = pd.Categorical(final_table['Weekday'], categories=weekday_order, ordered=True)
+    final_table = final_table.sort_values('Weekday').reset_index(drop=True)
+
+    return {"Weekday Analysis": final_table}
+
+
 def analyze_sl_reduction_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze how reducing stop loss size affects trade profitability.
