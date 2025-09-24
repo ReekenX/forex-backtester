@@ -997,16 +997,205 @@ def _create_news_strategies() -> List[Tuple[str, Callable, str]]:
     ]
 
 
+def _create_double_setup_strategies() -> List[Tuple[str, Callable, str]]:
+    """Create double setup strategies (exactly 2 factors combined)."""
+    strategies = []
+
+    # EMA + BOS/CH combinations
+    strategies.extend([
+        ("EMA + BOS", lambda df: df[(df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS")], "EMA trend + Break of Structure"),
+        ("EMA + CH", lambda df: df[(df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH")], "EMA trend + Change of Character"),
+    ])
+
+    # 30M Trend + Technical indicators
+    strategies.extend([
+        ("30M Trend + EMA", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"])
+        ], "30M trend + EMA confirmation"),
+        ("30M Trend + BOS", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS")
+        ], "30M trend + Break of Structure"),
+        ("30M Trend + CH", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "CH")
+        ], "30M trend + Change of Character"),
+    ])
+
+    # 30M Trend + Risk management
+    strategies.extend([
+        ("30M Trend + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["SL"] < 10)
+        ], "30M trend + tight stops"),
+        ("30M Trend + SL < 15", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["SL"] < 15)
+        ], "30M trend + moderate stops"),
+        ("30M Trend + SL > 3", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["SL"] > 3)
+        ], "30M trend excluding tiny stops"),
+        ("30M Trend + SL > 5", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["SL"] > 5)
+        ], "30M trend excluding small stops"),
+    ])
+
+    # 30M + News filters
+    strategies.extend([
+        ("30M Trend + No News", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            df["News Event"].isna()
+        ], "30M trend avoiding news"),
+        ("30M Trend + News > 2hrs", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (~df["News Event"].isna()) & (df["Hours Until News"] >= 2)
+        ], "30M trend + safe news distance"),
+    ])
+
+    # 30M + Pullback analysis
+    strategies.extend([
+        ("30M Trend + Pullback > 2", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["Pullback"] > 2)
+        ], "30M trend + decent pullback"),
+        ("30M Trend + Pullback > 3", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["Pullback"] > 3)
+        ], "30M trend + strong pullback"),
+    ])
+
+    # BOS/CH + Risk management
+    strategies.extend([
+        ("BOS + SL ≤ 2", lambda df: df[(df["BOS/CH"] == "BOS") & (df["SL"] <= 2)], "BOS with very tight stops"),
+        ("BOS + SL 3-6", lambda df: df[(df["BOS/CH"] == "BOS") & (df["SL"] >= 3) & (df["SL"] <= 6)], "BOS with medium stops"),
+        ("CH + SL ≤ 2", lambda df: df[(df["BOS/CH"] == "CH") & (df["SL"] <= 2)], "CH with very tight stops"),
+        ("CH + SL 3-6", lambda df: df[(df["BOS/CH"] == "CH") & (df["SL"] >= 3) & (df["SL"] <= 6)], "CH with medium stops"),
+    ])
+
+    # BOS/CH + News filters
+    strategies.extend([
+        ("BOS + No News", lambda df: df[(df["BOS/CH"] == "BOS") & df["News Event"].isna()], "BOS avoiding news"),
+        ("CH + No News", lambda df: df[(df["BOS/CH"] == "CH") & df["News Event"].isna()], "CH avoiding news"),
+        ("BOS + News > 2hrs", lambda df: df[(df["BOS/CH"] == "BOS") & (~df["News Event"].isna()) & (df["Hours Until News"] >= 2)], "BOS with safe news distance"),
+        ("CH + News > 2hrs", lambda df: df[(df["BOS/CH"] == "CH") & (~df["News Event"].isna()) & (df["Hours Until News"] >= 2)], "CH with safe news distance"),
+    ])
+
+    # EMA + Risk management
+    strategies.extend([
+        ("EMA + SL ≤ 2", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] <= 2)], "EMA trend with tight stops"),
+        ("EMA + SL 3-6", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] >= 3) & (df["SL"] <= 6)], "EMA trend with medium stops"),
+        ("EMA + SL < 10", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] < 10)], "EMA trend excluding large stops"),
+    ])
+
+    # EMA + News filters
+    strategies.extend([
+        ("EMA + No News", lambda df: df[(df["EMA"] == df["Direction"]) & df["News Event"].isna()], "EMA trend avoiding news"),
+        ("EMA + News > 2hrs", lambda df: df[(df["EMA"] == df["Direction"]) & (~df["News Event"].isna()) & (df["Hours Until News"] >= 2)], "EMA trend with safe news distance"),
+    ])
+
+    return strategies
+
+
+def _create_triple_setup_strategies() -> List[Tuple[str, Callable, str]]:
+    """Create triple setup strategies (3+ factors combined)."""
+    strategies = []
+
+    # Triple combinations with 30M + EMA + BOS/CH
+    strategies.extend([
+        ("30M Trend + EMA + BOS", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS")
+        ], "Triple confirmation: 30M + EMA + BOS"),
+        ("30M Trend + EMA + CH", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH")
+        ], "Triple confirmation: 30M + EMA + CH"),
+    ])
+
+    # Triple combinations with risk management
+    strategies.extend([
+        ("30M Trend + BOS + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") & (df["SL"] < 10)
+        ], "30M + BOS with risk control"),
+        ("30M Trend + CH + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "CH") & (df["SL"] < 10)
+        ], "30M + CH with risk control"),
+        ("30M Trend + EMA + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["SL"] < 10)
+        ], "30M + EMA with risk control"),
+    ])
+
+    # Quadruple combination - ultimate confluence
+    strategies.extend([
+        ("30M Trend + EMA + BOS + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") & (df["SL"] < 10)
+        ], "Full confluence with risk limit"),
+    ])
+
+    # Complex SL range combinations
+    strategies.extend([
+        ("30M Trend + 3 < SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["SL"] > 3) & (df["SL"] < 10)
+        ], "30M trend with optimal stops"),
+        ("30M Trend + 5 < SL < 15", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["SL"] > 5) & (df["SL"] < 15)
+        ], "30M trend with moderate stops"),
+        ("30M Trend + EMA + 3 < SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["SL"] > 3) & (df["SL"] < 10)
+        ], "30M + EMA with optimal stops"),
+    ])
+
+    # Triple combinations with pullback
+    strategies.extend([
+        ("30M Trend + BOS + Pullback > 2", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") & (df["Pullback"] > 2)
+        ], "30M + BOS with pullback filter"),
+        ("30M Trend + CH + No News", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "CH") & df["News Event"].isna()
+        ], "30M + CH in clean conditions"),
+    ])
+
+    return strategies
+
+
 def create_strategy_library() -> List[Strategy]:
     """
     Create a comprehensive library of trading strategies for backtesting.
-
-    Generates strategies across multiple categories:
-    1. Technical Indicators (EMA, BOS/CH)
-    2. Risk Management (Stop Loss levels)
-    3. Market Structure (Trend alignment)
-    4. Time-based (News events)
-    5. Combined filters (Multi-factor strategies)
+    This includes all strategies (single, double, and triple setups).
 
     Returns:
         List of Strategy objects ready for backtesting
@@ -1021,6 +1210,28 @@ def create_strategy_library() -> List[Strategy]:
 
     # Convert to Strategy objects
     return [Strategy(name, func, desc) for name, func, desc in all_strategies]
+
+
+def create_double_setup_strategy_library() -> List[Strategy]:
+    """
+    Create a library of double setup trading strategies (exactly 2 factors).
+
+    Returns:
+        List of double setup Strategy objects ready for backtesting
+    """
+    double_strategies = _create_double_setup_strategies()
+    return [Strategy(name, func, desc) for name, func, desc in double_strategies]
+
+
+def create_triple_setup_strategy_library() -> List[Strategy]:
+    """
+    Create a library of triple+ setup trading strategies (3+ factors).
+
+    Returns:
+        List of triple+ setup Strategy objects ready for backtesting
+    """
+    triple_strategies = _create_triple_setup_strategies()
+    return [Strategy(name, func, desc) for name, func, desc in triple_strategies]
 
 
 def _create_single_setup_strategies() -> List[Tuple[str, Callable, str]]:
@@ -1267,8 +1478,8 @@ def display_sl_reduction_analysis(df: pd.DataFrame):
         print('')
 
 
-def display_strategy_analysis(df: pd.DataFrame):
-    """Display comprehensive strategy analysis with proper formatting."""
+def display_double_setup_strategy_analysis(df: pd.DataFrame):
+    """Display double setup strategy analysis with proper formatting."""
     from IPython.display import display, HTML
 
     strategies = [
@@ -1278,7 +1489,7 @@ def display_strategy_analysis(df: pd.DataFrame):
             "Baseline: All trades without any filtering"
         )
     ]
-    strategies.extend(create_strategy_library())
+    strategies.extend(create_double_setup_strategy_library())
     strategy_results = evaluate_all_strategies(df, strategies)
 
     rrr_configs = [
@@ -1288,12 +1499,12 @@ def display_strategy_analysis(df: pd.DataFrame):
     ]
 
     for rrr_column, rrr_label in rrr_configs:
-        display(HTML(f"<h2>Best {rrr_label} Strategies</h2>"))
+        display(HTML(f"<h2>Double Setup {rrr_label} Strategies</h2>"))
 
         top_df = get_top_strategies_by_edge(strategy_results, rrr_column)
 
         top_df_regular = top_df.copy()
-        top_df_regular = top_df_regular.rename(columns={'Strategy': f'Top {rrr_label} Strategies'})
+        top_df_regular = top_df_regular.rename(columns={'Strategy': f'Top Double Setup {rrr_label} Strategies'})
 
         display(style_table(top_df_regular, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
         print()
@@ -1320,12 +1531,44 @@ def display_single_setup_strategy_analysis(df: pd.DataFrame):
     ]
 
     for rrr_column, rrr_label in rrr_configs:
-        display(HTML(f"<h2>Best Single Setup {rrr_label} Strategies</h2>"))
+        display(HTML(f"<h2>Single Setup {rrr_label} Strategies</h2>"))
 
         top_df = get_top_strategies_by_edge(strategy_results, rrr_column)
 
         top_df_regular = top_df.copy()
         top_df_regular = top_df_regular.rename(columns={'Strategy': f'Top Single Setup {rrr_label} Strategies'})
+
+        display(style_table(top_df_regular, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
+        print()
+
+
+def display_triple_setup_strategy_analysis(df: pd.DataFrame):
+    """Display triple setup strategy analysis with proper formatting."""
+    from IPython.display import display, HTML
+
+    strategies = [
+        Strategy(
+            "Plain Strategy",
+            lambda df: df,
+            "Baseline: All trades without any filtering"
+        )
+    ]
+    strategies.extend(create_triple_setup_strategy_library())
+    strategy_results = evaluate_all_strategies(df, strategies)
+
+    rrr_configs = [
+        ('1:1 RRR', '1:1'),
+        ('1:2 RRR', '1:2'),
+        ('1:3 RRR', '1:3'),
+    ]
+
+    for rrr_column, rrr_label in rrr_configs:
+        display(HTML(f"<h2>Triple Setup {rrr_label} Strategies</h2>"))
+
+        top_df = get_top_strategies_by_edge(strategy_results, rrr_column)
+
+        top_df_regular = top_df.copy()
+        top_df_regular = top_df_regular.rename(columns={'Strategy': f'Top Triple Setup {rrr_label} Strategies'})
 
         display(style_table(top_df_regular, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
         print()
