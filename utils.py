@@ -1289,15 +1289,6 @@ def _create_single_setup_strategies() -> List[Tuple[str, Callable, str]]:
         ("Pullback 50%", lambda df: df[df['Pullback'] >= df['SL'] * 0.5], "Pullback at least 50% of SL"),
     ])
 
-    # Hour-based filters (Individual)
-    strategies.extend([
-        ("London Session (8-16h)", lambda df: df[(df["Hour"] >= 8) & (df["Hour"] <= 16)], "London trading hours"),
-        ("New York Session (13-21h)", lambda df: df[(df["Hour"] >= 13) & (df["Hour"] <= 21)], "New York trading hours"),
-        ("Asian Session (22-6h)", lambda df: df[(df["Hour"] >= 22) | (df["Hour"] <= 6)], "Asian trading hours"),
-        ("Peak Hours (8-12h)", lambda df: df[(df["Hour"] >= 8) & (df["Hour"] <= 12)], "Morning peak trading"),
-        ("Afternoon Hours (13-17h)", lambda df: df[(df["Hour"] >= 13) & (df["Hour"] <= 17)], "Afternoon trading"),
-    ])
-
     # Additional SL ranges
     strategies.extend([
         ("SL 1-3 pips", lambda df: df[(df["SL"] >= 1) & (df["SL"] <= 3)], "Very tight SL range"),
