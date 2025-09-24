@@ -4,31 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Important: Read README.md First
 
-Always read the README.md file for:
-- Project overview and structure
-- Installation and usage instructions
-- Available make commands
-- Data format specifications
-- Backtesting rules and constraints
-- Commit conventions
+Always read the README.md file for complete project information including installation, usage, data format specifications, and commit conventions.
+
+## Project Focus
+
+When questions are asked about this project, assume they refer to:
+- **main.ipynb** - The primary Jupyter notebook for analysis
+- **utils.py** - The core utility module containing all analysis functions
 
 ## Architecture and Key Components
 
-### Data Structure
-The project uses two CSV formats for trading data:
-
-1. **Legacy format** (old/eurusd.csv) - Basic trade data with ~900 trades
-2. **Enhanced format** (new/eurusd.csv) - Extended with timing, news, and 30M trend analysis
-
-Key data columns:
-- Direction: Buy/Sell trade signal
-- EMA: EMA trend indicator
-- BOS/CH: Market structure (Break of Structure / Change of Character)
-- SL/Pullback/TP: Risk management metrics
-- 30M Leg: Higher timeframe trend alignment
-- News Event: Economic news impact tracking
-
-### Core Module: new/utils.py
+### Core Module: utils.py
 
 The utils module contains all backtesting logic organized into sections:
 
@@ -66,4 +52,18 @@ The utils module contains all backtesting logic organized into sections:
 4. 30M trend alignment:
    - Buy trend: "Above H" or "Above L"
    - Sell trend: "Below H" or "Below L"
+
+## Notebook Structure Guidelines
+
+### main.ipynb Requirements
+- Keep the notebook **extremely simple** with minimal code
+- Use only `display_*()` function calls from utils.py
+- Avoid complex logic or calculations in notebook cells
+- All analysis logic should be implemented in utils.py functions
+- Example structure:
+  ```python
+  display_hour_analysis(df)
+  display_weekday_analysis(df)
+  display_strategy_analysis(df)
+  ```
 
