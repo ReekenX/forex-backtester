@@ -1504,7 +1504,6 @@ def display_double_setup_strategy_analysis(df: pd.DataFrame):
         top_df = get_top_strategies_by_edge(strategy_results, rrr_column)
 
         top_df_regular = top_df.copy()
-        top_df_regular = top_df_regular.rename(columns={'Strategy': f'Top Double Setup {rrr_label} Strategies'})
 
         display(style_table(top_df_regular, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
         print()
@@ -1536,7 +1535,6 @@ def display_single_setup_strategy_analysis(df: pd.DataFrame):
         top_df = get_top_strategies_by_edge(strategy_results, rrr_column)
 
         top_df_regular = top_df.copy()
-        top_df_regular = top_df_regular.rename(columns={'Strategy': f'Top Single Setup {rrr_label} Strategies'})
 
         display(style_table(top_df_regular, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
         print()
@@ -1568,7 +1566,6 @@ def display_triple_setup_strategy_analysis(df: pd.DataFrame):
         top_df = get_top_strategies_by_edge(strategy_results, rrr_column)
 
         top_df_regular = top_df.copy()
-        top_df_regular = top_df_regular.rename(columns={'Strategy': f'Top Triple Setup {rrr_label} Strategies'})
 
         display(style_table(top_df_regular, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
         print()
