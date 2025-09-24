@@ -334,10 +334,11 @@ def analyze_hour_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     # Calculate wins (TP > 0 means profitable trade)
     hour_df['Is_Win'] = hour_df['TP'] > 0
 
-    # Remove rows with NaN hours before analysis
+    # Remove rows with NaN or empty hours before analysis
     hour_df = hour_df.dropna(subset=['Hour'])
+    hour_df = hour_df[hour_df['Hour'] != 0]
 
-    # Check if we have any data left after removing NaN hours
+    # Check if we have any data left after filtering
     if len(hour_df) == 0:
         # Return empty table if no hour data available
         empty_df = pd.DataFrame(columns=['Hour', 'Total Trades', 'Wins', 'Losses', 'Win %'])
