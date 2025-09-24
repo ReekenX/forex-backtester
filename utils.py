@@ -1765,12 +1765,12 @@ def create_sortable_table(
 
         #{table_id} th.sorted-asc::after {{
             content: ' ↑';
-            color: #333;
+            color: #999;
         }}
 
         #{table_id} th.sorted-desc::after {{
             content: ' ↓';
-            color: #333;
+            color: #999;
         }}
 
         #{table_id} td:first-child {{
