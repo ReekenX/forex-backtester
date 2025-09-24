@@ -257,7 +257,7 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         ("No Pullback", lambda d: d),
         ("Pullback >= 0.5 pips", lambda d: d[d["Pullback"] >= 0.5]),
         ("Pullback >= 1.0 pip", lambda d: d[d["Pullback"] >= 1.0]),
-        ("Pullback 50%", lambda d: d[d['SL'] * 0.5 > d['Pullback']]), # TODO: there might be a bug here
+        ("Pullback 50%", lambda d: d[d['Pullback'] >= d['SL'] * 0.5]),
     ]
 
     pullback_rows = []
