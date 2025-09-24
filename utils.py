@@ -272,6 +272,7 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
                 # TODO: if pullback is used, this changes SL and TP values that are not calculated here
                 profitable = filtered_df[
                     (filtered_df["SL"] != filtered_df["Pullback"])
+                    & (filtered_df["Pullback"] < filtered_df["SL"])
                     & (filtered_df["TP"] >= (ratio * filtered_df["SL"]))
                 ]
                 wins = len(profitable)
