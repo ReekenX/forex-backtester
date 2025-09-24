@@ -1,15 +1,15 @@
 Date,Trade,Weekday,Hour,Direction,EMA,SL,Pullback,TP,Extra,BOS/CH,30M Leg,Hours Until News,News Event
-2025-02-03,#1,Monday,,Sell,Sell,10.7,10.7,0,,BOS,,,
-2025-02-03,#2,Monday,,Buy,Buy,5.4,5.4,0,,BOS,,,
-2025-02-03,#4,Monday,,Buy,Buy,19.3,1.7,24,,BOS,,,
-2025-02-04,#1,Tuesday,,Buy,Buy,6.7,0.5,70,,BOS,,,
-2025-02-04,#2,Tuesday,,Buy,Sell,7.6,7.6,0,,BOS,,,
-2025-02-04,#3,Tuesday,,Sell,Sell,4.0,4.0,0,,BOS,,,
-2025-02-04,#4,Tuesday,,Buy,Sell,2.1,1.7,61,,BOS,,,
-2025-02-04,#5,Tuesday,,Buy,Buy,14.4,1.7,50,,BOS,,,
-2025-02-04,#6,Tuesday,,Buy,Buy,3.6,0.9,0,,BOS,,,
-2025-02-04,#7,Tuesday,,Sell,Buy,3.0,3.0,0,,CH,,,
-2025-02-04,#8,Tuesday,,Buy,Buy,4.8,4.8,0,,CH,,,
+2025-02-03,#1,Monday,10,Sell,Sell,10.7,10.7,0,,BOS,Below L,7,ISM
+2025-02-03,#2,Monday,11,Buy,Buy,5.4,5.4,0,,BOS,Below L,6,ISM
+2025-02-03,#4,Monday,17,Buy,Buy,19.3,1.7,24,,BOS,Above H,,
+2025-02-04,#1,Tuesday,10,Buy,Buy,6.7,0.5,70,,BOS,Below H,7,JOLTS
+2025-02-04,#2,Tuesday,12,Buy,Sell,7.6,7.6,0,,BOS,Below H,5,JOLTS
+2025-02-04,#3,Tuesday,13,Sell,Sell,4.0,4.0,0,,BOS,Below H,4,JOLTS
+2025-02-04,#4,Tuesday,14,Buy,Sell,2.1,1.7,61,,BOS,Below H,3,JOLTS
+2025-02-04,#5,Tuesday,17,Buy,Buy,14.4,1.7,50,,BOS,Above H,,
+2025-02-04,#6,Tuesday,17,Buy,Buy,3.6,0.9,0,,BOS,Above H,,
+2025-02-04,#7,Tuesday,18,Sell,Buy,3.0,3.0,0,,CH,Above H,,
+2025-02-04,#8,Tuesday,18,Buy,Buy,4.8,4.8,0,,CH,Above H,,
 2025-02-05,#1,Wednesday,,Buy,Buy,7.0,7.0,0,,BOS,,,
 2025-02-05,#2,Wednesday,,Buy,Buy,5.4,5.4,0,,BOS,,,
 2025-02-05,#3,Wednesday,,Sell,Buy,4.1,0.7,0,,BOS,,,
