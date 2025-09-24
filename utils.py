@@ -245,13 +245,13 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze how pullback size affects trade profitability.
 
-    Creates multiple tables showing profitability statistics for different pullback sizes.
+    Creates a table showing profitability statistics for different pullback types and RRR ratios.
 
     Args:
         df: Trading data with Pullback, TP, and SL columns
 
     Returns:
-        Dictionary of DataFrames, one for each pullback threshold
+        Dictionary containing the pullback analysis DataFrame
     """
     pullback_configs = [
         ("No Pullback", lambda d: d),
@@ -260,29 +260,16 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         ("Pullback 50%", lambda d: d[d['SL'] * 0.5 > d['Pullback']]), # TODO: there might be a bug here
     ]
 
-    pullback_tables = {}
+    pullback_rows = []
 
-    for pullback_name, filter_func, _ in [
-        (name, func, "") for name, func in pullback_configs
-    ]:
+    for pullback_name, filter_func in pullback_configs:
         filtered_df = filter_func(df)
-        total_trades = len(filtered_df)
-
-        summary_data = {
-            pullback_name: [
-                "Total trades",
-                "Wins",
-                "Losses",
-                "Win Rate",
-                "Edge",
-                "Outcome",
-            ]
-        }
 
         for ratio, breakeven_rate in RRR_CONFIGS:
+            total_trades = len(filtered_df)
+
             if total_trades > 0:
                 # TODO: if pullback is used, this changes SL and TP values that are not calculated here
-
                 profitable = filtered_df[
                     (filtered_df["SL"] != filtered_df["Pullback"])
                     & (filtered_df["TP"] >= (ratio * filtered_df["SL"]))
@@ -290,23 +277,22 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
                 wins = len(profitable)
                 losses = total_trades - wins
                 win_rate = wins / total_trades * 100
-                edge = win_rate - breakeven_rate
-                outcome = (wins * ratio) - losses
-
-                summary_data[f"1:{ratio} RRR"] = [
-                    total_trades,
-                    wins,
-                    losses,
-                    f"{win_rate:.1f}%",
-                    f"{edge:.1f}%",
-                    f"{outcome}R",
-                ]
             else:
-                summary_data[f"1:{ratio} RRR"] = [0, 0, 0, "0.0%", "0.0%", "0R"]
+                wins = 0
+                losses = 0
+                win_rate = 0.0
 
-        pullback_tables[pullback_name] = pd.DataFrame(summary_data)
+            pullback_rows.append({
+                'Type': pullback_name if ratio == 1 else '',
+                'RRR': f'1:{ratio}',
+                'Total Trades': total_trades,
+                'Wins': wins,
+                'Losses': losses,
+                'Win %': f"{win_rate:.1f}%"
+            })
 
-    return pullback_tables
+    final_table = pd.DataFrame(pullback_rows)
+    return {"Pullback Analysis": final_table}
 
 
 def analyze_hour_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
