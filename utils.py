@@ -1158,6 +1158,86 @@ def get_top_strategies_by_edge(
 # ============================================================================
 
 
+def display_hour_analysis(df: pd.DataFrame):
+    """Display hour profitability analysis with proper formatting."""
+    from IPython.display import display, HTML
+
+    display(HTML("<h2>Hour Analysis</h2>"))
+    hour_tables = analyze_hour_profitability(df)
+
+    for table_name, table_df in hour_tables.items():
+        display(style_table(table_df))
+        print('')
+
+
+def display_weekday_analysis(df: pd.DataFrame):
+    """Display weekday profitability analysis with proper formatting."""
+    from IPython.display import display, HTML
+
+    display(HTML("<h2>Weekday Analysis</h2>"))
+    weekday_tables = analyze_weekday_profitability(df)
+
+    for table_name, table_df in weekday_tables.items():
+        display(style_table(table_df))
+        print('')
+
+
+def display_pullback_analysis(df: pd.DataFrame):
+    """Display pullback profitability analysis with proper formatting."""
+    from IPython.display import display, HTML
+
+    display(HTML("<h2>Pullback Analysis</h2>"))
+    pullback_tables = analyze_pullback_profitability(df)
+
+    for table_name, table_df in pullback_tables.items():
+        display(style_table(table_df))
+        print('')
+
+
+def display_sl_reduction_analysis(df: pd.DataFrame):
+    """Display SL reduction profitability analysis with proper formatting."""
+    from IPython.display import display, HTML
+
+    display(HTML("<h2>SL Reduction Analysis</h2>"))
+    sl_reduction_tables = analyze_sl_reduction_profitability(df)
+
+    for table_name, table_df in sl_reduction_tables.items():
+        display(style_table(table_df))
+        print('')
+
+
+def display_strategy_analysis(df: pd.DataFrame):
+    """Display comprehensive strategy analysis with proper formatting."""
+    from IPython.display import display, HTML
+
+    strategies = [
+        Strategy(
+            "Plain Strategy",
+            lambda df: df,
+            "Baseline: All trades without any filtering"
+        )
+    ]
+    strategies.extend(create_strategy_library())
+    strategy_results = evaluate_all_strategies(df, strategies)
+
+    rrr_configs = [
+        ('1:1 RRR', '1:1'),
+        ('1:2 RRR', '1:2'),
+        ('1:3 RRR', '1:3'),
+    ]
+
+    for rrr_column, rrr_label in rrr_configs:
+        display(HTML(f"<h2>Best {rrr_label} Strategies</h2>"))
+
+        top_df = get_top_strategies_by_edge(strategy_results, rrr_column)
+
+        top_df_regular = top_df.copy()
+        top_df_regular = top_df_regular.rename(columns={'Strategy': f'Top {rrr_label} Strategies'})
+
+        display(style_table(top_df_regular, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
+        print()
+
+
 def style_table(
     table_df: pd.DataFrame,
     first_column_width: str = DEFAULT_COLUMN_WIDTH,
