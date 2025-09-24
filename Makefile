@@ -1,7 +1,7 @@
 .PHONY: run install clean format lint
 
 run:
-	@poetry run jupyter notebook new/lab.ipynb
+	@poetry run jupyter notebook main.ipynb
 
 install:
 	@poetry install

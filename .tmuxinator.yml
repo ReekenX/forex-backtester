@@ -1,0 +1,9 @@
+name: forex-backtester
+
+startup_window: shell
+
+windows:
+  - shell:
+  - claude:
+      - alias run="tmux rename-window -t\${TMUX_PANE} '🟢 claude'; claude --dangerously-skip-permissions; tmux rename-window -t\${TMUX_PANE} '🔴 claude'"
+      - run

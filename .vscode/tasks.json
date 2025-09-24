@@ -4,7 +4,7 @@
     {
       "label": "Tmux",
       "type": "shell",
-      "command": "tmuxinator start forex-backtester",
+      "command": "tmuxinator start",
       "isBackground": true,
       "runOptions": {
         "runOn": "folderOpen"
