@@ -426,7 +426,8 @@ def analyze_sl_reduction_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFra
         ("1 pip reduction or max 5 pip SL", lambda sl: np.where(sl > 5, 5, sl - 1)),
         ("1 pip reduction or max 6 pip SL", lambda sl: np.where(sl > 6, 6, sl - 1)),
         ("1 pip reduction or max 7 pip SL", lambda sl: np.where(sl > 7, 7, sl - 1)),
-        ("1 pip reduction or max 8 pip SL", lambda sl: np.where(sl > 8, 8, sl - 1)),
+        ("1 pip reduction or max 10 pip SL", lambda sl: np.where(sl > 10, 10, sl - 1)),
+        ("1 pip reduction or max 15 pip SL", lambda sl: np.where(sl > 15, 15, sl - 1)),
     ]
 
     sl_reduction_rows = []
