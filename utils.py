@@ -1023,6 +1023,94 @@ def create_strategy_library() -> List[Strategy]:
     return [Strategy(name, func, desc) for name, func, desc in all_strategies]
 
 
+def _create_single_setup_strategies() -> List[Tuple[str, Callable, str]]:
+    """Create single setup strategies (no combinations)."""
+    strategies = []
+
+    # Technical Indicators (Individual)
+    strategies.extend([
+        ("EMA Aligned", lambda df: df[df["EMA"] == df["Direction"]], "EMA matches trade direction"),
+        ("EMA Counter-Trend", lambda df: df[df["EMA"] != df["Direction"]], "EMA opposite to trade direction"),
+        ("BOS Only", lambda df: df[df["BOS/CH"] == "BOS"], "Break of Structure trades only"),
+        ("CH Only", lambda df: df[df["BOS/CH"] == "CH"], "Change of Character trades only"),
+    ])
+
+    # Risk Management (Individual)
+    strategies.extend([
+        ("SL ≤ 2 pips", lambda df: df[df["SL"] <= 2], "Very tight stop losses"),
+        ("SL 3-6 pips", lambda df: df[(df["SL"] >= 3) & (df["SL"] <= 6)], "Medium stop losses"),
+        ("SL ≥ 7 pips", lambda df: df[df["SL"] >= 7], "Wide stop losses"),
+        ("SL < 10 pips", lambda df: df[df["SL"] < 10], "Exclude very large stops"),
+        ("SL > 3 pips", lambda df: df[df["SL"] > 3], "Exclude tiny stops"),
+        ("SL > 5 pips", lambda df: df[df["SL"] > 5], "Exclude small stops"),
+        ("SL < 15 pips", lambda df: df[df["SL"] < 15], "Exclude extremely large stops"),
+    ])
+
+    # 30M Trend (Individual)
+    strategies.extend([
+        ("30M Trend", lambda df: df[
+            (df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+            (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))
+        ], "Higher timeframe trend alignment only"),
+    ])
+
+    # News Events (Individual)
+    strategies.extend([
+        ("No News", lambda df: df[df["News Event"].isna()], "Avoid news volatility"),
+        ("With News", lambda df: df[~df["News Event"].isna()], "Trade during news periods"),
+        ("News > 2hrs", lambda df: df[(~df["News Event"].isna()) & (df["Hours Until News"] >= 2)], "Safe distance from news"),
+    ])
+
+    # Trade Direction (Individual)
+    strategies.extend([
+        ("Buy Trades Only", lambda df: df[df["Direction"] == "Buy"], "Long positions only"),
+        ("Sell Trades Only", lambda df: df[df["Direction"] == "Sell"], "Short positions only"),
+    ])
+
+    # Pullback Analysis (Individual)
+    strategies.extend([
+        ("Pullback ≥ 0.5 pips", lambda df: df[df["Pullback"] >= 0.5], "Minimum pullback filter"),
+        ("Pullback ≥ 1.0 pip", lambda df: df[df["Pullback"] >= 1.0], "Decent pullback filter"),
+        ("Pullback ≥ 2 pips", lambda df: df[df["Pullback"] >= 2], "Strong pullback filter"),
+        ("Pullback ≥ 3 pips", lambda df: df[df["Pullback"] >= 3], "Very strong pullback filter"),
+        ("Pullback 50%", lambda df: df[df['Pullback'] >= df['SL'] * 0.5], "Pullback at least 50% of SL"),
+    ])
+
+    # Hour-based filters (Individual)
+    strategies.extend([
+        ("London Session (8-16h)", lambda df: df[(df["Hour"] >= 8) & (df["Hour"] <= 16)], "London trading hours"),
+        ("New York Session (13-21h)", lambda df: df[(df["Hour"] >= 13) & (df["Hour"] <= 21)], "New York trading hours"),
+        ("Asian Session (22-6h)", lambda df: df[(df["Hour"] >= 22) | (df["Hour"] <= 6)], "Asian trading hours"),
+        ("Peak Hours (8-12h)", lambda df: df[(df["Hour"] >= 8) & (df["Hour"] <= 12)], "Morning peak trading"),
+        ("Afternoon Hours (13-17h)", lambda df: df[(df["Hour"] >= 13) & (df["Hour"] <= 17)], "Afternoon trading"),
+    ])
+
+    # Additional SL ranges
+    strategies.extend([
+        ("SL 1-3 pips", lambda df: df[(df["SL"] >= 1) & (df["SL"] <= 3)], "Very tight SL range"),
+        ("SL 4-8 pips", lambda df: df[(df["SL"] >= 4) & (df["SL"] <= 8)], "Moderate SL range"),
+        ("SL 9-15 pips", lambda df: df[(df["SL"] >= 9) & (df["SL"] <= 15)], "Wide SL range"),
+        ("SL > 10 pips", lambda df: df[df["SL"] > 10], "Large stops only"),
+        ("SL > 15 pips", lambda df: df[df["SL"] > 15], "Very large stops only"),
+    ])
+
+    return strategies
+
+
+def create_single_setup_strategy_library() -> List[Strategy]:
+    """
+    Create a library of single setup trading strategies for backtesting.
+
+    Unlike the main strategy library, this focuses on individual components
+    rather than combinations, allowing for analysis of single factors.
+
+    Returns:
+        List of single setup Strategy objects ready for backtesting
+    """
+    single_strategies = _create_single_setup_strategies()
+    return [Strategy(name, func, desc) for name, func, desc in single_strategies]
+
+
 def evaluate_all_strategies(
     df: pd.DataFrame, strategies: List[Strategy]
 ) -> Dict[str, pd.DataFrame]:
@@ -1206,6 +1294,38 @@ def display_strategy_analysis(df: pd.DataFrame):
 
         top_df_regular = top_df.copy()
         top_df_regular = top_df_regular.rename(columns={'Strategy': f'Top {rrr_label} Strategies'})
+
+        display(style_table(top_df_regular, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
+        print()
+
+
+def display_single_setup_strategy_analysis(df: pd.DataFrame):
+    """Display single setup strategy analysis with proper formatting."""
+    from IPython.display import display, HTML
+
+    strategies = [
+        Strategy(
+            "Plain Strategy",
+            lambda df: df,
+            "Baseline: All trades without any filtering"
+        )
+    ]
+    strategies.extend(create_single_setup_strategy_library())
+    strategy_results = evaluate_all_strategies(df, strategies)
+
+    rrr_configs = [
+        ('1:1 RRR', '1:1'),
+        ('1:2 RRR', '1:2'),
+        ('1:3 RRR', '1:3'),
+    ]
+
+    for rrr_column, rrr_label in rrr_configs:
+        display(HTML(f"<h2>Best Single Setup {rrr_label} Strategies</h2>"))
+
+        top_df = get_top_strategies_by_edge(strategy_results, rrr_column)
+
+        top_df_regular = top_df.copy()
+        top_df_regular = top_df_regular.rename(columns={'Strategy': f'Top Single Setup {rrr_label} Strategies'})
 
         display(style_table(top_df_regular, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
         print()
