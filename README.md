@@ -2,7 +2,17 @@
 
 A Jupyter-based project for analyzing and backtesting forex trading data.
 
-Trading data is 5 minute timeframe, only EURUSD currency traded only during London session.
+## Strategy Background
+
+Trading data is taken from 5 minute timeframe and only EURUSD currency.
+
+Trades are taken during London session but hours tracked in Lithuanian timezone.
+
+## Trader Background
+
+Trader risking 0.5% per trade.
+
+Not taking trades right before red (high importance) news.
 
 ## Project Structure
 
