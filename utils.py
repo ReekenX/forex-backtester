@@ -409,13 +409,13 @@ def analyze_sl_reduction_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFra
     """
     Analyze how reducing stop loss size affects trade profitability.
 
-    Tests the impact of tightening stop losses on trade outcomes.
+    Creates a table showing profitability statistics for different SL reduction types and RRR ratios.
 
     Args:
         df: Trading data with SL, TP, and Pullback columns
 
     Returns:
-        Dictionary of DataFrames showing profitability for each SL reduction strategy
+        Dictionary containing the SL reduction analysis DataFrame
     """
     sl_reduction_configs = [
         ("No adjustment", lambda sl: sl),
@@ -428,29 +428,16 @@ def analyze_sl_reduction_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFra
         ("1 pip reduction or max 8 pip SL", lambda sl: np.where(sl > 8, 8, sl - 1)),
     ]
 
-    sl_reduction_tables = {}
+    sl_reduction_rows = []
 
-    for config_name, sl_adjust_func, _, _ in [
-        (name, func, 0, "") for name, func in sl_reduction_configs
-    ]:
+    for config_name, sl_adjust_func in sl_reduction_configs:
         working_df = df.copy()
         adjusted_sl = sl_adjust_func(working_df["SL"])
         adjusted_sl = np.maximum(adjusted_sl, 1.1)  # Minimum 1.1 pip (broker limit)
 
-        total_trades = len(working_df)
-
-        summary_data = {
-            config_name: [
-                "Total trades",
-                "Wins",
-                "Losses",
-                "Win Rate",
-                "Edge",
-                "Outcome",
-            ]
-        }
-
         for ratio, breakeven_rate in RRR_CONFIGS:
+            total_trades = len(working_df)
+
             if total_trades > 0:
                 profitable = working_df[
                     (working_df["SL"] != working_df["Pullback"])
@@ -460,23 +447,22 @@ def analyze_sl_reduction_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFra
                 wins = len(profitable)
                 losses = total_trades - wins
                 win_rate = wins / total_trades * 100
-                edge = win_rate - breakeven_rate
-                outcome = (wins * ratio) - losses
-
-                summary_data[f"1:{ratio} RRR"] = [
-                    total_trades,
-                    wins,
-                    losses,
-                    f"{win_rate:.1f}%",
-                    f"{edge:.1f}%",
-                    f"{outcome}R",
-                ]
             else:
-                summary_data[f"1:{ratio} RRR"] = [0, 0, 0, "0.0%", "0.0%", "0R"]
+                wins = 0
+                losses = 0
+                win_rate = 0.0
 
-        sl_reduction_tables[config_name] = pd.DataFrame(summary_data)
+            sl_reduction_rows.append({
+                'Type': config_name if ratio == 1 else '',
+                'RRR': f'1:{ratio}',
+                'Total Trades': total_trades,
+                'Wins': wins,
+                'Losses': losses,
+                'Win %': f"{win_rate:.1f}%"
+            })
 
-    return sl_reduction_tables
+    final_table = pd.DataFrame(sl_reduction_rows)
+    return {"SL Reduction Analysis": final_table}
 
 
 # ============================================================================
