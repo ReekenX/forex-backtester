@@ -1440,7 +1440,8 @@ def display_hour_analysis(df: pd.DataFrame):
     hour_tables = analyze_hour_profitability(df)
 
     for table_name, table_df in hour_tables.items():
-        display(style_table(table_df))
+        html_table = create_sortable_table(table_df)
+        display(HTML(html_table))
         print('')
 
 
@@ -1452,7 +1453,8 @@ def display_weekday_analysis(df: pd.DataFrame):
     weekday_tables = analyze_weekday_profitability(df)
 
     for table_name, table_df in weekday_tables.items():
-        display(style_table(table_df))
+        html_table = create_sortable_table(table_df)
+        display(HTML(html_table))
         print('')
 
 
@@ -1464,7 +1466,8 @@ def display_pullback_analysis(df: pd.DataFrame):
     pullback_tables = analyze_pullback_profitability(df)
 
     for table_name, table_df in pullback_tables.items():
-        display(style_table(table_df))
+        html_table = create_sortable_table(table_df)
+        display(HTML(html_table))
         print('')
 
 
@@ -1476,7 +1479,8 @@ def display_sl_reduction_analysis(df: pd.DataFrame):
     sl_reduction_tables = analyze_sl_reduction_profitability(df)
 
     for table_name, table_df in sl_reduction_tables.items():
-        display(style_table(table_df))
+        html_table = create_sortable_table(table_df)
+        display(HTML(html_table))
         print('')
 
 
@@ -1536,9 +1540,10 @@ def display_double_setup_strategy_analysis(df: pd.DataFrame):
             cols.insert(1, 'RRR')
             combined_df = combined_df[cols]
 
-        # Display the combined table
+        # Display the combined table with sortable columns
         display(HTML(f"<h2>Double Setup Strategies</h2>"))
-        display(style_table(combined_df, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
+        html_table = create_sortable_table(combined_df, first_column_width='300px', highlight_column='Edge', highlight_color='green')
+        display(HTML(html_table))
         print()
 
 
@@ -1598,9 +1603,10 @@ def display_single_setup_strategy_analysis(df: pd.DataFrame):
             cols.insert(1, 'RRR')
             combined_df = combined_df[cols]
 
-        # Display the combined table
+        # Display the combined table with sortable columns
         display(HTML(f"<h2>Single Setup Strategies</h2>"))
-        display(style_table(combined_df, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
+        html_table = create_sortable_table(combined_df, first_column_width='300px', highlight_column='Edge', highlight_color='green')
+        display(HTML(html_table))
         print()
 
 
@@ -1660,9 +1666,10 @@ def display_triple_setup_strategy_analysis(df: pd.DataFrame):
             cols.insert(1, 'RRR')
             combined_df = combined_df[cols]
 
-        # Display the combined table
+        # Display the combined table with sortable columns
         display(HTML(f"<h2>Triple Setup Strategies</h2>"))
-        display(style_table(combined_df, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
+        html_table = create_sortable_table(combined_df, first_column_width='300px', highlight_column='Edge', highlight_color='green')
+        display(HTML(html_table))
         print()
 
 
@@ -1699,3 +1706,199 @@ def style_table(
         )
 
     return styled_df
+
+
+def create_sortable_table(
+    table_df: pd.DataFrame,
+    first_column_width: str = DEFAULT_COLUMN_WIDTH,
+    highlight_column: Optional[str] = None,
+    highlight_color: str = DEFAULT_HIGHLIGHT_COLOR,
+    table_id: Optional[str] = None,
+) -> str:
+    """
+    Create an interactive HTML table with clickable column headers for sorting.
+
+    Args:
+        table_df: DataFrame to display
+        first_column_width: Width for the first column
+        highlight_column: Optional column to highlight
+        highlight_color: Color for highlighted column
+        table_id: Optional unique ID for the table (auto-generated if not provided)
+
+    Returns:
+        HTML string with interactive sortable table
+    """
+    import uuid
+    from IPython.display import HTML
+
+    # Generate unique table ID if not provided
+    if table_id is None:
+        table_id = f"sortable_table_{uuid.uuid4().hex[:8]}"
+
+    # Adjust index to start from 1
+    table_df_copy = table_df.copy()
+    table_df_copy.index = range(1, len(table_df_copy) + 1)
+
+    # Convert DataFrame to HTML with custom styling
+    html_table = table_df_copy.to_html(classes='sortable-table', table_id=table_id, escape=False)
+
+    # Prepare column indices for sortable columns
+    sortable_columns = []
+    if 'Edge' in table_df_copy.columns:
+        sortable_columns.append(table_df_copy.columns.get_loc('Edge') + 1)  # +1 for index column
+    if 'Outcome' in table_df_copy.columns:
+        sortable_columns.append(table_df_copy.columns.get_loc('Outcome') + 1)  # +1 for index column
+
+    # Build the complete HTML with JavaScript
+    html = f"""
+    <style>
+        #{table_id} th.sortable {{
+            cursor: pointer;
+            user-select: none;
+        }}
+
+        #{table_id} th.sortable::after {{
+            content: ' ⇅';
+            color: #999;
+            font-size: 12px;
+        }}
+
+        #{table_id} th.sorted-asc::after {{
+            content: ' ↑';
+            color: #333;
+        }}
+
+        #{table_id} th.sorted-desc::after {{
+            content: ' ↓';
+            color: #333;
+        }}
+
+        #{table_id} td:first-child {{
+            font-weight: bold;
+            width: {first_column_width};
+        }}
+
+        #{table_id} .highlight-column {{
+            color: {highlight_color} !important;
+            font-weight: bold;
+        }}
+    </style>
+
+    {html_table}
+
+    <script>
+    (function() {{
+        const table = document.getElementById('{table_id}');
+        if (!table) return;
+
+        const tbody = table.querySelector('tbody');
+        const headers = table.querySelectorAll('thead th');
+        const sortableColumns = {sortable_columns};
+
+        // Store the currently highlighted column index
+        let currentHighlightIndex = -1;
+        const initialHighlightColumn = '{highlight_column if highlight_column else ""}';
+
+        // Find the initial highlight column index
+        if (initialHighlightColumn) {{
+            const headerRow = table.querySelector('thead tr');
+            currentHighlightIndex = Array.from(headerRow.children).findIndex(th =>
+                th.textContent.trim() === initialHighlightColumn
+            );
+        }}
+
+        // Function to apply highlighting to a specific column
+        function applyHighlighting(columnIndex) {{
+            // Clear all existing highlights
+            headers.forEach((header, idx) => {{
+                header.style.color = '';
+                const rows = tbody.querySelectorAll('tr');
+                rows.forEach(row => {{
+                    const cells = row.querySelectorAll('td');
+                    if (cells[idx]) {{
+                        cells[idx].style.color = '';
+                        cells[idx].style.fontWeight = '';
+                    }}
+                }});
+            }});
+
+            // Apply new highlight if valid column
+            if (columnIndex !== -1 && columnIndex < headers.length) {{
+                // Highlight header
+                headers[columnIndex].style.color = '{highlight_color}';
+
+                currentHighlightIndex = columnIndex;
+            }}
+        }}
+
+        // Mark sortable columns
+        sortableColumns.forEach(colIndex => {{
+            if (headers[colIndex]) {{
+                headers[colIndex].classList.add('sortable');
+            }}
+        }});
+
+        // Apply initial highlighting
+        applyHighlighting(currentHighlightIndex);
+
+        // Add click handlers to sortable columns
+        sortableColumns.forEach(colIndex => {{
+            if (!headers[colIndex]) return;
+
+            headers[colIndex].addEventListener('click', function() {{
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+                const isAscending = this.classList.contains('sorted-asc');
+
+                // Remove sorted classes from all headers
+                headers.forEach(h => {{
+                    h.classList.remove('sorted-asc', 'sorted-desc');
+                }});
+
+                // Sort rows
+                rows.sort((a, b) => {{
+                    const aCell = a.children[colIndex];
+                    const bCell = b.children[colIndex];
+
+                    let aValue = aCell.textContent.trim();
+                    let bValue = bCell.textContent.trim();
+
+                    // Handle percentage values
+                    if (aValue.includes('%')) {{
+                        aValue = parseFloat(aValue.replace('%', '')) || 0;
+                        bValue = parseFloat(bValue.replace('%', '')) || 0;
+                    }}
+                    // Handle currency values
+                    else if (aValue.includes('$')) {{
+                        aValue = parseFloat(aValue.replace(/[\\$,]/g, '')) || 0;
+                        bValue = parseFloat(bValue.replace(/[\\$,]/g, '')) || 0;
+                    }}
+                    // Handle regular numbers
+                    else {{
+                        const aNum = parseFloat(aValue);
+                        const bNum = parseFloat(bValue);
+                        if (!isNaN(aNum) && !isNaN(bNum)) {{
+                            aValue = aNum;
+                            bValue = bNum;
+                        }}
+                    }}
+
+                    if (aValue < bValue) return isAscending ? 1 : -1;
+                    if (aValue > bValue) return isAscending ? -1 : 1;
+                    return 0;
+                }});
+
+                // Update the class for visual indicator
+                this.classList.add(isAscending ? 'sorted-desc' : 'sorted-asc');
+
+                // Re-append sorted rows
+                rows.forEach(row => tbody.appendChild(row));
+
+                // Highlight the clicked column
+                applyHighlighting(colIndex);
+            }});
+        }});
+    }})();
+    </script>
+    """
+
+    return html
