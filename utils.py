@@ -406,6 +406,66 @@ def analyze_weekday_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     return {"Weekday Analysis": final_table}
 
 
+def analyze_sl_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+    """
+    Analyze trade distribution and profitability by stop loss size ranges.
+
+    Creates a table showing wins, losses, and win percentage for different SL ranges.
+
+    Args:
+        df: Trading data with SL and TP columns
+
+    Returns:
+        Dictionary containing the SL distribution analysis DataFrame
+    """
+    # Define SL ranges for analysis
+    sl_ranges = [
+        ("SL < 1", lambda sl: sl < 1),
+        ("1 ≤ SL < 2", lambda sl: (sl >= 1) & (sl < 2)),
+        ("2 ≤ SL < 3", lambda sl: (sl >= 2) & (sl < 3)),
+        ("3 ≤ SL < 4", lambda sl: (sl >= 3) & (sl < 4)),
+        ("4 ≤ SL < 5", lambda sl: (sl >= 4) & (sl < 5)),
+        ("5 ≤ SL < 10", lambda sl: (sl >= 5) & (sl < 10)),
+        ("10 ≤ SL < 15", lambda sl: (sl >= 10) & (sl < 15)),
+        ("SL ≥ 15", lambda sl: sl >= 15),
+    ]
+
+    sl_rows = []
+
+    for range_name, range_filter in sl_ranges:
+        # Filter trades in this SL range
+        mask = range_filter(df["SL"])
+        range_df = df[mask]
+
+        total_trades = len(range_df)
+
+        if total_trades > 0:
+            # Calculate wins (TP > 0 means profitable trade)
+            wins = (range_df['TP'] > 0).sum()
+            losses = total_trades - wins
+            win_percentage = (wins / total_trades * 100)
+
+            # Format for display
+            win_percentage_display = f"{win_percentage:.1f}%"
+        else:
+            wins = 0
+            losses = 0
+            win_percentage_display = "N/A"
+
+        sl_rows.append({
+            "SL Range": range_name,
+            "Total Trades": total_trades,
+            "Wins": wins,
+            "Losses": losses,
+            "Win %": win_percentage_display
+        })
+
+    # Create DataFrame from results
+    result_df = pd.DataFrame(sl_rows)
+
+    return {"Stop Loss Distribution": result_df}
+
+
 def analyze_sl_reduction_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze how reducing stop loss size affects trade profitability.
@@ -1457,6 +1517,19 @@ def display_pullback_analysis(df: pd.DataFrame):
     pullback_tables = analyze_pullback_profitability(df)
 
     for table_name, table_df in pullback_tables.items():
+        html_table = create_sortable_table(table_df)
+        display(HTML(html_table))
+        print('')
+
+
+def display_sl_distribution_analysis(df: pd.DataFrame):
+    """Display stop loss distribution analysis with proper formatting."""
+    from IPython.display import display, HTML
+
+    display(HTML("<h2>Stop Loss Distribution Analysis</h2>"))
+    sl_distribution_tables = analyze_sl_distribution(df)
+
+    for table_name, table_df in sl_distribution_tables.items():
         html_table = create_sortable_table(table_df)
         display(HTML(html_table))
         print('')
