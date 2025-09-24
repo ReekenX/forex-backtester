@@ -257,7 +257,7 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         ("No Pullback", lambda d: d),
         ("Pullback >= 0.5 pips", lambda d: d[d["Pullback"] >= 0.5]),
         ("Pullback >= 1.0 pip", lambda d: d[d["Pullback"] >= 1.0]),
-        ("Pullback >= 2.0 pips", lambda d: d[d["Pullback"] >= 2.0]),
+        ("Pullback 50%", lambda d: d[d['SL'] * 0.5 > d['Pullback']]), # TODO: there might be a bug here
     ]
 
     pullback_tables = {}
@@ -281,6 +281,8 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
 
         for ratio, breakeven_rate in RRR_CONFIGS:
             if total_trades > 0:
+                # TODO: if pullback is used, this changes SL and TP values that are not calculated here
+
                 profitable = filtered_df[
                     (filtered_df["SL"] != filtered_df["Pullback"])
                     & (filtered_df["TP"] >= (ratio * filtered_df["SL"]))
@@ -332,6 +334,15 @@ def analyze_hour_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     # Calculate wins (TP > 0 means profitable trade)
     hour_df['Is_Win'] = hour_df['TP'] > 0
 
+    # Remove rows with NaN hours before analysis
+    hour_df = hour_df.dropna(subset=['Hour'])
+
+    # Check if we have any data left after removing NaN hours
+    if len(hour_df) == 0:
+        # Return empty table if no hour data available
+        empty_df = pd.DataFrame(columns=['Hour', 'Total Trades', 'Wins', 'Losses', 'Win %'])
+        return {"Hour Analysis": empty_df}
+
     # Group by hour and calculate statistics
     hour_stats = hour_df.groupby('Hour').agg(
         Total_Trades=('Is_Win', 'count'),
@@ -342,8 +353,8 @@ def analyze_hour_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     # Calculate win percentage
     hour_stats['Win_Percentage'] = (hour_stats['Wins'] / hour_stats['Total_Trades'] * 100).round(1)
 
-    # Format hour column for display
-    hour_stats['Hour_Display'] = hour_stats['Hour'].apply(lambda x: f"{x:02d}h")
+    # Format hour column for display (convert to int first to handle float values)
+    hour_stats['Hour_Display'] = hour_stats['Hour'].astype(int).apply(lambda x: f"{x:02d}h")
 
     # Format win percentage for display
     hour_stats['Win_Percentage_Display'] = hour_stats['Win_Percentage'].apply(lambda x: f"{x:.1f}%")
@@ -1053,18 +1064,15 @@ def evaluate_all_strategies(
         Dictionary mapping strategy names to their performance DataFrames
     """
     strategy_results = {}
-    sl_columns = ["SL", "SL 5M CC", "SL 5M Stop"]
+    for strategy in strategies:
+        # Apply strategy filter
+        filtered_df = strategy.apply(df)
 
-    for sl_column in sl_columns:
-        for strategy in strategies:
-            # Apply strategy filter
-            filtered_df = strategy.apply(df)
-
-            # Calculate normal RRR statistics
-            summary_df = calculate_rrr_stats(filtered_df, strategy.name, sl_column)
-            strategy_results[f"{strategy.name}[{ENTRY_TYPE_NAMES[sl_column]}]"] = (
-                summary_df
-            )
+        # Calculate normal RRR statistics
+        summary_df = calculate_rrr_stats(filtered_df, strategy.name, 'SL')
+        strategy_results[f"{strategy.name}[{ENTRY_TYPE_NAMES['SL']}]"] = (
+            summary_df
+        )
 
     return strategy_results
 
