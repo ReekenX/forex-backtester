@@ -1494,6 +1494,9 @@ def display_double_setup_strategy_analysis(df: pd.DataFrame):
     strategies.extend(create_double_setup_strategy_library())
     strategy_results = evaluate_all_strategies(df, strategies)
 
+    # Collect all results for all RRR levels
+    all_results = []
+
     rrr_configs = [
         ('1:1 RRR', '1:1'),
         ('1:2 RRR', '1:2'),
@@ -1501,13 +1504,41 @@ def display_double_setup_strategy_analysis(df: pd.DataFrame):
     ]
 
     for rrr_column, rrr_label in rrr_configs:
-        display(HTML(f"<h2>Double Setup {rrr_label} Strategies</h2>"))
-
         top_df = get_top_strategies_by_edge(strategy_results, rrr_column)
 
-        top_df_regular = top_df.copy()
+        # Add RRR column to each row
+        if not top_df.empty:
+            top_df['RRR'] = f'{rrr_label} RRR'
+            # Remove Entry column as it will be replaced by RRR
+            if 'Entry' in top_df.columns:
+                top_df = top_df.drop('Entry', axis=1)
+            all_results.append(top_df)
 
-        display(style_table(top_df_regular, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
+    # Combine all results and sort by edge
+    if all_results:
+        combined_df = pd.concat(all_results, ignore_index=True)
+
+        # Extract edge values for sorting
+        combined_df['edge_value'] = combined_df['Edge'].apply(
+            lambda x: float(x.strip('%')) if isinstance(x, str) and x.strip().endswith('%') else 0.0
+        )
+
+        # Sort by edge value in descending order
+        combined_df = combined_df.sort_values('edge_value', ascending=False)
+
+        # Drop the temporary sorting column
+        combined_df = combined_df.drop('edge_value', axis=1)
+
+        # Reorder columns to put RRR second
+        cols = combined_df.columns.tolist()
+        if 'RRR' in cols:
+            cols.remove('RRR')
+            cols.insert(1, 'RRR')
+            combined_df = combined_df[cols]
+
+        # Display the combined table
+        display(HTML(f"<h2>Double Setup Strategies</h2>"))
+        display(style_table(combined_df, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
         print()
 
 
@@ -1525,6 +1556,9 @@ def display_single_setup_strategy_analysis(df: pd.DataFrame):
     strategies.extend(create_single_setup_strategy_library())
     strategy_results = evaluate_all_strategies(df, strategies)
 
+    # Collect all results for all RRR levels
+    all_results = []
+
     rrr_configs = [
         ('1:1 RRR', '1:1'),
         ('1:2 RRR', '1:2'),
@@ -1532,13 +1566,41 @@ def display_single_setup_strategy_analysis(df: pd.DataFrame):
     ]
 
     for rrr_column, rrr_label in rrr_configs:
-        display(HTML(f"<h2>Single Setup {rrr_label} Strategies</h2>"))
-
         top_df = get_top_strategies_by_edge(strategy_results, rrr_column)
 
-        top_df_regular = top_df.copy()
+        # Add RRR column to each row
+        if not top_df.empty:
+            top_df['RRR'] = f'{rrr_label} RRR'
+            # Remove Entry column as it will be replaced by RRR
+            if 'Entry' in top_df.columns:
+                top_df = top_df.drop('Entry', axis=1)
+            all_results.append(top_df)
 
-        display(style_table(top_df_regular, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
+    # Combine all results and sort by edge
+    if all_results:
+        combined_df = pd.concat(all_results, ignore_index=True)
+
+        # Extract edge values for sorting
+        combined_df['edge_value'] = combined_df['Edge'].apply(
+            lambda x: float(x.strip('%')) if isinstance(x, str) and x.strip().endswith('%') else 0.0
+        )
+
+        # Sort by edge value in descending order
+        combined_df = combined_df.sort_values('edge_value', ascending=False)
+
+        # Drop the temporary sorting column
+        combined_df = combined_df.drop('edge_value', axis=1)
+
+        # Reorder columns to put RRR second
+        cols = combined_df.columns.tolist()
+        if 'RRR' in cols:
+            cols.remove('RRR')
+            cols.insert(1, 'RRR')
+            combined_df = combined_df[cols]
+
+        # Display the combined table
+        display(HTML(f"<h2>Single Setup Strategies</h2>"))
+        display(style_table(combined_df, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
         print()
 
 
@@ -1556,6 +1618,9 @@ def display_triple_setup_strategy_analysis(df: pd.DataFrame):
     strategies.extend(create_triple_setup_strategy_library())
     strategy_results = evaluate_all_strategies(df, strategies)
 
+    # Collect all results for all RRR levels
+    all_results = []
+
     rrr_configs = [
         ('1:1 RRR', '1:1'),
         ('1:2 RRR', '1:2'),
@@ -1563,13 +1628,41 @@ def display_triple_setup_strategy_analysis(df: pd.DataFrame):
     ]
 
     for rrr_column, rrr_label in rrr_configs:
-        display(HTML(f"<h2>Triple Setup {rrr_label} Strategies</h2>"))
-
         top_df = get_top_strategies_by_edge(strategy_results, rrr_column)
 
-        top_df_regular = top_df.copy()
+        # Add RRR column to each row
+        if not top_df.empty:
+            top_df['RRR'] = f'{rrr_label} RRR'
+            # Remove Entry column as it will be replaced by RRR
+            if 'Entry' in top_df.columns:
+                top_df = top_df.drop('Entry', axis=1)
+            all_results.append(top_df)
 
-        display(style_table(top_df_regular, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
+    # Combine all results and sort by edge
+    if all_results:
+        combined_df = pd.concat(all_results, ignore_index=True)
+
+        # Extract edge values for sorting
+        combined_df['edge_value'] = combined_df['Edge'].apply(
+            lambda x: float(x.strip('%')) if isinstance(x, str) and x.strip().endswith('%') else 0.0
+        )
+
+        # Sort by edge value in descending order
+        combined_df = combined_df.sort_values('edge_value', ascending=False)
+
+        # Drop the temporary sorting column
+        combined_df = combined_df.drop('edge_value', axis=1)
+
+        # Reorder columns to put RRR second
+        cols = combined_df.columns.tolist()
+        if 'RRR' in cols:
+            cols.remove('RRR')
+            cols.insert(1, 'RRR')
+            combined_df = combined_df[cols]
+
+        # Display the combined table
+        display(HTML(f"<h2>Triple Setup Strategies</h2>"))
+        display(style_table(combined_df, first_column_width='300px', highlight_column='Edge', highlight_color='green'))
         print()
 
 
