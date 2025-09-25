@@ -1905,6 +1905,11 @@ def create_sortable_table(
         // Apply initial highlighting
         applyHighlighting(currentHighlightIndex);
 
+        // Set initial sort state for Edge column (data is pre-sorted descending by Edge)
+        if (currentHighlightIndex !== -1 && sortableColumns.includes(currentHighlightIndex)) {{
+            headers[currentHighlightIndex].classList.add('sorted-desc');
+        }}
+
         // Add click handlers to sortable columns
         sortableColumns.forEach(colIndex => {{
             if (!headers[colIndex]) return;
