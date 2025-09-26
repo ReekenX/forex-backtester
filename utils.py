@@ -1446,6 +1446,16 @@ def get_top_strategies_by_edge(
             # If parsing fails, set to 0
             edge_value = 0.0
 
+        # Calculate trades required to earn 1R
+        trades_required = "N/A"
+        try:
+            if isinstance(outcome_str, str) and outcome_str.endswith("R"):
+                r_value = float(outcome_str[:-1])
+                if r_value > 0:
+                    trades_required = f"{total_trades / r_value:.1f}"
+        except (ValueError, TypeError, AttributeError):
+            trades_required = "N/A"
+
         # Clean up display name
         display_name = strategy_name.split("[")[0].strip()
 
@@ -1459,6 +1469,7 @@ def get_top_strategies_by_edge(
                 "Win Rate": win_rate,
                 "Edge": edge,
                 "Outcome": outcome_str,
+                "Trades Required": trades_required,
                 "edge_value": edge_value,
             }
         )
@@ -1597,12 +1608,15 @@ def display_double_setup_strategy_analysis(df: pd.DataFrame):
         # Drop the temporary sorting column
         combined_df = combined_df.drop('edge_value', axis=1)
 
-        # Reorder columns to put RRR second
+        # Reorder columns to put RRR second and Trades Required at the end
         cols = combined_df.columns.tolist()
         if 'RRR' in cols:
             cols.remove('RRR')
             cols.insert(1, 'RRR')
-            combined_df = combined_df[cols]
+        if 'Trades Required' in cols:
+            cols.remove('Trades Required')
+            cols.append('Trades Required')
+        combined_df = combined_df[cols]
 
         # Display the combined table with sortable columns
         display(HTML(f"<h2>Double Setup Strategies</h2>"))
@@ -1660,12 +1674,15 @@ def display_single_setup_strategy_analysis(df: pd.DataFrame):
         # Drop the temporary sorting column
         combined_df = combined_df.drop('edge_value', axis=1)
 
-        # Reorder columns to put RRR second
+        # Reorder columns to put RRR second and Trades Required at the end
         cols = combined_df.columns.tolist()
         if 'RRR' in cols:
             cols.remove('RRR')
             cols.insert(1, 'RRR')
-            combined_df = combined_df[cols]
+        if 'Trades Required' in cols:
+            cols.remove('Trades Required')
+            cols.append('Trades Required')
+        combined_df = combined_df[cols]
 
         # Display the combined table with sortable columns
         display(HTML(f"<h2>Single Setup Strategies</h2>"))
@@ -1723,12 +1740,15 @@ def display_triple_setup_strategy_analysis(df: pd.DataFrame):
         # Drop the temporary sorting column
         combined_df = combined_df.drop('edge_value', axis=1)
 
-        # Reorder columns to put RRR second
+        # Reorder columns to put RRR second and Trades Required at the end
         cols = combined_df.columns.tolist()
         if 'RRR' in cols:
             cols.remove('RRR')
             cols.insert(1, 'RRR')
-            combined_df = combined_df[cols]
+        if 'Trades Required' in cols:
+            cols.remove('Trades Required')
+            cols.append('Trades Required')
+        combined_df = combined_df[cols]
 
         # Display the combined table with sortable columns
         display(HTML(f"<h2>Triple Setup Strategies</h2>"))
@@ -1812,6 +1832,8 @@ def create_sortable_table(
         sortable_columns.append(table_df_copy.columns.get_loc('Edge') + 1)  # +1 for index column
     if 'Outcome' in table_df_copy.columns:
         sortable_columns.append(table_df_copy.columns.get_loc('Outcome') + 1)  # +1 for index column
+    if 'Trades Required' in table_df_copy.columns:
+        sortable_columns.append(table_df_copy.columns.get_loc('Trades Required') + 1)  # +1 for index column
 
     # Build the complete HTML with JavaScript
     html = f"""

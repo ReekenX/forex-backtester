@@ -4,12 +4,6 @@ startup_window: shell
 
 windows:
   - shell:
-  - editor:
-      - alias run="tmux rename-window -t\${TMUX_PANE} 'editor'; nvim .; tmux rename-window -t\${TMUX_PANE} '🔴 editor'"
-      - run
   - claude:
       - alias run="tmux rename-window -t\${TMUX_PANE} 'claude'; clear; claude --dangerously-skip-permissions; tmux rename-window -t\${TMUX_PANE} '🔴 claude'"
-      - run
-  - webserver:
-      - alias run="tmux rename-window -t\${TMUX_PANE} 'webserver'; make run; tmux rename-window -t\${TMUX_PANE} '🔴 webserver'"
       - run

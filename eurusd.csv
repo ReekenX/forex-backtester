@@ -155,74 +155,74 @@ Date,Trade,Weekday,Hour,Direction,EMA,SL,Pullback,TP,Extra,BOS/CH,30M Leg,Hours 
 2025-03-10,#2,Monday,11,Buy,Buy,3.3,2.2,32,,BOS,Above L,,
 2025-03-10,#3,Monday,12,Buy,Buy,4.5,1.5,21,,BOS,Above L,,
 2025-03-10,#4,Monday,12,Buy,Buy,11.1,11.1,0,,BOS,Below H,,
-2025-03-11,#1,Tuesday,,Buy,Buy,6.1,3.9,19,,BOS,,,
-2025-03-11,#2,Tuesday,,Buy,Sell,7.0,2.2,9,,BOS,,,
-2025-03-11,#3,Tuesday,,Sell,Buy,6.6,6.6,0,,BOS,,,
-2025-03-11,#4,Tuesday,,Sell,Buy,7.9,3.2,17,,BOS,,,
-2025-03-11,#5,Tuesday,,Buy,Buy,9.5,4.3,25,,BOS,,,
-2025-03-12,#1,Wednesday,,Buy,Buy,12.5,1.7,0,,BOS,,,
-2025-03-12,#2,Wednesday,,Sell,Buy,3.3,3.3,0,,BOS,,,
-2025-03-12,#3,Wednesday,,Buy,Buy,3.4,3.4,0,,CH,,,
-2025-03-12,#4,Wednesday,,Sell,Sell,10.4,3.8,17,,BOS,,,
-2025-03-12,#5,Wednesday,,Sell,Sell,6.6,6.6,0,,BOS,,,
-2025-03-12,#6,Wednesday,,Buy,Buy,4.2,3.2,13,,BOS,,,
-2025-03-12,#7,Wednesday,,Buy,Buy,3.3,2.7,13,,BOS,,,
-2025-03-13,#1,Thursday,,Buy,Sell,3.0,3.0,0,,CH,,,
-2025-03-13,#2,Thursday,,Sell,Buy,5.4,2.9,57,,BOS,,,
-2025-03-13,#3,Thursday,,Sell,Sell,1.3,0.4,7,,BOS,,,
-2025-03-13,#4,Thursday,,Sell,Sell,3.1,3.1,0,,BOS,,,
-2025-03-13,#5,Thursday,,Sell,Sell,6.2,2.6,23,,BOS,,,
-2025-03-13,#6,Thursday,,Buy,Sell,12.0,12.0,0,,CH,,,
-2025-03-13,#7,Thursday,,Sell,Sell,5.8,5.8,0,,BOS,,,
-2025-03-13,#8,Thursday,,Buy,Buy,6.9,5.8,6,,BOS,,,
-2025-03-13,#9,Thursday,,Sell,Buy,7.6,7.6,0,,CH,,,
-2025-03-13,#10,Thursday,,Buy,Buy,8.6,5.6,18,,CH,,,
-2025-03-13,#11,Thursday,,Buy,Buy,6.0,4.9,18,,BOS,,,
-2025-03-14,#1,Friday,,Buy,Buy,3.8,3.2,6,,BOS,,,
-2025-03-14,#2,Friday,,Buy,Buy,4.9,1.9,62,,BOS,,,
-2025-03-14,#3,Friday,,Buy,Buy,15.0,4.0,30,,BOS,,,
-2025-03-17,#1,Monday,,Buy,Buy,9.8,3.4,49,,BOS,,,
-2025-03-17,#2,Monday,,Buy,Sell,1.7,1.7,0,,CH,,,
-2025-03-17,#3,Monday,,Sell,Buy,5.3,5.3,0,,BOS,,,
-2025-03-17,#4,Monday,,Buy,Buy,7.1,0.5,8,,BOS,,,
-2025-03-17,#5,Monday,,Buy,Buy,3.6,3.6,0,,BOS,,,
-2025-03-17,#6,Monday,,Sell,Buy,4.9,4.9,0,,BOS,,,
-2025-03-17,#7,Monday,,Buy,Buy,6.4,0.8,21,,BOS,,,
-2025-03-17,#8,Monday,,Buy,Buy,2.3,0.5,17,,BOS,,,
-2025-03-17,#9,Monday,,Sell,Buy,8.4,4.8,9,,CH,,,
-2025-03-18,#1,Tuesday,,Buy,Sell,2.4,2.4,0,,BOS,,,
-2025-03-18,#2,Tuesday,,Sell,Sell,5.7,2.8,16,,BOS,,,
-2025-03-18,#3,Tuesday,,Buy,Sell,10.5,6.2,49,,CH,,,
-2025-03-19,#1,Wednesday,,Sell,Sell,5.2,1.9,9,,BOS,,,
-2025-03-19,#2,Wednesday,,Buy,Sell,6.4,6.3,8,,CH,,,
-2025-03-19,#3,Wednesday,,Buy,Buy,4.3,3.3,6,,BOS,,,
-2025-03-19,#4,Wednesday,,Sell,Buy,6.7,5.6,50,,CH,,,
-2025-03-19,#5,Wednesday,,Sell,Sell,5.3,4.6,38,,BOS,,,
-2025-03-19,#6,Wednesday,,Buy,Sell,6.4,6.4,0,,CH,,,
-2025-03-19,#7,Wednesday,,Sell,Sell,2.0,1.9,25,,BOS,,,
-2025-03-19,#8,Wednesday,,Buy,Sell,4.4,1.3,6,,CH,,,
-2025-03-20,#1,Thursday,,Sell,Sell,6.2,4.9,48,,BOS,,,
-2025-03-20,#2,Thursday,,Sell,Sell,3.4,0.7,12,,BOS,,,
-2025-03-20,#3,Thursday,,Buy,Sell,13.2,13.2,0,,CH,,,
-2025-03-20,#4,Thursday,,Sell,Sell,7.0,1.5,22,,BOS,,,
-2025-03-20,#5,Thursday,,Sell,Sell,6.7,6.1,9,,BOS,,,
-2025-03-20,#6,Thursday,,Sell,Buy,3.3,3.3,0,,CH,,,
-2025-03-21,#1,Friday,,Buy,Buy,1.6,1.6,0,,BOS,,,
-2025-03-21,#2,Friday,,Sell,Sell,0.9,0.5,0,,BOS,,,
-2025-03-21,#3,Friday,,Buy,Buy,1.7,1.7,0,,BOS,,,
-2025-03-21,#4,Friday,,Sell,Sell,2.0,0.5,0,,BOS,,,
-2025-03-21,#5,Friday,,Buy,Buy,3.7,2.4,32,,CH,,,
-2025-03-21,#6,Friday,,Buy,Buy,3.5,1.9,22,,BOS,,,
-2025-03-21,#7,Friday,,Buy,Buy,4.3,4.3,0,,BOS,,,
-2025-03-21,#8,Friday,,Sell,Sell,7.5,7.2,31,,BOS,,,
-2025-03-21,#9,Friday,,Sell,Sell,7.1,0.6,31,,BOS,,,
-2025-03-24,#1,Monday,,Buy,Buy,7.5,7.5,0,,BOS,,,
-2025-03-24,#2,Monday,,Sell,Sell,3.5,0.5,7,,BOS,,,
-2025-03-24,#3,Monday,,Sell,Sell,4.5,4.5,0,,CH,,,
-2025-03-24,#4,Monday,,Buy,Buy,6.0,6.0,0,,BOS,,,
-2025-03-24,#5,Monday,,Sell,Sell,3.1,3.1,0,,BOS,,,
-2025-03-24,#6,Monday,,Buy,Sell,2.8,1.0,6,,CH,,,
-2025-03-24,#7,Monday,,Buy,Sell,7.5,7.4,9,,CH,,,
+2025-03-11,#1,Tuesday,11,Buy,Buy,6.1,3.9,19,,BOS,Above H,5,JOLTS
+2025-03-11,#2,Tuesday,12,Buy,Sell,7.0,2.2,9,,BOS,Above H,4,JOLTS
+2025-03-11,#3,Tuesday,13,Sell,Buy,6.6,6.6,0,,BOS,Above H,3,JOLTS
+2025-03-11,#4,Tuesday,16,Sell,Buy,7.9,3.2,17,,BOS,Above H,,
+2025-03-11,#5,Tuesday,17,Buy,Buy,9.5,4.3,25,,BOS,Above H,,
+2025-03-12,#1,Wednesday,11,Buy,Buy,12.5,1.7,0,,BOS,Above L,3,CPI
+2025-03-12,#2,Wednesday,12,Sell,Buy,3.3,3.3,0,,BOS,Above L,2,CPI
+2025-03-12,#3,Wednesday,15,Buy,Buy,3.4,3.4,0,,CH,Above L,1,Speaks
+2025-03-12,#4,Wednesday,17,Sell,Sell,10.4,3.8,17,,BOS,Below L,1,Speaks
+2025-03-12,#5,Wednesday,16,Sell,Sell,6.6,6.6,0,,BOS,Below L,,
+2025-03-12,#6,Wednesday,17,Buy,Buy,4.2,3.2,13,,BOS,Above L,,
+2025-03-12,#7,Wednesday,17,Buy,Buy,3.3,2.7,13,,BOS,Above L,,
+2025-03-13,#1,Thursday,11,Buy,Sell,3.0,3.0,0,,CH,Below L,3,Unemployments Claims
+2025-03-13,#2,Thursday,12,Sell,Buy,5.4,2.9,57,,BOS,Above L,2,Unemployments Claims
+2025-03-13,#3,Thursday,12,Sell,Sell,1.3,0.4,7,,BOS,Below L,2,Unemployments Claims
+2025-03-13,#4,Thursday,13,Sell,Sell,3.1,3.1,0,,BOS,Below L,1,Unemployments Claims
+2025-03-13,#5,Thursday,13,Sell,Sell,6.2,2.6,23,,BOS,Below L,,
+2025-03-13,#6,Thursday,14,Buy,Sell,12.0,12.0,0,,CH,Below L,,
+2025-03-13,#7,Thursday,15,Sell,Sell,5.8,5.8,0,,BOS,Below L,,
+2025-03-13,#8,Thursday,16,Buy,Buy,6.9,5.8,6,,BOS,Below L,,
+2025-03-13,#9,Thursday,16,Sell,Buy,7.6,7.6,0,,CH,Below L,,
+2025-03-13,#10,Thursday,17,Buy,Buy,8.6,5.6,18,,CH,Below L,,
+2025-03-13,#11,Thursday,17,Buy,Buy,6.0,4.9,18,,BOS,Below L,,
+2025-03-14,#1,Friday,10,Buy,Buy,3.8,3.2,6,,BOS,Below L,6,UoM
+2025-03-14,#2,Friday,11,Buy,Buy,4.9,1.9,62,,BOS,Below L,5,UoM
+2025-03-14,#3,Friday,12,Buy,Buy,15.0,4.0,30,,BOS,Below L,4,UoM
+2025-03-17,#1,Monday,10,Buy,Buy,9.8,3.4,49,,BOS,Above H,4,Retail Sales
+2025-03-17,#2,Monday,11,Buy,Sell,1.7,1.7,0,,CH,Above H,3,Retail Sales
+2025-03-17,#3,Monday,11,Sell,Buy,5.3,5.3,0,,BOS,Above H,3,Retail Sales
+2025-03-17,#4,Monday,12,Buy,Buy,7.1,0.5,8,,BOS,Above H,2,Retail Sales
+2025-03-17,#5,Monday,13,Buy,Buy,3.6,3.6,0,,BOS,Above H,1,Retail Sales
+2025-03-17,#6,Monday,13,Sell,Buy,4.9,4.9,0,,BOS,Above H,1,Retail Sales
+2025-03-17,#7,Monday,16,Buy,Buy,6.4,0.8,21,,BOS,Above H,,
+2025-03-17,#8,Monday,16,Buy,Buy,2.3,0.5,17,,BOS,Above H,,
+2025-03-17,#9,Monday,18,Sell,Buy,8.4,4.8,9,,CH,Above H,,
+2025-03-18,#1,Tuesday,12,Buy,Sell,2.4,2.4,0,,BOS,Above H,2,CPI
+2025-03-18,#2,Tuesday,15,Sell,Sell,5.7,2.8,16,,BOS,Above L,,
+2025-03-18,#3,Tuesday,17,Buy,Sell,10.5,6.2,49,,CH,Below L,,
+2025-03-19,#1,Wednesday,10,Sell,Sell,5.2,1.9,9,,BOS,Above L,,
+2025-03-19,#2,Wednesday,10,Buy,Sell,6.4,6.3,8,,CH,Above L,,
+2025-03-19,#3,Wednesday,13,Buy,Buy,4.3,3.3,6,,BOS,Above L,,
+2025-03-19,#4,Wednesday,14,Sell,Buy,6.7,5.6,50,,CH,Above L,,
+2025-03-19,#5,Wednesday,15,Sell,Sell,5.3,4.6,38,,BOS,Above L,,
+2025-03-19,#6,Wednesday,15,Buy,Sell,6.4,6.4,0,,CH,Above L,,
+2025-03-19,#7,Wednesday,17,Sell,Sell,2.0,1.9,25,,BOS,Below L,,
+2025-03-19,#8,Wednesday,18,Buy,Sell,4.4,1.3,6,,CH,Below L,,
+2025-03-20,#1,Thursday,11,Sell,Sell,6.2,4.9,48,,BOS,Below H,1,Speaks
+2025-03-20,#2,Thursday,12,Sell,Sell,3.4,0.7,12,,BOS,Below L,1,Monetary Policy
+2025-03-20,#3,Thursday,14,Buy,Sell,13.2,13.2,0,,CH,Below L,,
+2025-03-20,#4,Thursday,15,Sell,Sell,7.0,1.5,22,,BOS,Below L,4,Speaks
+2025-03-20,#5,Thursday,16,Sell,Sell,6.7,6.1,9,,BOS,Below L,3,Speaks
+2025-03-20,#6,Thursday,18,Sell,Buy,3.3,3.3,0,,CH,Below L,1,Speaks
+2025-03-21,#1,Friday,10,Buy,Buy,1.6,1.6,0,,BOS,Below H,4,Retail Sales
+2025-03-21,#2,Friday,10,Sell,Sell,0.9,0.5,0,,BOS,Below H,4,Retail Sales
+2025-03-21,#3,Friday,11,Buy,Buy,1.7,1.7,0,,BOS,Below H,3,Retail Sales
+2025-03-21,#4,Friday,11,Sell,Sell,2.0,0.5,0,,BOS,Below H,3,Retail Sales
+2025-03-21,#5,Friday,12,Buy,Buy,3.7,2.4,32,,CH,Below H,2,Retail Sales
+2025-03-21,#6,Friday,13,Buy,Buy,3.5,1.9,22,,BOS,Below H,1,Retail Sales
+2025-03-21,#7,Friday,14,Buy,Buy,4.3,4.3,0,,BOS,Below H,,
+2025-03-21,#8,Friday,16,Sell,Sell,7.5,7.2,31,,BOS,Below H,,
+2025-03-21,#9,Friday,16,Sell,Sell,7.1,0.6,31,,BOS,Below H,,
+2025-03-24,#1,Monday,10,Buy,Buy,7.5,7.5,0,,BOS,Above H,1,PMI
+2025-03-24,#2,Monday,11,Sell,Sell,3.5,0.5,7,,BOS,Below H,1,PMI
+2025-03-24,#3,Monday,11,Sell,Sell,4.5,4.5,0,,CH,Below H,4,PMI
+2025-03-24,#4,Monday,13,Buy,Buy,6.0,6.0,0,,BOS,Above H,2,PMI
+2025-03-24,#5,Monday,14,Sell,Sell,3.1,3.1,0,,BOS,Below H,1,PMI
+2025-03-24,#6,Monday,14,Buy,Sell,2.8,1.0,6,,CH,Below H,1,PMI
+2025-03-24,#7,Monday,16,Buy,Sell,7.5,7.4,9,,CH,Above L,,
 2025-03-25,#1,Tuesday,,Sell,Sell,3.9,3.9,0,,BOS,,,
 2025-03-25,#2,Tuesday,,Buy,Buy,3.9,1.7,17,,BOS,,,
 2025-03-25,#3,Tuesday,,Sell,Buy,7.9,7.9,0,,CH,,,

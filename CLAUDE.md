@@ -12,6 +12,8 @@ When questions are asked about this project, assume they refer to:
 - **main.ipynb** - The primary Jupyter notebook for analysis
 - **utils.py** - The core utility module containing all analysis functions
 
+If you need to run any commands, like `jupyter`, then prefix it with `poetry run`. For example: `jupyter nbconvert --to notebook --execute main.ipynb --output main_test.ipynb`
+
 ## Architecture and Key Components
 
 ### Core Module: utils.py
