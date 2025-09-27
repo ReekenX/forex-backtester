@@ -1938,12 +1938,19 @@ def create_sortable_table(
 
             headers[colIndex].addEventListener('click', function() {{
                 const rows = Array.from(tbody.querySelectorAll('tr'));
-                const isAscending = this.classList.contains('sorted-asc');
+                const columnName = this.textContent.trim();
 
                 // Remove sorted classes from all headers
                 headers.forEach(h => {{
                     h.classList.remove('sorted-asc', 'sorted-desc');
                 }});
+
+                // Determine sort direction based on column type
+                let sortDescending = true; // Default to descending
+                if (columnName === 'Trades Required') {{
+                    sortDescending = false; // Trades Required should be ascending (lowest to highest)
+                }}
+                // Edge and Outcome columns use descending (highest to lowest) - default behavior
 
                 // Sort rows
                 rows.sort((a, b) => {{
@@ -1973,13 +1980,13 @@ def create_sortable_table(
                         }}
                     }}
 
-                    if (aValue < bValue) return isAscending ? 1 : -1;
-                    if (aValue > bValue) return isAscending ? -1 : 1;
+                    if (aValue < bValue) return sortDescending ? 1 : -1;
+                    if (aValue > bValue) return sortDescending ? -1 : 1;
                     return 0;
                 }});
 
                 // Update the class for visual indicator
-                this.classList.add(isAscending ? 'sorted-desc' : 'sorted-asc');
+                this.classList.add(sortDescending ? 'sorted-desc' : 'sorted-asc');
 
                 // Re-append sorted rows
                 rows.forEach(row => tbody.appendChild(row));
