@@ -19,7 +19,8 @@ Not taking trades right before red (high importance) news.
 ```
 forex-backtester/
 ├── eurusd.csv               # EUR/USD real trading data
-├── main.ipynb               # Strategy analysis notebook
+├── main.ipynb               # Strategy analysis notebook (table)
+├── charts.ipynb             # Strategy analysis notebook (charts)
 ├── utils.py                 # Helper functions strategy analysis notebook
 ├── pyproject.toml           # Poetry configuration and dependencies
 └── Makefile                 # Build automation commands
