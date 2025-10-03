@@ -1760,12 +1760,12 @@ def display_triple_setup_strategy_analysis(df: pd.DataFrame):
 
 def display_strategy_cumulative_chart(df: pd.DataFrame, strategy_name: str = "30M Trend + BOS + SL < 10", rrr: int = 1):
     """
-    Display cumulative performance chart for a specific strategy.
+    Display cumulative performance chart for a specific strategy with all three RRR ratios.
 
     Args:
         df: Trading data
         strategy_name: Name of the strategy to analyze
-        rrr: Risk-reward ratio to use (1, 2, or 3)
+        rrr: Risk-reward ratio to use (1, 2, or 3) - ignored, all three are shown
     """
     from IPython.display import display, HTML
 
@@ -1788,59 +1788,80 @@ def display_strategy_cumulative_chart(df: pd.DataFrame, strategy_name: str = "30
     filtered_df = strategy_filter(df)
 
     if len(filtered_df) == 0:
-        display(HTML(f"<h2>{strategy_name} - Cumulative Performance (1:{rrr} RRR)</h2>"))
+        display(HTML(f"<h2>{strategy_name} - Cumulative Performance</h2>"))
         display(HTML("<p>No trades found for this strategy.</p>"))
         return
 
-    # Calculate outcome for each trade
-    outcomes = []
-    for _, trade in filtered_df.iterrows():
-        # Win condition: TP > rrr * SL
-        if trade['TP'] > rrr * trade['SL']:
-            outcomes.append(rrr)  # Win = +rrr R
-        else:
-            outcomes.append(-1)  # Loss = -1R
+    # Calculate outcomes for each RRR ratio
+    rrr_ratios = [1, 2, 3]
+    colors = ['#2E86AB', '#A23B72', '#F18F01']  # Blue, Purple, Orange
+    cumulative_outcomes = {}
+    trade_stats = {}
 
-    # Calculate cumulative sum
-    cumulative_outcome = np.cumsum(outcomes)
+    for ratio in rrr_ratios:
+        outcomes = []
+        for _, trade in filtered_df.iterrows():
+            # Win condition: TP > ratio * SL
+            if trade['TP'] > ratio * trade['SL']:
+                outcomes.append(ratio)  # Win = +ratio R
+            else:
+                outcomes.append(-1)  # Loss = -1R
+
+        cumulative_outcomes[ratio] = np.cumsum(outcomes)
+
+        # Calculate stats
+        total_trades = len(filtered_df)
+        wins = sum(1 for o in outcomes if o > 0)
+        losses = total_trades - wins
+        win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
+        final_outcome = cumulative_outcomes[ratio][-1]
+
+        trade_stats[ratio] = {
+            'total': total_trades,
+            'wins': wins,
+            'losses': losses,
+            'win_rate': win_rate,
+            'final': final_outcome
+        }
 
     # Create the chart
-    plt.figure(figsize=(14, 6))
-    trade_numbers = range(1, len(cumulative_outcome) + 1)
-    plt.plot(trade_numbers, cumulative_outcome, linewidth=2, color='#2E86AB')
+    plt.figure(figsize=(14, 7))
+    trade_numbers = range(1, len(filtered_df) + 1)
+
+    for i, ratio in enumerate(rrr_ratios):
+        cumulative = cumulative_outcomes[ratio]
+        plt.plot(trade_numbers, cumulative, linewidth=2, color=colors[i],
+                label=f'1:{ratio} RRR (Final: {cumulative[-1]:.1f}R)', alpha=0.85)
+
     plt.axhline(y=0, color='gray', linestyle='--', linewidth=1, alpha=0.5)
 
     plt.xlabel('Trade Number', fontsize=12)
     plt.ylabel('Cumulative Outcome (R)', fontsize=12)
-    plt.title(f'{strategy_name} - Cumulative Performance (1:{rrr} RRR)', fontsize=14, fontweight='bold')
+    plt.title(f'{strategy_name} - Cumulative Performance', fontsize=14, fontweight='bold')
     plt.grid(True, alpha=0.3)
-
-    # Add final outcome annotation
-    final_outcome = cumulative_outcome[-1]
-    final_color = 'green' if final_outcome > 0 else 'red'
-    plt.annotate(f'Final: {final_outcome:.1f}R',
-                xy=(len(cumulative_outcome), final_outcome),
-                xytext=(10, 10), textcoords='offset points',
-                bbox=dict(boxstyle='round,pad=0.5', facecolor=final_color, alpha=0.2),
-                fontsize=11, fontweight='bold', color=final_color)
+    plt.legend(loc='best', fontsize=11, framealpha=0.9)
 
     plt.tight_layout()
     plt.show()
 
-    # Display summary statistics
-    total_trades = len(filtered_df)
-    wins = sum(1 for o in outcomes if o > 0)
-    losses = total_trades - wins
-    win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
+    # Display summary statistics for all RRR ratios
+    summary_html = f"<h3>Summary Statistics</h3><table style='border-collapse: collapse; margin: 10px 0;'>"
+    summary_html += "<tr style='border-bottom: 2px solid #333;'><th style='padding: 8px; text-align: left;'>RRR</th><th style='padding: 8px;'>Total Trades</th><th style='padding: 8px;'>Wins</th><th style='padding: 8px;'>Losses</th><th style='padding: 8px;'>Win Rate</th><th style='padding: 8px;'>Final Outcome</th></tr>"
 
-    display(HTML(f"""
-    <p style="font-size: 14px;">
-        <strong>Summary:</strong> {total_trades} trades |
-        {wins} wins | {losses} losses |
-        Win rate: {win_rate:.1f}% |
-        Final outcome: <span style="color: {final_color}; font-weight: bold;">{final_outcome:.1f}R</span>
-    </p>
-    """))
+    for ratio in rrr_ratios:
+        stats = trade_stats[ratio]
+        final_color = 'green' if stats['final'] > 0 else 'red'
+        summary_html += f"<tr style='border-bottom: 1px solid #ddd;'>"
+        summary_html += f"<td style='padding: 8px; font-weight: bold;'>1:{ratio}</td>"
+        summary_html += f"<td style='padding: 8px; text-align: center;'>{stats['total']}</td>"
+        summary_html += f"<td style='padding: 8px; text-align: center;'>{stats['wins']}</td>"
+        summary_html += f"<td style='padding: 8px; text-align: center;'>{stats['losses']}</td>"
+        summary_html += f"<td style='padding: 8px; text-align: center;'>{stats['win_rate']:.1f}%</td>"
+        summary_html += f"<td style='padding: 8px; text-align: center; color: {final_color}; font-weight: bold;'>{stats['final']:.1f}R</td>"
+        summary_html += "</tr>"
+
+    summary_html += "</table>"
+    display(HTML(summary_html))
 
 
 def style_table(
