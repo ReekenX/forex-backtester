@@ -4,7 +4,7 @@
     {
       "label": "Tmux",
       "type": "shell",
-      "command": "tmuxinator start",
+      "command": "tmuxinator start --suppress-tmux-version-warning=SUPPRESS-TMUX-VERSION-WARNING",
       "isBackground": true,
       "runOptions": {
         "runOn": "folderOpen"
