@@ -2140,3 +2140,150 @@ def create_sortable_table(
     """
 
     return html
+
+
+def display_strategy_trade_details(df: pd.DataFrame):
+    """
+    Display an interactive dropdown to select a profitable strategy and view its trade details.
+
+    Args:
+        df: Trading data with all columns
+    """
+    from IPython.display import display, HTML, clear_output
+    import ipywidgets as widgets
+
+    # Collect all profitable strategies from all three categories
+    all_strategies = []
+
+    # Single setup strategies
+    single_strategies = create_single_setup_strategy_library()
+    for strategy in single_strategies:
+        if _is_strategy_profitable(df, strategy):
+            all_strategies.append(('Single', strategy))
+
+    # Double setup strategies
+    double_strategies = create_double_setup_strategy_library()
+    for strategy in double_strategies:
+        if _is_strategy_profitable(df, strategy):
+            all_strategies.append(('Double', strategy))
+
+    # Triple setup strategies
+    triple_strategies = create_triple_setup_strategy_library()
+    for strategy in triple_strategies:
+        if _is_strategy_profitable(df, strategy):
+            all_strategies.append(('Triple', strategy))
+
+    # Sort strategies by name
+    all_strategies.sort(key=lambda x: x[1].name)
+
+    # Create dropdown options
+    strategy_options = [('Select a strategy...', None)] + [
+        (f"[{setup_type}] {strategy.name}", (setup_type, strategy))
+        for setup_type, strategy in all_strategies
+    ]
+
+    # Create dropdown widget
+    strategy_dropdown = widgets.Dropdown(
+        options=strategy_options,
+        description='Strategy:',
+        style={'description_width': 'initial'},
+        layout=widgets.Layout(width='600px')
+    )
+
+    # Create RRR dropdown
+    rrr_dropdown = widgets.Dropdown(
+        options=[
+            ('1:1 RRR', 1),
+            ('1:2 RRR', 2),
+            ('1:3 RRR', 3)
+        ],
+        value=1,
+        description='RRR:',
+        style={'description_width': 'initial'},
+        layout=widgets.Layout(width='200px')
+    )
+
+    # Output widget for displaying trade details
+    output = widgets.Output()
+
+    def on_selection_change(change):
+        """Handle dropdown selection changes"""
+        with output:
+            clear_output(wait=True)
+
+            if strategy_dropdown.value is None:
+                display(HTML("<p><i>Please select a strategy to view trade details.</i></p>"))
+                return
+
+            setup_type, strategy = strategy_dropdown.value
+            rrr_ratio = rrr_dropdown.value
+
+            # Apply strategy filter
+            filtered_df = strategy.apply(df)
+
+            if len(filtered_df) == 0:
+                display(HTML(f"<p>No trades found for strategy: <b>{strategy.name}</b></p>"))
+                return
+
+            # Prepare trade details table
+            trade_details = []
+
+            for idx, trade in filtered_df.iterrows():
+                # Determine if profitable based on selected RRR
+                is_win = trade['TP'] > rrr_ratio * trade['SL']
+                is_loss = trade['SL'] == trade['Pullback'] or (trade['Pullback'] >= trade['SL'])
+
+                if is_win:
+                    profitable = '🟢'
+                elif is_loss:
+                    profitable = '🔴'
+                else:
+                    profitable = ''
+
+                trade_details.append({
+                    'Profitable': profitable,
+                    'Date': trade.get('Date', ''),
+                    'Trade': trade.get('Trade', ''),
+                    'Weekday': trade.get('Weekday', ''),
+                    'Hour': int(trade.get('Hour', 0)) if trade.get('Hour', 0) != 0 else '',
+                    'Direction': trade.get('Direction', ''),
+                    'EMA': trade.get('EMA', ''),
+                    'SL': trade.get('SL', ''),
+                    'Pullback': trade.get('Pullback', ''),
+                    'TP': trade.get('TP', ''),
+                    'Extra': trade.get('Extra', ''),
+                    'BOS/CH': trade.get('BOS/CH', ''),
+                    '30M Leg': trade.get('30M Leg', ''),
+                    'Hours Until News': trade.get('Hours Until News', ''),
+                    'News Event': trade.get('News Event', '')
+                })
+
+            # Create DataFrame from trade details
+            trades_df = pd.DataFrame(trade_details)
+
+            # Display strategy name and trade count
+            display(HTML(f"<h3>Strategy: {strategy.name} ({setup_type} Setup) - {rrr_ratio}:1 RRR</h3>"))
+            display(HTML(f"<p>Total trades: <b>{len(trades_df)}</b></p>"))
+
+            # Display sortable table
+            html_table = create_sortable_table(trades_df, first_column_width='100px')
+            display(HTML(html_table))
+
+    # Attach event handlers
+    strategy_dropdown.observe(on_selection_change, names='value')
+    rrr_dropdown.observe(on_selection_change, names='value')
+
+    # Display header
+    display(HTML("<h2>Strategy Trade Details</h2>"))
+    display(HTML("<p>Select a profitable strategy to view all its trades with profitability indicators.</p>"))
+
+    # Display dropdowns in a horizontal box
+    dropdown_box = widgets.HBox([strategy_dropdown, rrr_dropdown])
+    display(dropdown_box)
+
+    # Display output area
+    display(output)
+
+    # Show initial message
+    with output:
+        display(HTML("<p><i>Please select a strategy to view trade details.</i></p>"))
