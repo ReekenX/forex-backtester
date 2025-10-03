@@ -1758,14 +1758,13 @@ def display_triple_setup_strategy_analysis(df: pd.DataFrame):
         print()
 
 
-def display_strategy_cumulative_chart(df: pd.DataFrame, strategy_name: str = "30M Trend + BOS + SL < 10", rrr: int = 1):
+def display_strategy_cumulative_chart(df: pd.DataFrame, strategy_name: str = "30M Trend + BOS + SL < 10"):
     """
     Display cumulative performance chart for a specific strategy with all three RRR ratios.
 
     Args:
         df: Trading data
         strategy_name: Name of the strategy to analyze
-        rrr: Risk-reward ratio to use (1, 2, or 3) - ignored, all three are shown
     """
     from IPython.display import display, HTML
 
