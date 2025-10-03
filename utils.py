@@ -1193,6 +1193,11 @@ def _create_triple_setup_strategies() -> List[Tuple[str, Callable, str]]:
 
     # Triple combinations with risk management
     strategies.extend([
+        ("EMA + BOS + skip SL <= 4", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 4)
+        ], "EMA + BOS excluding small stops"),
         ("30M Trend + BOS + SL < 10", lambda df: df[
             ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
              (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
@@ -2142,6 +2147,86 @@ def create_sortable_table(
     return html
 
 
+def export_strategy_trades_to_csv(
+    df: pd.DataFrame,
+    strategy_name: str,
+    rrr_ratio: int,
+    output_file: str = "strategy_trades.csv"
+) -> str:
+    """
+    Export trades for a specific strategy and RRR ratio to CSV.
+
+    Args:
+        df: Trading data with all columns
+        strategy_name: Name of the strategy to export (e.g., "EMA + BOS")
+        rrr_ratio: RRR ratio to use for profitability calculation (1, 2, or 3)
+        output_file: Path to the output CSV file
+
+    Returns:
+        Path to the exported CSV file
+    """
+    # Find the strategy
+    all_strategies = []
+    all_strategies.extend(create_single_setup_strategy_library())
+    all_strategies.extend(create_double_setup_strategy_library())
+    all_strategies.extend(create_triple_setup_strategy_library())
+
+    # Find matching strategy
+    strategy = None
+    for s in all_strategies:
+        if s.name == strategy_name:
+            strategy = s
+            break
+
+    if strategy is None:
+        raise ValueError(f"Strategy '{strategy_name}' not found. Please check the strategy name.")
+
+    # Apply strategy filter
+    filtered_df = strategy.apply(df)
+
+    if len(filtered_df) == 0:
+        raise ValueError(f"No trades found for strategy '{strategy_name}'")
+
+    # Prepare trade details
+    trade_details = []
+
+    for idx, trade in filtered_df.iterrows():
+        # Determine if profitable based on selected RRR
+        is_win = trade['TP'] > rrr_ratio * trade['SL']
+        is_loss = trade['SL'] == trade['Pullback'] or (trade['Pullback'] >= trade['SL'])
+
+        if is_win:
+            profitable = 'Yes'
+        elif is_loss:
+            profitable = 'No'
+        else:
+            profitable = ''
+
+        trade_details.append({
+            'Profitable': profitable,
+            'Date': trade.get('Date', ''),
+            'Trade': trade.get('Trade', ''),
+            'Weekday': trade.get('Weekday', ''),
+            'Hour': int(trade.get('Hour', 0)) if trade.get('Hour', 0) != 0 else '',
+            'Direction': trade.get('Direction', ''),
+            'EMA': trade.get('EMA', ''),
+            'SL': trade.get('SL', ''),
+            'Pullback': trade.get('Pullback', ''),
+            'TP': trade.get('TP', ''),
+            'Extra': trade.get('Extra', ''),
+            'BOS/CH': trade.get('BOS/CH', ''),
+            '30M Leg': trade.get('30M Leg', ''),
+            'Hours Until News': trade.get('Hours Until News', ''),
+            'News Event': trade.get('News Event', '')
+        })
+
+    # Create DataFrame and export to CSV
+    trades_df = pd.DataFrame(trade_details)
+    trades_df.to_csv(output_file, index=False)
+
+    return output_file
+
+
 def display_strategy_trade_details(df: pd.DataFrame):
     """
     Display an interactive dropdown to select a profitable strategy and view its trade details.
@@ -2261,17 +2346,16 @@ def display_strategy_trade_details(df: pd.DataFrame):
             # Create DataFrame from trade details
             trades_df = pd.DataFrame(trade_details)
 
-            # Display strategy name and trade count
-            display(HTML(f"<h3>Strategy: {strategy.name} ({setup_type} Setup) - {rrr_ratio}:1 RRR</h3>"))
-            display(HTML(f"<p>Total trades: <b>{len(trades_df)}</b></p>"))
-
-            # Display sortable table
+            # Create sortable table
             html_table = create_sortable_table(trades_df, first_column_width='100px')
-            display(HTML(html_table))
 
-    # Attach event handlers
-    strategy_dropdown.observe(on_selection_change, names='value')
-    rrr_dropdown.observe(on_selection_change, names='value')
+            # Combine all HTML into a single display call
+            combined_html = f"""
+                <h3>Strategy: {strategy.name} ({setup_type} Setup) - {rrr_ratio}:1 RRR</h3>
+                <p>Total trades: <b>{len(trades_df)}</b></p>
+                {html_table}
+            """
+            display(HTML(combined_html))
 
     # Display header
     display(HTML("<h2>Strategy Trade Details</h2>"))
@@ -2284,6 +2368,6 @@ def display_strategy_trade_details(df: pd.DataFrame):
     # Display output area
     display(output)
 
-    # Show initial message
-    with output:
-        display(HTML("<p><i>Please select a strategy to view trade details.</i></p>"))
+    # Attach event handlers
+    strategy_dropdown.observe(on_selection_change, names='value')
+    rrr_dropdown.observe(on_selection_change, names='value')
