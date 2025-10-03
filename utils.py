@@ -1844,25 +1844,6 @@ def display_strategy_cumulative_chart(df: pd.DataFrame, strategy_name: str = "30
     plt.tight_layout()
     plt.show()
 
-    # Display summary statistics for all RRR ratios
-    summary_html = f"<h3>Summary Statistics</h3><table style='border-collapse: collapse; margin: 10px 0;'>"
-    summary_html += "<tr style='border-bottom: 2px solid #333;'><th style='padding: 8px; text-align: left;'>RRR</th><th style='padding: 8px;'>Total Trades</th><th style='padding: 8px;'>Wins</th><th style='padding: 8px;'>Losses</th><th style='padding: 8px;'>Win Rate</th><th style='padding: 8px;'>Final Outcome</th></tr>"
-
-    for ratio in rrr_ratios:
-        stats = trade_stats[ratio]
-        final_color = 'green' if stats['final'] > 0 else 'red'
-        summary_html += f"<tr style='border-bottom: 1px solid #ddd;'>"
-        summary_html += f"<td style='padding: 8px; font-weight: bold;'>1:{ratio}</td>"
-        summary_html += f"<td style='padding: 8px; text-align: center;'>{stats['total']}</td>"
-        summary_html += f"<td style='padding: 8px; text-align: center;'>{stats['wins']}</td>"
-        summary_html += f"<td style='padding: 8px; text-align: center;'>{stats['losses']}</td>"
-        summary_html += f"<td style='padding: 8px; text-align: center;'>{stats['win_rate']:.1f}%</td>"
-        summary_html += f"<td style='padding: 8px; text-align: center; color: {final_color}; font-weight: bold;'>{stats['final']:.1f}R</td>"
-        summary_html += "</tr>"
-
-    summary_html += "</table>"
-    display(HTML(summary_html))
-
 
 def style_table(
     table_df: pd.DataFrame,

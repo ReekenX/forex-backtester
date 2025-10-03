@@ -4,7 +4,7 @@ run:
 	@poetry run jupyter notebook main.ipynb
 
 install:
-	@poetry install
+	@poetry install --no-root
 
 clean:
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
