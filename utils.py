@@ -1789,8 +1789,13 @@ def display_strategy_cumulative_chart(df: pd.DataFrame, strategy: Strategy):
     for ratio in rrr_ratios:
         outcomes = []
         for _, trade in filtered_df.iterrows():
-            # Win condition: TP > ratio * SL
-            if trade['TP'] > ratio * trade['SL']:
+            # Win condition: all three must be true
+            is_win = (
+                (trade['SL'] != trade['Pullback']) and
+                (trade['Pullback'] < trade['SL']) and
+                (trade['TP'] >= ratio * trade['SL'])
+            )
+            if is_win:
                 outcomes.append(ratio)  # Win = +ratio R
             else:
                 outcomes.append(-1)  # Loss = -1R
@@ -2192,15 +2197,17 @@ def export_strategy_trades_to_csv(
 
     for idx, trade in filtered_df.iterrows():
         # Determine if profitable based on selected RRR
-        is_win = trade['TP'] > rrr_ratio * trade['SL']
-        is_loss = trade['SL'] == trade['Pullback'] or (trade['Pullback'] >= trade['SL'])
+        # Win condition: all three must be true
+        is_win = (
+            (trade['SL'] != trade['Pullback']) and
+            (trade['Pullback'] < trade['SL']) and
+            (trade['TP'] >= rrr_ratio * trade['SL'])
+        )
 
         if is_win:
             profitable = 'Yes'
-        elif is_loss:
-            profitable = 'No'
         else:
-            profitable = ''
+            profitable = 'No'
 
         trade_details.append({
             'Profitable': profitable,
@@ -2258,9 +2265,6 @@ def display_strategy_trade_details(df: pd.DataFrame):
         if _is_strategy_profitable(df, strategy):
             all_strategies.append(('Triple', strategy))
 
-    # Sort strategies by name
-    all_strategies.sort(key=lambda x: x[1].name)
-
     # Create dropdown options
     strategy_options = [('Select a strategy...', None)] + [
         (f"[{setup_type}] {strategy.name}", (setup_type, strategy))
@@ -2315,15 +2319,17 @@ def display_strategy_trade_details(df: pd.DataFrame):
 
             for idx, trade in filtered_df.iterrows():
                 # Determine if profitable based on selected RRR
-                is_win = trade['TP'] > rrr_ratio * trade['SL']
-                is_loss = trade['SL'] == trade['Pullback'] or (trade['Pullback'] >= trade['SL'])
+                # Win condition: all three must be true
+                is_win = (
+                    (trade['SL'] != trade['Pullback']) and
+                    (trade['Pullback'] < trade['SL']) and
+                    (trade['TP'] >= rrr_ratio * trade['SL'])
+                )
 
                 if is_win:
                     profitable = '🟢'
-                elif is_loss:
-                    profitable = '🔴'
                 else:
-                    profitable = ''
+                    profitable = '🔴'
 
                 trade_details.append({
                     'Profitable': profitable,
