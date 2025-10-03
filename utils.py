@@ -14,6 +14,7 @@ Main components:
 
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from typing import Dict, List, Tuple, Callable, Optional
 
 # ============================================================================
@@ -1755,6 +1756,91 @@ def display_triple_setup_strategy_analysis(df: pd.DataFrame):
         html_table = create_sortable_table(combined_df, first_column_width='300px', highlight_column='Edge', highlight_color='green')
         display(HTML(html_table))
         print()
+
+
+def display_strategy_cumulative_chart(df: pd.DataFrame, strategy_name: str = "30M Trend + BOS + SL < 10", rrr: int = 1):
+    """
+    Display cumulative performance chart for a specific strategy.
+
+    Args:
+        df: Trading data
+        strategy_name: Name of the strategy to analyze
+        rrr: Risk-reward ratio to use (1, 2, or 3)
+    """
+    from IPython.display import display, HTML
+
+    # Apply the strategy filter
+    strategy_filter = lambda df: df[
+        (
+            (
+                df["30M Leg"].isin(["Above H", "Above L"])
+                & (df["Direction"] == "Buy")
+            )
+            | (
+                df["30M Leg"].isin(["Below H", "Below L"])
+                & (df["Direction"] == "Sell")
+            )
+        )
+        & (df["BOS/CH"] == "BOS")
+        & (df["SL"] < 10)
+    ]
+
+    filtered_df = strategy_filter(df)
+
+    if len(filtered_df) == 0:
+        display(HTML(f"<h2>{strategy_name} - Cumulative Performance (1:{rrr} RRR)</h2>"))
+        display(HTML("<p>No trades found for this strategy.</p>"))
+        return
+
+    # Calculate outcome for each trade
+    outcomes = []
+    for _, trade in filtered_df.iterrows():
+        # Win condition: TP > rrr * SL
+        if trade['TP'] > rrr * trade['SL']:
+            outcomes.append(rrr)  # Win = +rrr R
+        else:
+            outcomes.append(-1)  # Loss = -1R
+
+    # Calculate cumulative sum
+    cumulative_outcome = np.cumsum(outcomes)
+
+    # Create the chart
+    plt.figure(figsize=(14, 6))
+    trade_numbers = range(1, len(cumulative_outcome) + 1)
+    plt.plot(trade_numbers, cumulative_outcome, linewidth=2, color='#2E86AB')
+    plt.axhline(y=0, color='gray', linestyle='--', linewidth=1, alpha=0.5)
+
+    plt.xlabel('Trade Number', fontsize=12)
+    plt.ylabel('Cumulative Outcome (R)', fontsize=12)
+    plt.title(f'{strategy_name} - Cumulative Performance (1:{rrr} RRR)', fontsize=14, fontweight='bold')
+    plt.grid(True, alpha=0.3)
+
+    # Add final outcome annotation
+    final_outcome = cumulative_outcome[-1]
+    final_color = 'green' if final_outcome > 0 else 'red'
+    plt.annotate(f'Final: {final_outcome:.1f}R',
+                xy=(len(cumulative_outcome), final_outcome),
+                xytext=(10, 10), textcoords='offset points',
+                bbox=dict(boxstyle='round,pad=0.5', facecolor=final_color, alpha=0.2),
+                fontsize=11, fontweight='bold', color=final_color)
+
+    plt.tight_layout()
+    plt.show()
+
+    # Display summary statistics
+    total_trades = len(filtered_df)
+    wins = sum(1 for o in outcomes if o > 0)
+    losses = total_trades - wins
+    win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
+
+    display(HTML(f"""
+    <p style="font-size: 14px;">
+        <strong>Summary:</strong> {total_trades} trades |
+        {wins} wins | {losses} losses |
+        Win rate: {win_rate:.1f}% |
+        Final outcome: <span style="color: {final_color}; font-weight: bold;">{final_outcome:.1f}R</span>
+    </p>
+    """))
 
 
 def style_table(
