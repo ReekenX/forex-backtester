@@ -467,6 +467,65 @@ def analyze_sl_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     return {"Stop Loss Distribution": result_df}
 
 
+def analyze_tp_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+    """
+    Analyze trade distribution and profitability by take profit size ranges.
+
+    Creates a table showing wins, losses, and win percentage for different TP ranges.
+
+    Args:
+        df: Trading data with SL and TP columns
+
+    Returns:
+        Dictionary containing the TP distribution analysis DataFrame
+    """
+    # Define TP ranges for analysis
+    tp_ranges = [
+        ("TP < 5", lambda tp: tp < 5),
+        ("5 ≤ TP < 10", lambda tp: (tp >= 5) & (tp < 10)),
+        ("10 ≤ TP < 15", lambda tp: (tp >= 10) & (tp < 15)),
+        ("15 ≤ TP < 20", lambda tp: (tp >= 15) & (tp < 20)),
+        ("20 ≤ TP < 25", lambda tp: (tp >= 20) & (tp < 25)),
+        ("25 ≤ TP < 30", lambda tp: (tp >= 25) & (tp < 30)),
+        ("TP ≥ 30", lambda tp: tp >= 30),
+    ]
+
+    tp_rows = []
+
+    for range_name, range_filter in tp_ranges:
+        # Filter trades in this TP range
+        mask = range_filter(df["TP"])
+        range_df = df[mask]
+
+        total_trades = len(range_df)
+
+        if total_trades > 0:
+            # Calculate wins: SL != Pullback AND TP > SL
+            wins = ((range_df['SL'] != range_df['Pullback']) & (range_df['TP'] > range_df['SL'])).sum()
+            losses = total_trades - wins
+            win_percentage = (wins / total_trades * 100)
+
+            # Format for display
+            win_percentage_display = f"{win_percentage:.1f}%"
+        else:
+            wins = 0
+            losses = 0
+            win_percentage_display = "N/A"
+
+        tp_rows.append({
+            "TP Range": range_name,
+            "Total Trades": total_trades,
+            "Wins": wins,
+            "Losses": losses,
+            "Win %": win_percentage_display
+        })
+
+    # Create DataFrame from results
+    result_df = pd.DataFrame(tp_rows)
+
+    return {"Take Profit Distribution": result_df}
+
+
 def analyze_sl_reduction_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze how reducing stop loss size affects trade profitability.
@@ -1408,8 +1467,52 @@ def evaluate_all_strategies(
     return strategy_results
 
 
+def _calculate_strategy_drawdown(df: pd.DataFrame, strategy: Strategy, ratio: int) -> float:
+    """
+    Calculate maximum drawdown in R for a strategy at a given RRR ratio.
+
+    Args:
+        df: Trading data
+        strategy: Strategy object
+        ratio: RRR ratio (1, 2, or 3)
+
+    Returns:
+        Maximum drawdown in R
+    """
+    filtered_df = strategy.apply(df)
+
+    if len(filtered_df) == 0:
+        return 0.0
+
+    # Calculate outcomes for each trade
+    outcomes = []
+    for _, trade in filtered_df.iterrows():
+        is_win = (
+            (trade['SL'] != trade['Pullback']) and
+            (trade['Pullback'] < trade['SL']) and
+            (trade['TP'] >= ratio * trade['SL'])
+        )
+        if is_win:
+            outcomes.append(ratio)
+        else:
+            outcomes.append(-1)
+
+    # Calculate cumulative returns
+    cumulative = np.cumsum(outcomes)
+
+    # Calculate drawdown: max drop from any peak
+    running_max = np.maximum.accumulate(cumulative)
+    drawdowns = running_max - cumulative
+    max_drawdown = np.max(drawdowns)
+
+    return max_drawdown
+
+
 def get_top_strategies_by_edge(
-    strategy_results: Dict[str, pd.DataFrame], rrr_column: str
+    strategy_results: Dict[str, pd.DataFrame],
+    rrr_column: str,
+    df: pd.DataFrame = None,
+    strategies: List[Strategy] = None
 ) -> pd.DataFrame:
     """
     Extract top performing strategies for a specific RRR, sorted by Edge.
@@ -1417,25 +1520,41 @@ def get_top_strategies_by_edge(
     Args:
         strategy_results: Dictionary of strategy results
         rrr_column: Column name for RRR (e.g., '1:2 RRR')
+        df: Original trading data (optional, required for drawdown calculation)
+        strategies: List of Strategy objects (optional, required for drawdown calculation)
 
     Returns:
         Top strategies ranked by edge
     """
     strategy_performance = []
 
-    for strategy_name, df in strategy_results.items():
+    # Extract RRR ratio from column name (e.g., "1:2 RRR" -> 2)
+    rrr_ratio = None
+    if df is not None and strategies is not None:
+        try:
+            rrr_ratio = int(rrr_column.split(':')[1].split()[0])
+        except:
+            rrr_ratio = None
+
+    # Create a mapping from strategy name to Strategy object
+    strategy_map = {}
+    if strategies is not None:
+        for strategy in strategies:
+            strategy_map[strategy.name] = strategy
+
+    for strategy_name, df_result in strategy_results.items():
         # Skip if column doesn't exist
-        if rrr_column not in df.columns:
+        if rrr_column not in df_result.columns:
             continue
 
         # Extract performance metrics
-        total_trades = df[rrr_column].iloc[0]
-        wins = df[rrr_column].iloc[1]
-        losses = df[rrr_column].iloc[2]
-        win_rate = df[rrr_column].iloc[3]
-        edge = df[rrr_column].iloc[4]
-        outcome_str = df[rrr_column].iloc[5]
-        entry_str = df[rrr_column].iloc[6]
+        total_trades = df_result[rrr_column].iloc[0]
+        wins = df_result[rrr_column].iloc[1]
+        losses = df_result[rrr_column].iloc[2]
+        win_rate = df_result[rrr_column].iloc[3]
+        edge = df_result[rrr_column].iloc[4]
+        outcome_str = df_result[rrr_column].iloc[5]
+        entry_str = df_result[rrr_column].iloc[6]
 
         # Parse edge value for sorting - handle both string and numeric
         try:
@@ -1465,6 +1584,13 @@ def get_top_strategies_by_edge(
         # Clean up display name
         display_name = strategy_name.split("[")[0].strip()
 
+        # Calculate drawdown if possible
+        drawdown_str = "N/A"
+        if df is not None and rrr_ratio is not None and display_name in strategy_map:
+            strategy = strategy_map[display_name]
+            drawdown_value = _calculate_strategy_drawdown(df, strategy, rrr_ratio)
+            drawdown_str = f"{int(drawdown_value)}"
+
         strategy_performance.append(
             {
                 "Strategy": display_name,
@@ -1476,6 +1602,7 @@ def get_top_strategies_by_edge(
                 "Edge": edge,
                 "Outcome": outcome_str,
                 "Trades Required": trades_required,
+                "Drawdown": drawdown_str,
                 "edge_value": edge_value,
             }
         )
@@ -1552,6 +1679,19 @@ def display_sl_distribution_analysis(df: pd.DataFrame):
         print('')
 
 
+def display_tp_distribution_analysis(df: pd.DataFrame):
+    """Display take profit distribution analysis with proper formatting."""
+    from IPython.display import display, HTML
+
+    display(HTML("<h2>Take Profit Distribution Analysis</h2>"))
+    tp_distribution_tables = analyze_tp_distribution(df)
+
+    for table_name, table_df in tp_distribution_tables.items():
+        html_table = create_sortable_table(table_df)
+        display(HTML(html_table))
+        print('')
+
+
 def display_sl_reduction_analysis(df: pd.DataFrame):
     """Display SL reduction profitability analysis with proper formatting."""
     from IPython.display import display, HTML
@@ -1589,7 +1729,7 @@ def display_double_setup_strategy_analysis(df: pd.DataFrame):
     ]
 
     for rrr_column, rrr_label in rrr_configs:
-        top_df = get_top_strategies_by_edge(strategy_results, rrr_column)
+        top_df = get_top_strategies_by_edge(strategy_results, rrr_column, df, strategies)
 
         # Add RRR column to each row
         if not top_df.empty:
@@ -1614,7 +1754,7 @@ def display_double_setup_strategy_analysis(df: pd.DataFrame):
         # Drop the temporary sorting column
         combined_df = combined_df.drop('edge_value', axis=1)
 
-        # Reorder columns to put RRR second and Trades Required at the end
+        # Reorder columns to put RRR second, Trades Required and Drawdown at the end
         cols = combined_df.columns.tolist()
         if 'RRR' in cols:
             cols.remove('RRR')
@@ -1622,6 +1762,9 @@ def display_double_setup_strategy_analysis(df: pd.DataFrame):
         if 'Trades Required' in cols:
             cols.remove('Trades Required')
             cols.append('Trades Required')
+        if 'Drawdown' in cols:
+            cols.remove('Drawdown')
+            cols.append('Drawdown')
         combined_df = combined_df[cols]
 
         # Display the combined table with sortable columns
@@ -1655,7 +1798,7 @@ def display_single_setup_strategy_analysis(df: pd.DataFrame):
     ]
 
     for rrr_column, rrr_label in rrr_configs:
-        top_df = get_top_strategies_by_edge(strategy_results, rrr_column)
+        top_df = get_top_strategies_by_edge(strategy_results, rrr_column, df, strategies)
 
         # Add RRR column to each row
         if not top_df.empty:
@@ -1680,7 +1823,7 @@ def display_single_setup_strategy_analysis(df: pd.DataFrame):
         # Drop the temporary sorting column
         combined_df = combined_df.drop('edge_value', axis=1)
 
-        # Reorder columns to put RRR second and Trades Required at the end
+        # Reorder columns to put RRR second, Trades Required and Drawdown at the end
         cols = combined_df.columns.tolist()
         if 'RRR' in cols:
             cols.remove('RRR')
@@ -1688,6 +1831,9 @@ def display_single_setup_strategy_analysis(df: pd.DataFrame):
         if 'Trades Required' in cols:
             cols.remove('Trades Required')
             cols.append('Trades Required')
+        if 'Drawdown' in cols:
+            cols.remove('Drawdown')
+            cols.append('Drawdown')
         combined_df = combined_df[cols]
 
         # Display the combined table with sortable columns
@@ -1721,7 +1867,7 @@ def display_triple_setup_strategy_analysis(df: pd.DataFrame):
     ]
 
     for rrr_column, rrr_label in rrr_configs:
-        top_df = get_top_strategies_by_edge(strategy_results, rrr_column)
+        top_df = get_top_strategies_by_edge(strategy_results, rrr_column, df, strategies)
 
         # Add RRR column to each row
         if not top_df.empty:
@@ -1746,7 +1892,7 @@ def display_triple_setup_strategy_analysis(df: pd.DataFrame):
         # Drop the temporary sorting column
         combined_df = combined_df.drop('edge_value', axis=1)
 
-        # Reorder columns to put RRR second and Trades Required at the end
+        # Reorder columns to put RRR second, Trades Required and Drawdown at the end
         cols = combined_df.columns.tolist()
         if 'RRR' in cols:
             cols.remove('RRR')
@@ -1754,6 +1900,9 @@ def display_triple_setup_strategy_analysis(df: pd.DataFrame):
         if 'Trades Required' in cols:
             cols.remove('Trades Required')
             cols.append('Trades Required')
+        if 'Drawdown' in cols:
+            cols.remove('Drawdown')
+            cols.append('Drawdown')
         combined_df = combined_df[cols]
 
         # Display the combined table with sortable columns
@@ -1984,6 +2133,8 @@ def create_sortable_table(
         sortable_columns.append(table_df_copy.columns.get_loc('Outcome') + 1)  # +1 for index column
     if 'Trades Required' in table_df_copy.columns:
         sortable_columns.append(table_df_copy.columns.get_loc('Trades Required') + 1)  # +1 for index column
+    if 'Drawdown' in table_df_copy.columns:
+        sortable_columns.append(table_df_copy.columns.get_loc('Drawdown') + 1)  # +1 for index column
 
     # Build the complete HTML with JavaScript
     html = f"""
@@ -2097,8 +2248,8 @@ def create_sortable_table(
 
                 // Determine sort direction based on column type
                 let sortDescending = true; // Default to descending
-                if (columnName === 'Trades Required') {{
-                    sortDescending = false; // Trades Required should be ascending (lowest to highest)
+                if (columnName === 'Trades Required' || columnName === 'Drawdown') {{
+                    sortDescending = false; // Trades Required and Drawdown should be ascending (lowest to highest)
                 }}
                 // Edge and Outcome columns use descending (highest to lowest) - default behavior
 
