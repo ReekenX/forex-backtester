@@ -1726,6 +1726,7 @@ def analyze_ema_30m_trend_alignment(df: pd.DataFrame) -> pd.DataFrame:
 
     # Configuration for different alignment scenarios
     scenarios = [
+        ("Plain trading", lambda d: d),
         ("EMA aligned with trade", lambda d: d[d["EMA"] == d["Direction"]]),
         ("30M Trend aligned with trade", lambda d: d[
             ((d["Direction"] == "Buy") & d["30M Leg"].isin(["Above H", "Above L"])) |
