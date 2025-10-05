@@ -1707,6 +1707,82 @@ def display_tp_distribution_analysis(df: pd.DataFrame):
         print('')
 
 
+def analyze_ema_30m_trend_alignment(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Analyze how EMA and 30M Trend alignment affects trade profitability.
+
+    Creates a table showing:
+    1. EMA aligned with trade direction
+    2. 30M Trend aligned with trade direction
+    3. Both EMA and 30M Trend aligned with trade direction
+
+    Args:
+        df: Trading data with EMA, Direction, 30M Leg, Pullback, TP, and SL columns
+
+    Returns:
+        DataFrame containing the alignment analysis
+    """
+    rows = []
+
+    # Configuration for different alignment scenarios
+    scenarios = [
+        ("EMA aligned with trade", lambda d: d[d["EMA"] == d["Direction"]]),
+        ("30M Trend aligned with trade", lambda d: d[
+            ((d["Direction"] == "Buy") & d["30M Leg"].isin(["Above H", "Above L"])) |
+            ((d["Direction"] == "Sell") & d["30M Leg"].isin(["Below H", "Below L"]))
+        ]),
+        ("EMA + 30M Trend aligned with trade", lambda d: d[
+            (d["EMA"] == d["Direction"]) &
+            (
+                ((d["Direction"] == "Buy") & d["30M Leg"].isin(["Above H", "Above L"])) |
+                ((d["Direction"] == "Sell") & d["30M Leg"].isin(["Below H", "Below L"]))
+            )
+        ])
+    ]
+
+    # Analyze each scenario for 1:1 RRR
+    for scenario_name, filter_func in scenarios:
+        filtered_df = filter_func(df)
+        total_trades = len(filtered_df)
+
+        if total_trades > 0:
+            # Win condition for 1:1 RRR: SL != Pullback AND Pullback < SL AND TP >= SL
+            profitable = filtered_df[
+                (filtered_df["SL"] != filtered_df["Pullback"])
+                & (filtered_df["Pullback"] < filtered_df["SL"])
+                & (filtered_df["TP"] >= filtered_df["SL"])
+            ]
+            wins = len(profitable)
+            losses = total_trades - wins
+            win_rate = wins / total_trades * 100
+        else:
+            wins = 0
+            losses = 0
+            win_rate = 0.0
+
+        rows.append({
+            'Scenario': scenario_name,
+            'Total Trades': total_trades,
+            'Wins': wins,
+            'Losses': losses,
+            'Win Rate': f"{win_rate:.1f}%"
+        })
+
+    return pd.DataFrame(rows)
+
+
+def display_ema_30m_trend_analysis(df: pd.DataFrame):
+    """Display EMA and 30M Trend alignment analysis with proper formatting."""
+    from IPython.display import display, HTML
+
+    display(HTML("<h2>EMA and 30M Trend Alignment Analysis</h2>"))
+    alignment_df = analyze_ema_30m_trend_alignment(df)
+
+    html_table = create_sortable_table(alignment_df)
+    display(HTML(html_table))
+    print('')
+
+
 def display_sl_reduction_analysis(df: pd.DataFrame):
     """Display SL reduction profitability analysis with proper formatting."""
     from IPython.display import display, HTML
