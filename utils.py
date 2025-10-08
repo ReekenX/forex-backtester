@@ -407,6 +407,56 @@ def analyze_weekday_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     return {"Weekday Analysis": final_table}
 
 
+def analyze_30m_leg_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+    """
+    Analyze which 30M Leg values produce the most profitable trades.
+
+    Creates a table showing wins, losses, and win percentage for each 30M Leg value:
+    Below H, Above H, Below L, Above L.
+
+    Args:
+        df: Trading data with 30M Leg and TP columns
+
+    Returns:
+        Dictionary containing the 30M Leg analysis DataFrame
+    """
+    # Work with copy of data
+    leg_df = df.copy()
+
+    # Check if 30M Leg column exists
+    if '30M Leg' not in leg_df.columns:
+        raise ValueError("No 30M Leg column found in data")
+
+    # Calculate wins (TP > 0 means profitable trade)
+    leg_df['Is_Win'] = leg_df['TP'] > 0
+
+    # Group by 30M Leg and calculate statistics
+    leg_stats = leg_df.groupby('30M Leg').agg(
+        Total_Trades=('Is_Win', 'count'),
+        Wins=('Is_Win', 'sum'),
+        Losses=('Is_Win', lambda x: (~x).sum())
+    ).reset_index()
+
+    # Calculate win percentage
+    leg_stats['Win_Percentage'] = (leg_stats['Wins'] / leg_stats['Total_Trades'] * 100).round(1)
+
+    # Format win percentage for display
+    leg_stats['Win_Percentage_Display'] = leg_stats['Win_Percentage'].apply(lambda x: f"{x:.1f}%")
+
+    # Prepare final table with proper column names
+    final_table = leg_stats[['30M Leg', 'Total_Trades', 'Wins', 'Losses', 'Win_Percentage_Display']].copy()
+    final_table.columns = ['30M Leg', 'Total Trades', 'Wins', 'Losses', 'Win %']
+
+    # Define proper order
+    leg_order = ['Below H', 'Below L', 'Above L', 'Above H']
+
+    # Sort by leg order
+    final_table['30M Leg'] = pd.Categorical(final_table['30M Leg'], categories=leg_order, ordered=True)
+    final_table = final_table.sort_values('30M Leg').reset_index(drop=True)
+
+    return {"30M Leg Analysis": final_table}
+
+
 def analyze_sl_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze trade distribution and profitability by stop loss size ranges.
@@ -1663,6 +1713,19 @@ def display_weekday_analysis(df: pd.DataFrame):
     weekday_tables = analyze_weekday_profitability(df)
 
     for table_name, table_df in weekday_tables.items():
+        html_table = create_sortable_table(table_df)
+        display(HTML(html_table))
+        print('')
+
+
+def display_30m_leg_analysis(df: pd.DataFrame):
+    """Display 30M Leg profitability analysis with proper formatting."""
+    from IPython.display import display, HTML
+
+    display(HTML("<h2>30M Leg Analysis</h2>"))
+    leg_tables = analyze_30m_leg_profitability(df)
+
+    for table_name, table_df in leg_tables.items():
         html_table = create_sortable_table(table_df)
         display(HTML(html_table))
         print('')
