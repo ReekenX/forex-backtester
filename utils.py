@@ -301,10 +301,11 @@ def analyze_hour_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze which hours produce the most profitable trades.
 
-    Creates a table showing wins, losses, and win percentage for each trading hour.
+    Creates a table showing wins, losses, and win percentage for each trading hour
+    across different RRR ratios (1:1, 1:2, 1:3).
 
     Args:
-        df: Trading data with Hour and TP columns
+        df: Trading data with Hour, Pullback, TP, and SL columns
 
     Returns:
         Dictionary containing the hour analysis DataFrame
@@ -319,9 +320,6 @@ def analyze_hour_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
             # Hour column should already exist in the data
             raise ValueError("No Hour column found in data")
 
-    # Calculate wins (TP > 0 means profitable trade)
-    hour_df['Is_Win'] = hour_df['TP'] > 0
-
     # Remove rows with NaN or empty hours before analysis
     hour_df = hour_df.dropna(subset=['Hour'])
     hour_df = hour_df[hour_df['Hour'] != 0]
@@ -329,32 +327,49 @@ def analyze_hour_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     # Check if we have any data left after filtering
     if len(hour_df) == 0:
         # Return empty table if no hour data available
-        empty_df = pd.DataFrame(columns=['Hour', 'Total Trades', 'Wins', 'Losses', 'Win %'])
+        empty_df = pd.DataFrame(columns=['Hour', 'RRR', 'Total Trades', 'Wins', 'Losses', 'Win %'])
         return {"Hour Analysis": empty_df}
 
-    # Group by hour and calculate statistics
-    hour_stats = hour_df.groupby('Hour').agg(
-        Total_Trades=('Is_Win', 'count'),
-        Wins=('Is_Win', 'sum'),
-        Losses=('Is_Win', lambda x: (~x).sum())
-    ).reset_index()
+    # Get unique hours and sort them
+    unique_hours = sorted(hour_df['Hour'].unique())
 
-    # Calculate win percentage
-    hour_stats['Win_Percentage'] = (hour_stats['Wins'] / hour_stats['Total_Trades'] * 100).round(1)
+    hour_rows = []
 
-    # Format hour column for display (convert to int first to handle float values)
-    hour_stats['Hour_Display'] = hour_stats['Hour'].astype(int).apply(lambda x: f"{x:02d}h")
+    for hour in unique_hours:
+        # Filter trades for this hour
+        hour_filtered = hour_df[hour_df['Hour'] == hour]
 
-    # Format win percentage for display
-    hour_stats['Win_Percentage_Display'] = hour_stats['Win_Percentage'].apply(lambda x: f"{x:.1f}%")
+        for ratio, breakeven_rate in RRR_CONFIGS:
+            total_trades = len(hour_filtered)
 
-    # Prepare final table with proper column names
-    final_table = hour_stats[['Hour_Display', 'Total_Trades', 'Wins', 'Losses', 'Win_Percentage_Display']].copy()
-    final_table.columns = ['Hour', 'Total Trades', 'Wins', 'Losses', 'Win %']
+            if total_trades > 0:
+                # Calculate wins based on RRR ratio
+                profitable = hour_filtered[
+                    (hour_filtered["SL"] != hour_filtered["Pullback"])
+                    & (hour_filtered["Pullback"] < hour_filtered["SL"])
+                    & (hour_filtered["TP"] >= (ratio * hour_filtered["SL"]))
+                ]
+                wins = len(profitable)
+                losses = total_trades - wins
+                win_rate = wins / total_trades * 100
+            else:
+                wins = 0
+                losses = 0
+                win_rate = 0.0
 
-    # Sort by hour
-    final_table = final_table.sort_values(by='Hour').reset_index(drop=True)
+            # Format hour display - only show hour on first RRR row
+            hour_display = f"{int(hour):02d}h" if ratio == 1 else ''
 
+            hour_rows.append({
+                'Hour': hour_display,
+                'RRR': f'1:{ratio}',
+                'Total Trades': total_trades,
+                'Wins': wins,
+                'Losses': losses,
+                'Win %': f"{win_rate:.1f}%"
+            })
+
+    final_table = pd.DataFrame(hour_rows)
     return {"Hour Analysis": final_table}
 
 
@@ -362,10 +377,11 @@ def analyze_weekday_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze which weekdays produce the most profitable trades.
 
-    Creates a table showing wins, losses, and win percentage for each weekday.
+    Creates a table showing wins, losses, and win percentage for each weekday
+    across different RRR ratios (1:1, 1:2, 1:3).
 
     Args:
-        df: Trading data with Weekday and TP columns
+        df: Trading data with Weekday, Pullback, TP, and SL columns
 
     Returns:
         Dictionary containing the weekday analysis DataFrame
@@ -377,33 +393,49 @@ def analyze_weekday_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     if 'Weekday' not in weekday_df.columns:
         raise ValueError("No Weekday column found in data")
 
-    # Calculate wins (TP > 0 means profitable trade)
-    weekday_df['Is_Win'] = weekday_df['TP'] > 0
-
-    # Group by weekday and calculate statistics
-    weekday_stats = weekday_df.groupby('Weekday').agg(
-        Total_Trades=('Is_Win', 'count'),
-        Wins=('Is_Win', 'sum'),
-        Losses=('Is_Win', lambda x: (~x).sum())
-    ).reset_index()
-
-    # Calculate win percentage
-    weekday_stats['Win_Percentage'] = (weekday_stats['Wins'] / weekday_stats['Total_Trades'] * 100).round(1)
-
-    # Format win percentage for display
-    weekday_stats['Win_Percentage_Display'] = weekday_stats['Win_Percentage'].apply(lambda x: f"{x:.1f}%")
-
-    # Prepare final table with proper column names
-    final_table = weekday_stats[['Weekday', 'Total_Trades', 'Wins', 'Losses', 'Win_Percentage_Display']].copy()
-    final_table.columns = ['Weekday', 'Total Trades', 'Wins', 'Losses', 'Win %']
-
     # Define proper weekday order
     weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-    # Sort by weekday order
-    final_table['Weekday'] = pd.Categorical(final_table['Weekday'], categories=weekday_order, ordered=True)
-    final_table = final_table.sort_values('Weekday').reset_index(drop=True)
+    weekday_rows = []
 
+    for weekday in weekday_order:
+        # Filter trades for this weekday (skip if no data)
+        weekday_filtered = weekday_df[weekday_df['Weekday'] == weekday]
+
+        if len(weekday_filtered) == 0:
+            continue
+
+        for ratio, breakeven_rate in RRR_CONFIGS:
+            total_trades = len(weekday_filtered)
+
+            if total_trades > 0:
+                # Calculate wins based on RRR ratio
+                profitable = weekday_filtered[
+                    (weekday_filtered["SL"] != weekday_filtered["Pullback"])
+                    & (weekday_filtered["Pullback"] < weekday_filtered["SL"])
+                    & (weekday_filtered["TP"] >= (ratio * weekday_filtered["SL"]))
+                ]
+                wins = len(profitable)
+                losses = total_trades - wins
+                win_rate = wins / total_trades * 100
+            else:
+                wins = 0
+                losses = 0
+                win_rate = 0.0
+
+            # Format weekday display - only show weekday on first RRR row
+            weekday_display = weekday if ratio == 1 else ''
+
+            weekday_rows.append({
+                'Weekday': weekday_display,
+                'RRR': f'1:{ratio}',
+                'Total Trades': total_trades,
+                'Wins': wins,
+                'Losses': losses,
+                'Win %': f"{win_rate:.1f}%"
+            })
+
+    final_table = pd.DataFrame(weekday_rows)
     return {"Weekday Analysis": final_table}
 
 
@@ -411,11 +443,12 @@ def analyze_30m_leg_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze which 30M Leg values produce the most profitable trades.
 
-    Creates a table showing wins, losses, and win percentage for each 30M Leg value:
+    Creates a table showing wins, losses, and win percentage for each 30M Leg value
+    across different RRR ratios (1:1, 1:2, 1:3).
     Below H, Above H, Below L, Above L.
 
     Args:
-        df: Trading data with 30M Leg and TP columns
+        df: Trading data with 30M Leg, Pullback, TP, and SL columns
 
     Returns:
         Dictionary containing the 30M Leg analysis DataFrame
@@ -427,33 +460,49 @@ def analyze_30m_leg_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     if '30M Leg' not in leg_df.columns:
         raise ValueError("No 30M Leg column found in data")
 
-    # Calculate wins (TP > 0 means profitable trade)
-    leg_df['Is_Win'] = leg_df['TP'] > 0
-
-    # Group by 30M Leg and calculate statistics
-    leg_stats = leg_df.groupby('30M Leg').agg(
-        Total_Trades=('Is_Win', 'count'),
-        Wins=('Is_Win', 'sum'),
-        Losses=('Is_Win', lambda x: (~x).sum())
-    ).reset_index()
-
-    # Calculate win percentage
-    leg_stats['Win_Percentage'] = (leg_stats['Wins'] / leg_stats['Total_Trades'] * 100).round(1)
-
-    # Format win percentage for display
-    leg_stats['Win_Percentage_Display'] = leg_stats['Win_Percentage'].apply(lambda x: f"{x:.1f}%")
-
-    # Prepare final table with proper column names
-    final_table = leg_stats[['30M Leg', 'Total_Trades', 'Wins', 'Losses', 'Win_Percentage_Display']].copy()
-    final_table.columns = ['30M Leg', 'Total Trades', 'Wins', 'Losses', 'Win %']
-
     # Define proper order
     leg_order = ['Below H', 'Below L', 'Above L', 'Above H']
 
-    # Sort by leg order
-    final_table['30M Leg'] = pd.Categorical(final_table['30M Leg'], categories=leg_order, ordered=True)
-    final_table = final_table.sort_values('30M Leg').reset_index(drop=True)
+    leg_rows = []
 
+    for leg in leg_order:
+        # Filter trades for this 30M Leg (skip if no data)
+        leg_filtered = leg_df[leg_df['30M Leg'] == leg]
+
+        if len(leg_filtered) == 0:
+            continue
+
+        for ratio, breakeven_rate in RRR_CONFIGS:
+            total_trades = len(leg_filtered)
+
+            if total_trades > 0:
+                # Calculate wins based on RRR ratio
+                profitable = leg_filtered[
+                    (leg_filtered["SL"] != leg_filtered["Pullback"])
+                    & (leg_filtered["Pullback"] < leg_filtered["SL"])
+                    & (leg_filtered["TP"] >= (ratio * leg_filtered["SL"]))
+                ]
+                wins = len(profitable)
+                losses = total_trades - wins
+                win_rate = wins / total_trades * 100
+            else:
+                wins = 0
+                losses = 0
+                win_rate = 0.0
+
+            # Format leg display - only show leg on first RRR row
+            leg_display = leg if ratio == 1 else ''
+
+            leg_rows.append({
+                '30M Leg': leg_display,
+                'RRR': f'1:{ratio}',
+                'Total Trades': total_trades,
+                'Wins': wins,
+                'Losses': losses,
+                'Win %': f"{win_rate:.1f}%"
+            })
+
+    final_table = pd.DataFrame(leg_rows)
     return {"30M Leg Analysis": final_table}
 
 
@@ -461,10 +510,11 @@ def analyze_sl_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze trade distribution and profitability by stop loss size ranges.
 
-    Creates a table showing wins, losses, and win percentage for different SL ranges.
+    Creates a table showing wins, losses, and win percentage for different SL ranges
+    across different RRR ratios (1:1, 1:2, 1:3).
 
     Args:
-        df: Trading data with SL and TP columns
+        df: Trading data with SL, Pullback, and TP columns
 
     Returns:
         Dictionary containing the SL distribution analysis DataFrame
@@ -488,28 +538,36 @@ def analyze_sl_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         mask = range_filter(df["SL"])
         range_df = df[mask]
 
-        total_trades = len(range_df)
+        for ratio, breakeven_rate in RRR_CONFIGS:
+            total_trades = len(range_df)
 
-        if total_trades > 0:
-            # Calculate wins (TP > 0 means profitable trade)
-            wins = (range_df['TP'] > 0).sum()
-            losses = total_trades - wins
-            win_percentage = (wins / total_trades * 100)
+            if total_trades > 0:
+                # Calculate wins based on RRR ratio
+                profitable = range_df[
+                    (range_df["SL"] != range_df["Pullback"])
+                    & (range_df["Pullback"] < range_df["SL"])
+                    & (range_df["TP"] >= (ratio * range_df["SL"]))
+                ]
+                wins = len(profitable)
+                losses = total_trades - wins
+                win_rate = wins / total_trades * 100
+                win_percentage_display = f"{win_rate:.1f}%"
+            else:
+                wins = 0
+                losses = 0
+                win_percentage_display = "N/A"
 
-            # Format for display
-            win_percentage_display = f"{win_percentage:.1f}%"
-        else:
-            wins = 0
-            losses = 0
-            win_percentage_display = "N/A"
+            # Format range display - only show range on first RRR row
+            range_display = range_name if ratio == 1 else ''
 
-        sl_rows.append({
-            "SL Range": range_name,
-            "Total Trades": total_trades,
-            "Wins": wins,
-            "Losses": losses,
-            "Win %": win_percentage_display
-        })
+            sl_rows.append({
+                "SL Range": range_display,
+                'RRR': f'1:{ratio}',
+                "Total Trades": total_trades,
+                "Wins": wins,
+                "Losses": losses,
+                "Win %": win_percentage_display
+            })
 
     # Create DataFrame from results
     result_df = pd.DataFrame(sl_rows)
@@ -521,10 +579,11 @@ def analyze_tp_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze trade distribution and profitability by take profit size ranges.
 
-    Creates a table showing wins, losses, and win percentage for different TP ranges.
+    Creates a table showing wins, losses, and win percentage for different TP ranges
+    across different RRR ratios (1:1, 1:2, 1:3).
 
     Args:
-        df: Trading data with SL and TP columns
+        df: Trading data with SL, Pullback, and TP columns
 
     Returns:
         Dictionary containing the TP distribution analysis DataFrame
@@ -546,28 +605,36 @@ def analyze_tp_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         mask = range_filter(df["TP"])
         range_df = df[mask]
 
-        total_trades = len(range_df)
+        for ratio, breakeven_rate in RRR_CONFIGS:
+            total_trades = len(range_df)
 
-        if total_trades > 0:
-            # Calculate wins: SL != Pullback AND TP > SL
-            wins = ((range_df['SL'] != range_df['Pullback']) & (range_df['TP'] > range_df['SL'])).sum()
-            losses = total_trades - wins
-            win_percentage = (wins / total_trades * 100)
+            if total_trades > 0:
+                # Calculate wins based on RRR ratio
+                profitable = range_df[
+                    (range_df["SL"] != range_df["Pullback"])
+                    & (range_df["Pullback"] < range_df["SL"])
+                    & (range_df["TP"] >= (ratio * range_df["SL"]))
+                ]
+                wins = len(profitable)
+                losses = total_trades - wins
+                win_rate = wins / total_trades * 100
+                win_percentage_display = f"{win_rate:.1f}%"
+            else:
+                wins = 0
+                losses = 0
+                win_percentage_display = "N/A"
 
-            # Format for display
-            win_percentage_display = f"{win_percentage:.1f}%"
-        else:
-            wins = 0
-            losses = 0
-            win_percentage_display = "N/A"
+            # Format range display - only show range on first RRR row
+            range_display = range_name if ratio == 1 else ''
 
-        tp_rows.append({
-            "TP Range": range_name,
-            "Total Trades": total_trades,
-            "Wins": wins,
-            "Losses": losses,
-            "Win %": win_percentage_display
-        })
+            tp_rows.append({
+                "TP Range": range_display,
+                'RRR': f'1:{ratio}',
+                "Total Trades": total_trades,
+                "Wins": wins,
+                "Losses": losses,
+                "Win %": win_percentage_display
+            })
 
     # Create DataFrame from results
     result_df = pd.DataFrame(tp_rows)
@@ -2324,6 +2391,11 @@ def create_sortable_table(
             color: {highlight_color} !important;
             font-weight: bold;
         }}
+
+        #{table_id} .win-rate-green {{
+            color: #2ecc71 !important;
+            font-weight: bold;
+        }}
     </style>
 
     {html_table}
@@ -2336,6 +2408,51 @@ def create_sortable_table(
         const tbody = table.querySelector('tbody');
         const headers = table.querySelectorAll('thead th');
         const sortableColumns = {sortable_columns};
+
+        // Find the columns for RRR and Win %
+        const headerRow = table.querySelector('thead tr');
+        const headerCells = Array.from(headerRow.children);
+        const rrrColumnIndex = headerCells.findIndex(th => th.textContent.trim() === 'RRR');
+        const winPercentColumnIndex = headerCells.findIndex(th => th.textContent.trim() === 'Win %');
+
+        // Function to apply green highlighting to Win % cells based on RRR value
+        function applyWinRateHighlighting() {{
+            if (rrrColumnIndex !== -1 && winPercentColumnIndex !== -1) {{
+                const rows = tbody.querySelectorAll('tr');
+                rows.forEach(row => {{
+                    const cells = Array.from(row.querySelectorAll('td'));
+
+                    // Account for the fact that header includes index column but we need to match with td elements
+                    // The headerCells index includes the index column (th), but cells are only td elements
+                    // So we need to subtract 1 from the header index to get the td index
+                    const rrrCell = cells[rrrColumnIndex - 1];
+                    const winPercentCell = cells[winPercentColumnIndex - 1];
+
+                    if (rrrCell && winPercentCell) {{
+                        const rrrValue = rrrCell.textContent.trim();
+                        const winPercentText = winPercentCell.textContent.trim();
+                        const winPercentValue = parseFloat(winPercentText.replace('%', ''));
+
+                        // Remove existing green class first
+                        winPercentCell.classList.remove('win-rate-green');
+
+                        if (!isNaN(winPercentValue)) {{
+                            // Check thresholds based on RRR
+                            if (rrrValue === '1:1' && winPercentValue > 50) {{
+                                winPercentCell.classList.add('win-rate-green');
+                            }} else if (rrrValue === '1:2' && winPercentValue > 33) {{
+                                winPercentCell.classList.add('win-rate-green');
+                            }} else if (rrrValue === '1:3' && winPercentValue > 25) {{
+                                winPercentCell.classList.add('win-rate-green');
+                            }}
+                        }}
+                    }}
+                }});
+            }}
+        }}
+
+        // Apply initial green highlighting
+        applyWinRateHighlighting();
 
         // Store the currently highlighted column index
         let currentHighlightIndex = -1;
@@ -2446,6 +2563,9 @@ def create_sortable_table(
 
                 // Re-append sorted rows
                 rows.forEach(row => tbody.appendChild(row));
+
+                // Re-apply green highlighting after sorting
+                applyWinRateHighlighting();
 
                 // Highlight the clicked column
                 applyHighlighting(colIndex);
