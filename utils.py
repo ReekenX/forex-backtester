@@ -591,10 +591,8 @@ def analyze_tp_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     # Define TP ranges for analysis
     tp_ranges = [
         ("TP < 10", lambda tp: (tp > 0) & (tp < 10)),
-        ("10 ≤ TP < 15", lambda tp: (tp >= 10) & (tp < 15)),
-        ("15 ≤ TP < 20", lambda tp: (tp >= 15) & (tp < 20)),
-        ("20 ≤ TP < 25", lambda tp: (tp >= 20) & (tp < 25)),
-        ("25 ≤ TP < 30", lambda tp: (tp >= 25) & (tp < 30)),
+        ("10 ≤ TP < 20", lambda tp: (tp >= 10) & (tp < 20)),
+        ("20 ≤ TP < 30", lambda tp: (tp >= 20) & (tp < 30)),
         ("TP ≥ 30", lambda tp: tp >= 30),
     ]
 
@@ -606,7 +604,7 @@ def analyze_tp_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         range_df = df[mask]
 
         for ratio, breakeven_rate in RRR_CONFIGS:
-            total_trades = len(range_df)
+            total_trades = len(df)
 
             if total_trades > 0:
                 # Calculate wins based on RRR ratio
