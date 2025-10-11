@@ -64,6 +64,8 @@ The project uses enhanced trading data format in `eurusd.csv`:
 #### Data Format (eurusd.csv)
 - **Date**: Trading date (YYYY-MM-DD format)
 - **Trade**: Trade identifier (e.g., #1, #2)
+- **Range**: Size in pips of the market structure leg that was broken
+- **Strength**: Size in pips that price went after making new High or Low
 - **Weekday**: Day of the week (from Monday till Friday)
 - **Hour**: Trading hour in Lithuanian timezone (values from 10 to 18)
 - **Direction**: Trade direction (Buy or Sell)

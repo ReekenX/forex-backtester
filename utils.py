@@ -256,9 +256,14 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     pullback_configs = [
         ("No Pullback", lambda d: d),
-        ("Pullback >= 0.5 pips", lambda d: d[d["Pullback"] >= 0.5]),
-        ("Pullback >= 1.0 pip", lambda d: d[d["Pullback"] >= 1.0]),
-        ("Pullback 50%", lambda d: d[d['Pullback'] >= d['SL'] * 0.5]),
+        ("0.5 pip Pullback ", lambda d: d[(d["Pullback"] >= 0.5) & (d["TP"] > 0)]),
+        ("1 pip Pullback ", lambda d: d[(d["Pullback"] >= 1) & (d["TP"] > 0)]),
+        ("2 pip Pullback ", lambda d: d[(d["Pullback"] >= 2) & (d["TP"] > 0)]),
+        ("3 pip Pullback ", lambda d: d[(d["Pullback"] >= 3) & (d["TP"] > 0)]),
+        ("5 pip Pullback ", lambda d: d[(d["Pullback"] >= 5) & (d["TP"] > 0)]),
+        ("10 pip Pullback ", lambda d: d[(d["Pullback"] >= 10) & (d["TP"] > 0)]),
+        ("15 pip Pullback ", lambda d: d[(d["Pullback"] >= 15) & (d["TP"] > 0)]),
+        ("50% Pullback", lambda d: d[(d["Pullback"] >= d["SL"] * 0.5) & (d["Pullback"] >= 2)]),
     ]
 
     pullback_rows = []
@@ -3325,6 +3330,176 @@ def display_30m_trend_vs_success_correlation(df: pd.DataFrame):
     plt.show()
 
 
+def display_range_vs_winrate_correlation(df: pd.DataFrame, bin_size: float = 5.0):
+    """
+    Display correlation between Range and win rate for different RRR levels.
+
+    Args:
+        df: DataFrame with trade data
+        bin_size: Size of Range bins in pips (default: 5.0)
+    """
+    from IPython.display import display, HTML
+    import matplotlib.pyplot as plt
+
+    display(HTML("<h2>Range vs Win Rate Correlation Analysis</h2>"))
+
+    # Filter out rows with missing Range data
+    valid_df = df[df['Range'].notna() & (df['Range'] != '') & (df['Range'] > 0)].copy()
+
+    if len(valid_df) == 0:
+        display(HTML("<p>No valid Range data found for analysis.</p>"))
+        return
+
+    # Create bins for Range
+    max_range = valid_df['Range'].max()
+    bins = np.arange(0, max_range + bin_size, bin_size)
+    valid_df['Range_Bin'] = pd.cut(valid_df['Range'], bins=bins)
+
+    # Create figure with subplots for each RRR level
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    fig.suptitle('Range vs Win Rate Correlation', fontsize=16, fontweight='bold')
+
+    for idx, (ratio, breakeven_rate) in enumerate(RRR_CONFIGS):
+        ax = axes[idx]
+        data_points = []
+
+        for range_bin in valid_df['Range_Bin'].cat.categories:
+            bin_df = valid_df[valid_df['Range_Bin'] == range_bin]
+            total = len(bin_df)
+
+            if total < 5:  # Skip bins with too few trades
+                continue
+
+            wins = len(_win_condition_normal(bin_df, ratio, 'SL'))
+            win_rate = (wins / total) * 100
+            range_midpoint = (range_bin.left + range_bin.right) / 2
+
+            data_points.append({
+                'midpoint': range_midpoint,
+                'win_rate': win_rate,
+                'wins': wins,
+                'total': total
+            })
+
+        if data_points:
+            midpoints = [d['midpoint'] for d in data_points]
+            win_rates = [d['win_rate'] for d in data_points]
+            wins_counts = [d['wins'] for d in data_points]
+
+            # Plot win rate vs Range
+            ax.plot(midpoints, win_rates, marker='o', linewidth=2, markersize=8,
+                   label='Win Rate', color='#2E86AB')
+
+            # Plot breakeven line
+            ax.axhline(y=breakeven_rate, color='red', linestyle='--', linewidth=2,
+                      label=f'Breakeven ({breakeven_rate}%)', alpha=0.7)
+
+            # Add win count as text on points
+            for mp, wr, w in zip(midpoints, win_rates, wins_counts):
+                ax.annotate(f"{int(w)}", (mp, wr), textcoords="offset points",
+                           xytext=(0,10), ha='center', fontsize=8, color='gray')
+
+            # Styling
+            ax.set_xlabel('Range (pips)', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Win Rate (%)', fontsize=11, fontweight='bold')
+            ax.set_title(f'1:{ratio} RRR', fontsize=12, fontweight='bold')
+            ax.grid(True, alpha=0.3, linestyle='--')
+            ax.legend(loc='best')
+            ax.set_ylim(0, 100)
+        else:
+            ax.text(0.5, 0.5, 'Insufficient data', ha='center', va='center',
+                   transform=ax.transAxes)
+            ax.set_title(f'1:{ratio} RRR', fontsize=12, fontweight='bold')
+
+    plt.tight_layout()
+    plt.show()
+
+
+def display_strength_vs_winrate_correlation(df: pd.DataFrame, bin_size: float = 5.0):
+    """
+    Display correlation between Strength and win rate for different RRR levels.
+
+    Args:
+        df: DataFrame with trade data
+        bin_size: Size of Strength bins (default: 5.0)
+    """
+    from IPython.display import display, HTML
+    import matplotlib.pyplot as plt
+
+    display(HTML("<h2>Strength vs Win Rate Correlation Analysis</h2>"))
+
+    # Filter out rows with missing Strength data
+    valid_df = df[df['Strength'].notna() & (df['Strength'] != '') & (df['Strength'] > 0)].copy()
+
+    if len(valid_df) == 0:
+        display(HTML("<p>No valid Strength data found for analysis.</p>"))
+        return
+
+    # Create bins for Strength
+    max_strength = valid_df['Strength'].max()
+    bins = np.arange(0, max_strength + bin_size, bin_size)
+    valid_df['Strength_Bin'] = pd.cut(valid_df['Strength'], bins=bins)
+
+    # Create figure with subplots for each RRR level
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    fig.suptitle('Strength vs Win Rate Correlation', fontsize=16, fontweight='bold')
+
+    for idx, (ratio, breakeven_rate) in enumerate(RRR_CONFIGS):
+        ax = axes[idx]
+        data_points = []
+
+        for strength_bin in valid_df['Strength_Bin'].cat.categories:
+            bin_df = valid_df[valid_df['Strength_Bin'] == strength_bin]
+            total = len(bin_df)
+
+            if total < 5:  # Skip bins with too few trades
+                continue
+
+            wins = len(_win_condition_normal(bin_df, ratio, 'SL'))
+            win_rate = (wins / total) * 100
+            strength_midpoint = (strength_bin.left + strength_bin.right) / 2
+
+            data_points.append({
+                'midpoint': strength_midpoint,
+                'win_rate': win_rate,
+                'wins': wins,
+                'total': total
+            })
+
+        if data_points:
+            midpoints = [d['midpoint'] for d in data_points]
+            win_rates = [d['win_rate'] for d in data_points]
+            wins_counts = [d['wins'] for d in data_points]
+
+            # Plot win rate vs Strength
+            ax.plot(midpoints, win_rates, marker='o', linewidth=2, markersize=8,
+                   label='Win Rate', color='#2E86AB')
+
+            # Plot breakeven line
+            ax.axhline(y=breakeven_rate, color='red', linestyle='--', linewidth=2,
+                      label=f'Breakeven ({breakeven_rate}%)', alpha=0.7)
+
+            # Add win count as text on points
+            for mp, wr, w in zip(midpoints, win_rates, wins_counts):
+                ax.annotate(f"{int(w)}", (mp, wr), textcoords="offset points",
+                           xytext=(0,10), ha='center', fontsize=8, color='gray')
+
+            # Styling
+            ax.set_xlabel('Strength', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Win Rate (%)', fontsize=11, fontweight='bold')
+            ax.set_title(f'1:{ratio} RRR', fontsize=12, fontweight='bold')
+            ax.grid(True, alpha=0.3, linestyle='--')
+            ax.legend(loc='best')
+            ax.set_ylim(0, 100)
+        else:
+            ax.text(0.5, 0.5, 'Insufficient data', ha='center', va='center',
+                   transform=ax.transAxes)
+            ax.set_title(f'1:{ratio} RRR', fontsize=12, fontweight='bold')
+
+    plt.tight_layout()
+    plt.show()
+
+
 def display_all_correlations(df: pd.DataFrame):
     """Display all correlation analyses in one call."""
     display_sl_vs_winrate_correlation(df)
@@ -3334,3 +3509,5 @@ def display_all_correlations(df: pd.DataFrame):
     display_sl_vs_pullback_correlation(df)
     display_bosch_vs_success_correlation(df)
     display_30m_trend_vs_success_correlation(df)
+    display_range_vs_winrate_correlation(df)
+    display_strength_vs_winrate_correlation(df)
