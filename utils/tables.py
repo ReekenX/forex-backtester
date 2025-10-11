@@ -131,7 +131,7 @@ def _create_empty_rrr_summary(strategy_name: str, entry_type: str) -> pd.DataFra
     """Create an empty RRR summary DataFrame for strategies with no trades."""
     summary_data = {
         strategy_name: [
-            "Total trades",
+            "Trades",
             "Wins",
             "Losses",
             "Win Rate",
@@ -182,7 +182,7 @@ def calculate_rrr_stats(
 
     summary_data = {
         strategy_name: [
-            "Total trades",
+            "Trades",
             "Wins",
             "Losses",
             "Win Rate",
@@ -260,7 +260,7 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
             pullback_rows.append({
                 'Type': pullback_name if ratio == 1 else '',
                 'RRR': f'1:{ratio}',
-                'Total Trades': total_trades,
+                'Trades': total_trades,
                 'Wins': wins,
                 'Losses': losses,
                 'Outcome': f"{outcome}R",
@@ -301,7 +301,7 @@ def analyze_hour_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     # Check if we have any data left after filtering
     if len(hour_df) == 0:
         # Return empty table if no hour data available
-        empty_df = pd.DataFrame(columns=['Hour', 'RRR', 'Total Trades', 'Wins', 'Losses', 'Win %'])
+        empty_df = pd.DataFrame(columns=['Hour', 'RRR', 'Trades', 'Wins', 'Losses', 'Win %'])
         return {"Hour Analysis": empty_df}
 
     # Get unique hours and sort them
@@ -339,7 +339,7 @@ def analyze_hour_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
             hour_rows.append({
                 'Hour': hour_display,
                 'RRR': f'1:{ratio}',
-                'Total Trades': total_trades,
+                'Trades': total_trades,
                 'Wins': wins,
                 'Losses': losses,
                 'Outcome': f"{outcome}R",
@@ -408,7 +408,7 @@ def analyze_weekday_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
             weekday_rows.append({
                 'Weekday': weekday_display,
                 'RRR': f'1:{ratio}',
-                'Total Trades': total_trades,
+                'Trades': total_trades,
                 'Wins': wins,
                 'Losses': losses,
                 'Outcome': f"{outcome}R",
@@ -478,7 +478,53 @@ def analyze_30m_leg_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
             leg_rows.append({
                 '30M Leg': leg_display,
                 'RRR': f'1:{ratio}',
-                'Total Trades': total_trades,
+                'Trades': total_trades,
+                'Wins': wins,
+                'Losses': losses,
+                'Outcome': f"{outcome}R",
+                'Win %': f"{win_rate:.1f}%"
+            })
+
+    # Add combination rows
+    combinations = [
+        ('Above H & Above L', ['Above H', 'Above L']),
+        ('Below H & Below L', ['Below H', 'Below L'])
+    ]
+
+    for combo_name, legs in combinations:
+        # Filter trades for this combination (trades that are in either leg)
+        combo_filtered = leg_df[leg_df['30M Leg'].isin(legs)]
+
+        if len(combo_filtered) == 0:
+            continue
+
+        for ratio, breakeven_rate in RRR_CONFIGS:
+            total_trades = len(combo_filtered)
+
+            if total_trades > 0:
+                # Calculate wins based on RRR ratio
+                profitable = combo_filtered[
+                    (combo_filtered["SL"] != combo_filtered["Pullback"])
+                    & (combo_filtered["Pullback"] < combo_filtered["SL"])
+                    & (combo_filtered["TP"] >= (ratio * combo_filtered["SL"]))
+                ]
+                wins = len(profitable)
+                losses = total_trades - wins
+                win_rate = wins / total_trades * 100
+                outcome = (wins * ratio) - losses
+            else:
+                wins = 0
+                losses = 0
+                win_rate = 0.0
+                outcome = 0
+
+            # Format combo display - only show combo name on first RRR row
+            combo_display = combo_name if ratio == 1 else ''
+
+            leg_rows.append({
+                '30M Leg': combo_display,
+                'RRR': f'1:{ratio}',
+                'Trades': total_trades,
                 'Wins': wins,
                 'Losses': losses,
                 'Outcome': f"{outcome}R",
@@ -545,7 +591,7 @@ def analyze_sl_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
             sl_rows.append({
                 "SL Range": range_display,
                 'RRR': f'1:{ratio}',
-                "Total Trades": total_trades,
+                "Trades": total_trades,
                 "Wins": wins,
                 "Losses": losses,
                 'Outcome': f"{outcome}R",
@@ -611,7 +657,7 @@ def analyze_tp_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
             tp_rows.append({
                 "TP Range": range_display,
                 'RRR': f'1:{ratio}',
-                "Total Trades": total_trades,
+                "Trades": total_trades,
                 "Wins": wins,
                 "Losses": losses,
                 "Win %": win_percentage_display
@@ -674,7 +720,7 @@ def analyze_sl_reduction_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFra
             sl_reduction_rows.append({
                 'Type': config_name if ratio == 1 else '',
                 'RRR': f'1:{ratio}',
-                'Total Trades': total_trades,
+                'Trades': total_trades,
                 'Wins': wins,
                 'Losses': losses,
                 'Win %': f"{win_rate:.1f}%"
@@ -1809,7 +1855,7 @@ def analyze_ema_30m_trend_alignment(df: pd.DataFrame) -> pd.DataFrame:
             rows.append({
                 'Scenario': scenario_name if ratio == 1 else '',
                 'RRR': f'1:{ratio}',
-                'Total Trades': total_trades,
+                'Trades': total_trades,
                 'Wins': wins,
                 'Losses': losses,
                 'Win %': f"{win_rate:.1f}%"
@@ -2474,7 +2520,7 @@ def display_strategy_trade_details(df: pd.DataFrame):
             # Combine all HTML into a single display call
             combined_html = f"""
                 <h3>Strategy: {strategy.name} ({setup_type} Setup) - {rrr_ratio}:1 RRR</h3>
-                <p>Total trades: <b>{len(trades_df)}</b></p>
+                <p>Trades: <b>{len(trades_df)}</b></p>
                 {html_table}
             """
             display(HTML(combined_html))
