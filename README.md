@@ -24,13 +24,15 @@ forex-backtester/
 │   ├── tables.ipynb         # Deep strategy analysis and customizations
 │   ├── charts.ipynb         # Visualization of profitable strategies
 │   ├── export.ipynb         # CSV data export functionality
-│   └── correlations.ipynb   # Correlation analysis (SL vs Win Rate, etc.)
+│   ├── correlations.ipynb   # Correlation analysis (SL vs Win Rate, etc.)
+│   └── optimizer.ipynb      # Meta Trader-style strategy optimizer
 ├── utils/                   # Python package with analysis modules
 │   ├── __init__.py          # Package initialization and shared utilities
 │   ├── tables.py            # Strategy analysis functions
 │   ├── charts.py            # Charting and visualization functions
 │   ├── export.py            # Data export utilities
-│   └── correlations.py      # Correlation analysis functions
+│   ├── correlations.py      # Correlation analysis functions
+│   └── optimizer.py         # Combinatorial strategy optimizer
 ├── pyproject.toml           # Poetry configuration and dependencies
 └── Makefile                 # Build automation commands
 ```
@@ -66,6 +68,7 @@ This will open Jupyter in the current directory, allowing you to navigate to the
 - **charts.ipynb** - For visualizing profitable strategies
 - **correlations.ipynb** - For analyzing correlations between trading variables
 - **export.ipynb** - For exporting filtered data to CSV
+- **optimizer.ipynb** - For Meta Trader-style exhaustive strategy optimization
 
 ### Data Format
 

@@ -15,12 +15,14 @@ This project uses a modular structure with specialized Jupyter notebooks and uti
 - **charts.ipynb** - Visualization of profitable strategies
 - **export.ipynb** - CSV data export functionality
 - **correlations.ipynb** - Correlation analysis (e.g., SL size vs Win Rate)
+- **optimizer.ipynb** - Meta Trader-style exhaustive strategy optimization
 
 **Utility Modules (utils/ package):**
 - **tables.py** - Analysis functions for strategy evaluation
 - **charts.py** - Charting and visualization functions
 - **export.py** - Data export utilities
 - **correlations.py** - Correlation analysis functions
+- **optimizer.py** - Combinatorial strategy optimizer (Meta Trader-style)
 
 If you need to run any commands, like `jupyter`, then prefix it with `poetry run`. For example: `poetry run jupyter notebook labs/tables.ipynb`
 
@@ -55,6 +57,14 @@ The utils package contains all backtesting logic organized into specialized modu
    - `evaluate_all_strategies()`: Batch processes all strategies
    - `get_top_strategies_by_edge()`: Ranks strategies by profitability edge
 
+6. **Strategy Optimizer** (utils/optimizer.py):
+   - `FilterDimension`: Defines filter dimensions with multiple options
+   - `create_filter_dimensions()`: Creates all available filter dimensions (EMA, BOS/CH, SL, News, Hour, Weekday, etc.)
+   - `generate_all_combinations()`: Generates Cartesian product of all filter combinations
+   - `optimize_strategies()`: Exhaustively backtests all strategy combinations
+   - `display_optimization_results()`: Shows results in sortable HTML tables
+   - `export_optimization_results()`: Exports results to CSV (Meta Trader format)
+
 
 ### Trading Logic Constraints
 
@@ -85,5 +95,8 @@ The utils package contains all backtesting logic organized into specialized modu
 
   # In labs/export.ipynb
   from utils.export import export_to_csv
+
+  # In labs/optimizer.ipynb
+  from utils.optimizer import optimize_strategies, display_optimization_results
   ```
 
