@@ -8,17 +8,27 @@ Always read the README.md file for complete project information including instal
 
 ## Project Focus
 
-When questions are asked about this project, assume they refer to:
-- **main.ipynb** - The primary Jupyter notebook for analysis
-- **utils.py** - The core utility module containing all analysis functions
+This project uses a modular structure with specialized Jupyter notebooks and utility modules:
 
-If you need to run any commands, like `jupyter`, then prefix it with `poetry run`. For example: `jupyter nbconvert --to notebook --execute main.ipynb --output main_test.ipynb`
+**Jupyter Notebooks (labs/ directory):**
+- **tables.ipynb** - Deep strategy analysis and customization testing
+- **charts.ipynb** - Visualization of profitable strategies
+- **export.ipynb** - CSV data export functionality
+- **correlations.ipynb** - Correlation analysis (e.g., SL size vs Win Rate)
+
+**Utility Modules (utils/ package):**
+- **tables.py** - Analysis functions for strategy evaluation
+- **charts.py** - Charting and visualization functions
+- **export.py** - Data export utilities
+- **correlations.py** - Correlation analysis functions
+
+If you need to run any commands, like `jupyter`, then prefix it with `poetry run`. For example: `poetry run jupyter notebook labs/tables.ipynb`
 
 ## Architecture and Key Components
 
-### Core Module: utils.py
+### Core Package: utils/
 
-The utils module contains all backtesting logic organized into sections:
+The utils package contains all backtesting logic organized into specialized modules:
 
 1. **Data Loading** (`load_and_clean_data`): Handles CSV loading and NaN cleanup
 
@@ -57,15 +67,23 @@ The utils module contains all backtesting logic organized into sections:
 
 ## Notebook Structure Guidelines
 
-### main.ipynb Requirements
-- Keep the notebook **extremely simple** with minimal code
-- Use only `display_*()` function calls from utils.py
+### labs/ Notebooks Requirements
+- Keep notebooks **extremely simple** with minimal code
+- Use only function calls from the utils package modules
 - Avoid complex logic or calculations in notebook cells
-- All analysis logic should be implemented in utils.py functions
-- Example structure:
+- All analysis logic should be implemented in utils/ module functions
+- Each notebook imports from its corresponding utils module:
   ```python
-  display_hour_analysis(df)
-  display_weekday_analysis(df)
-  display_strategy_analysis(df)
+  # In labs/tables.ipynb
+  from utils.tables import display_strategy_analysis
+
+  # In labs/charts.ipynb
+  from utils.charts import display_strategy_charts
+
+  # In labs/correlations.ipynb
+  from utils.correlations import analyze_sl_winrate_correlation
+
+  # In labs/export.ipynb
+  from utils.export import export_to_csv
   ```
 

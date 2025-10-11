@@ -1,7 +1,4 @@
-.PHONY: run install clean format lint
-
-run:
-	@poetry run jupyter notebook main.ipynb
+.PHONY: install clean format lint
 
 install:
 	@poetry install --no-root
@@ -12,7 +9,7 @@ clean:
 	@find . -type d -name ".ipynb_checkpoints" -exec rm -rf {} + 2>/dev/null || true
 
 format:
-	@black .
+	@black utils/ 
 
 lint:
-	@ruff check . --fix
+	@ruff check utils/ --fix
