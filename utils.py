@@ -587,7 +587,7 @@ def analyze_tp_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     # Define TP ranges for analysis
     tp_ranges = [
-        ("TP < 10", lambda tp: (tp > 0) & (tp < 10)),
+        ("TP < 10", lambda tp: (tp >= 1) & (tp < 10)),
         ("10 ≤ TP < 20", lambda tp: (tp >= 10) & (tp < 20)),
         ("20 ≤ TP < 30", lambda tp: (tp >= 20) & (tp < 30)),
         ("TP ≥ 30", lambda tp: tp >= 30),
