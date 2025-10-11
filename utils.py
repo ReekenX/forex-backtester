@@ -2840,8 +2840,8 @@ def analyze_sl_vs_winrate_correlation(
     Returns:
         Dictionary with DataFrames for each RRR level containing SL ranges and win rates
     """
-    # Filter out trades with SL == 0 or invalid SL
-    valid_df = df[df[sl_column] > 0].copy()
+    # Filter out trades with SL == 0 or invalid SL, and SL > 20 pips
+    valid_df = df[(df[sl_column] > 0) & (df[sl_column] <= 20)].copy()
 
     if len(valid_df) == 0:
         return {}
