@@ -522,10 +522,7 @@ def analyze_sl_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     # Define SL ranges for analysis
     sl_ranges = [
         ("SL < 1", lambda sl: sl < 1),
-        ("1 ≤ SL < 2", lambda sl: (sl >= 1) & (sl < 2)),
-        ("2 ≤ SL < 3", lambda sl: (sl >= 2) & (sl < 3)),
-        ("3 ≤ SL < 4", lambda sl: (sl >= 3) & (sl < 4)),
-        ("4 ≤ SL < 5", lambda sl: (sl >= 4) & (sl < 5)),
+        ("1 ≤ SL < 5", lambda sl: (sl >= 1) & (sl < 5)),
         ("5 ≤ SL < 10", lambda sl: (sl >= 5) & (sl < 10)),
         ("10 ≤ SL < 15", lambda sl: (sl >= 10) & (sl < 15)),
         ("SL ≥ 15", lambda sl: sl >= 15),
