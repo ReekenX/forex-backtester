@@ -18,7 +18,8 @@ Not taking trades right before red (high importance) news.
 
 ```
 forex-backtester/
-├── eurusd.csv               # EUR/USD real trading data
+├── data/
+│   └── eurusd.csv           # EUR/USD real trading data
 ├── main.ipynb               # Strategy analysis notebook (table)
 ├── charts.ipynb             # Strategy analysis notebook (charts)
 ├── utils.py                 # Helper functions strategy analysis notebook
@@ -59,9 +60,9 @@ poetry run jupyter notebook main.ipynb
 
 ### Data Format
 
-The project uses enhanced trading data format in `eurusd.csv`:
+The project uses enhanced trading data format in `data/eurusd.csv`:
 
-#### Data Format (eurusd.csv)
+#### Data Format (data/eurusd.csv)
 - **Date**: Trading date (YYYY-MM-DD format)
 - **Trade**: Trade identifier (e.g., #1, #2)
 - **Range**: Size in pips of the market structure leg that was broken
@@ -79,7 +80,7 @@ The project uses enhanced trading data format in `eurusd.csv`:
 - **Hours Until News**: Time until news event in hours
 - **News Event**: Associated news event title (eg. PMI)
 
-#### Rules For Backtesting (from eurusd.csv)
+#### Rules For Backtesting (from data/eurusd.csv)
 
 - **Trade**: Do not use this field for backtesting
 - **Pullback**: Pullback value can't be filtered because it is unknown until trade has been executed. Pullback value means that once trade signal is received, SL value is recorded, but how big the pullback will be - is unknown. If Pullback matches SL value - it means that trade was instant loss. If Pullback value is less than SL value, it means that at some point in time, before reaching TP - this entry got "discount".
