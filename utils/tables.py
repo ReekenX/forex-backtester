@@ -712,10 +712,12 @@ def analyze_sl_reduction_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFra
                 wins = len(profitable)
                 losses = total_trades - wins
                 win_rate = wins / total_trades * 100
+                outcome = (wins * ratio) - losses
             else:
                 wins = 0
                 losses = 0
                 win_rate = 0.0
+                outcome = 0
 
             sl_reduction_rows.append({
                 'Type': config_name if ratio == 1 else '',
@@ -723,6 +725,7 @@ def analyze_sl_reduction_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFra
                 'Trades': total_trades,
                 'Wins': wins,
                 'Losses': losses,
+                'Outcome': f"{outcome}R",
                 'Win %': f"{win_rate:.1f}%"
             })
 
