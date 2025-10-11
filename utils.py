@@ -1866,33 +1866,36 @@ def analyze_ema_30m_trend_alignment(df: pd.DataFrame) -> pd.DataFrame:
         ])
     ]
 
-    # Analyze each scenario for 1:1 RRR
+    # Analyze each scenario for all RRR ratios
     for scenario_name, filter_func in scenarios:
         filtered_df = filter_func(df)
-        total_trades = len(filtered_df)
 
-        if total_trades > 0:
-            # Win condition for 1:1 RRR: SL != Pullback AND Pullback < SL AND TP >= SL
-            profitable = filtered_df[
-                (filtered_df["SL"] != filtered_df["Pullback"])
-                & (filtered_df["Pullback"] < filtered_df["SL"])
-                & (filtered_df["TP"] >= filtered_df["SL"])
-            ]
-            wins = len(profitable)
-            losses = total_trades - wins
-            win_rate = wins / total_trades * 100
-        else:
-            wins = 0
-            losses = 0
-            win_rate = 0.0
+        for ratio, breakeven_rate in RRR_CONFIGS:
+            total_trades = len(filtered_df)
 
-        rows.append({
-            'Scenario': scenario_name,
-            'Total Trades': total_trades,
-            'Wins': wins,
-            'Losses': losses,
-            'Win Rate': f"{win_rate:.1f}%"
-        })
+            if total_trades > 0:
+                # Win condition: SL != Pullback AND Pullback < SL AND TP >= (ratio * SL)
+                profitable = filtered_df[
+                    (filtered_df["SL"] != filtered_df["Pullback"])
+                    & (filtered_df["Pullback"] < filtered_df["SL"])
+                    & (filtered_df["TP"] >= (ratio * filtered_df["SL"]))
+                ]
+                wins = len(profitable)
+                losses = total_trades - wins
+                win_rate = wins / total_trades * 100
+            else:
+                wins = 0
+                losses = 0
+                win_rate = 0.0
+
+            rows.append({
+                'Scenario': scenario_name if ratio == 1 else '',
+                'RRR': f'1:{ratio}',
+                'Total Trades': total_trades,
+                'Wins': wins,
+                'Losses': losses,
+                'Win %': f"{win_rate:.1f}%"
+            })
 
     return pd.DataFrame(rows)
 
