@@ -1532,12 +1532,9 @@ def _create_single_setup_strategies() -> List[Tuple[str, Callable, str]]:
     # Risk Management (Individual)
     strategies.extend([
         ("SL ≤ 2 pips", lambda df: df[df["SL"] <= 2], "Very tight stop losses"),
-        ("SL 3-6 pips", lambda df: df[(df["SL"] >= 3) & (df["SL"] <= 6)], "Medium stop losses"),
-        ("SL ≥ 7 pips", lambda df: df[df["SL"] >= 7], "Wide stop losses"),
-        ("SL < 10 pips", lambda df: df[df["SL"] < 10], "Exclude very large stops"),
-        ("SL > 3 pips", lambda df: df[df["SL"] > 3], "Exclude tiny stops"),
-        ("SL > 5 pips", lambda df: df[df["SL"] > 5], "Exclude small stops"),
-        ("SL < 15 pips", lambda df: df[df["SL"] < 15], "Exclude extremely large stops"),
+        ("SL ≤ 5 pips", lambda df: df[(df["SL"] <= 5)], "Medium stop losses"),
+        ("SL ≤ 10 pips", lambda df: df[(df["SL"] <= 10)], "Wide stop losses"),
+        ("SL ≤ 15 pips", lambda df: df[(df["SL"] <= 15)], "Very wide stop losses"),
     ])
 
     # 30M Trend (Individual)
@@ -1553,21 +1550,6 @@ def _create_single_setup_strategies() -> List[Tuple[str, Callable, str]]:
         ("No News", lambda df: df[df["News Event"].isna()], "Avoid news volatility"),
         ("With News", lambda df: df[~df["News Event"].isna()], "Trade during news periods"),
         ("News > 2hrs", lambda df: df[(~df["News Event"].isna()) & (df["Hours Until News"] >= 2)], "Safe distance from news"),
-    ])
-
-    # Trade Direction (Individual)
-    strategies.extend([
-        ("Buy Trades Only", lambda df: df[df["Direction"] == "Buy"], "Long positions only"),
-        ("Sell Trades Only", lambda df: df[df["Direction"] == "Sell"], "Short positions only"),
-    ])
-
-    # Additional SL ranges
-    strategies.extend([
-        ("SL 1-3 pips", lambda df: df[(df["SL"] >= 1) & (df["SL"] <= 3)], "Very tight SL range"),
-        ("SL 4-8 pips", lambda df: df[(df["SL"] >= 4) & (df["SL"] <= 8)], "Moderate SL range"),
-        ("SL 9-15 pips", lambda df: df[(df["SL"] >= 9) & (df["SL"] <= 15)], "Wide SL range"),
-        ("SL > 10 pips", lambda df: df[df["SL"] > 10], "Large stops only"),
-        ("SL > 15 pips", lambda df: df[df["SL"] > 15], "Very large stops only"),
     ])
 
     return strategies
