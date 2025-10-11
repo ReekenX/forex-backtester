@@ -256,13 +256,13 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     pullback_configs = [
         ("No Pullback", lambda d: d),
-        ("0.5 pip Pullback ", lambda d: d[(d["Pullback"] >= 0.5) & (d["TP"] > 0)]),
-        ("1 pip Pullback ", lambda d: d[(d["Pullback"] >= 1) & (d["TP"] > 0)]),
-        ("2 pip Pullback ", lambda d: d[(d["Pullback"] >= 2) & (d["TP"] > 0)]),
-        ("3 pip Pullback ", lambda d: d[(d["Pullback"] >= 3) & (d["TP"] > 0)]),
-        ("5 pip Pullback ", lambda d: d[(d["Pullback"] >= 5) & (d["TP"] > 0)]),
-        ("10 pip Pullback ", lambda d: d[(d["Pullback"] >= 10) & (d["TP"] > 0)]),
-        ("15 pip Pullback ", lambda d: d[(d["Pullback"] >= 15) & (d["TP"] > 0)]),
+        ("0.5 pip Pullback ", lambda d: d[d["Pullback"] >= 0.5]),
+        ("1 pip Pullback ", lambda d: d[d["Pullback"] >= 1]),
+        ("2 pip Pullback ", lambda d: d[d["Pullback"] >= 2]),
+        ("3 pip Pullback ", lambda d: d[d["Pullback"] >= 3]),
+        ("5 pip Pullback ", lambda d: d[d["Pullback"] >= 5]),
+        ("10 pip Pullback ", lambda d: d[d["Pullback"] >= 10]),
+        ("15 pip Pullback ", lambda d: d[d["Pullback"] >= 15]),
         ("50% Pullback", lambda d: d[(d["Pullback"] >= d["SL"] * 0.5) & (d["Pullback"] >= 2)]),
     ]
 
@@ -284,10 +284,12 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
                 wins = len(profitable)
                 losses = total_trades - wins
                 win_rate = wins / total_trades * 100
+                outcome = (wins * ratio) - losses
             else:
                 wins = 0
                 losses = 0
                 win_rate = 0.0
+                outcome = 0
 
             pullback_rows.append({
                 'Type': pullback_name if ratio == 1 else '',
@@ -295,6 +297,7 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
                 'Total Trades': total_trades,
                 'Wins': wins,
                 'Losses': losses,
+                'Outcome': f"{outcome}R",
                 'Win %': f"{win_rate:.1f}%"
             })
 
@@ -357,10 +360,12 @@ def analyze_hour_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
                 wins = len(profitable)
                 losses = total_trades - wins
                 win_rate = wins / total_trades * 100
+                outcome = (wins * ratio) - losses
             else:
                 wins = 0
                 losses = 0
                 win_rate = 0.0
+                outcome = 0
 
             # Format hour display - only show hour on first RRR row
             hour_display = f"{int(hour):02d}h" if ratio == 1 else ''
@@ -371,6 +376,7 @@ def analyze_hour_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
                 'Total Trades': total_trades,
                 'Wins': wins,
                 'Losses': losses,
+                'Outcome': f"{outcome}R",
                 'Win %': f"{win_rate:.1f}%"
             })
 
@@ -423,10 +429,12 @@ def analyze_weekday_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
                 wins = len(profitable)
                 losses = total_trades - wins
                 win_rate = wins / total_trades * 100
+                outcome = (wins * ratio) - losses
             else:
                 wins = 0
                 losses = 0
                 win_rate = 0.0
+                outcome = 0
 
             # Format weekday display - only show weekday on first RRR row
             weekday_display = weekday if ratio == 1 else ''
@@ -437,6 +445,7 @@ def analyze_weekday_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
                 'Total Trades': total_trades,
                 'Wins': wins,
                 'Losses': losses,
+                'Outcome': f"{outcome}R",
                 'Win %': f"{win_rate:.1f}%"
             })
 
@@ -490,10 +499,12 @@ def analyze_30m_leg_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
                 wins = len(profitable)
                 losses = total_trades - wins
                 win_rate = wins / total_trades * 100
+                outcome = (wins * ratio) - losses
             else:
                 wins = 0
                 losses = 0
                 win_rate = 0.0
+                outcome = 0
 
             # Format leg display - only show leg on first RRR row
             leg_display = leg if ratio == 1 else ''
@@ -504,6 +515,7 @@ def analyze_30m_leg_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
                 'Total Trades': total_trades,
                 'Wins': wins,
                 'Losses': losses,
+                'Outcome': f"{outcome}R",
                 'Win %': f"{win_rate:.1f}%"
             })
 
@@ -553,10 +565,12 @@ def analyze_sl_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
                 wins = len(profitable)
                 losses = total_trades - wins
                 win_rate = wins / total_trades * 100
+                outcome = (wins * ratio) - losses
                 win_percentage_display = f"{win_rate:.1f}%"
             else:
                 wins = 0
                 losses = 0
+                outcome = 0
                 win_percentage_display = "N/A"
 
             # Format range display - only show range on first RRR row
@@ -568,6 +582,7 @@ def analyze_sl_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
                 "Total Trades": total_trades,
                 "Wins": wins,
                 "Losses": losses,
+                'Outcome': f"{outcome}R",
                 "Win %": win_percentage_display
             })
 
@@ -606,7 +621,7 @@ def analyze_tp_distribution(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         range_df = df[mask]
 
         for ratio, breakeven_rate in RRR_CONFIGS:
-            total_trades = len(df)
+            total_trades = len(range_df)
 
             if total_trades > 0:
                 # Calculate wins based on RRR ratio
@@ -1868,7 +1883,8 @@ def analyze_ema_30m_trend_alignment(df: pd.DataFrame) -> pd.DataFrame:
                 ((d["Direction"] == "Buy") & d["30M Leg"].isin(["Above H", "Above L"])) |
                 ((d["Direction"] == "Sell") & d["30M Leg"].isin(["Below H", "Below L"]))
             )
-        ])
+        ]),
+        ("EMA aligned with trade + 1 pip pullback", lambda d: d[(d["EMA"] == d["Direction"]) & (d["Pullback"] >= 1)]),
     ]
 
     # Analyze each scenario for all RRR ratios
