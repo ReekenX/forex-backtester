@@ -42,7 +42,7 @@ DEFAULT_HIGHLIGHT_COLOR = "green"
 # ============================================================================
 
 
-def load_and_clean_data(filepath: str = "./eurusd.csv") -> pd.DataFrame:
+def load_and_clean_data(filepath: str = "./data/eurusd.csv") -> pd.DataFrame:
     """
     Load EUR/USD data from CSV and clean NaN values.
 
@@ -1223,26 +1223,21 @@ def _create_double_setup_strategies() -> List[Tuple[str, Callable, str]]:
 
     # 30M Trend + Risk management
     strategies.extend([
+        ("30M Trend + SL < 5", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["SL"] < 5)
+        ], "30M trend + tight stops"),
         ("30M Trend + SL < 10", lambda df: df[
             ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
              (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
             (df["SL"] < 10)
-        ], "30M trend + tight stops"),
+        ], "30M trend + moderate stops"),
         ("30M Trend + SL < 15", lambda df: df[
             ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
              (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
             (df["SL"] < 15)
-        ], "30M trend + moderate stops"),
-        ("30M Trend + SL > 3", lambda df: df[
-            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
-             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
-            (df["SL"] > 3)
-        ], "30M trend excluding tiny stops"),
-        ("30M Trend + SL > 5", lambda df: df[
-            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
-             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
-            (df["SL"] > 5)
-        ], "30M trend excluding small stops"),
+        ], "30M trend + huge stops"),
     ])
 
     # 30M + News filters
@@ -1261,10 +1256,12 @@ def _create_double_setup_strategies() -> List[Tuple[str, Callable, str]]:
 
     # BOS/CH + Risk management
     strategies.extend([
-        ("BOS + SL ≤ 2", lambda df: df[(df["BOS/CH"] == "BOS") & (df["SL"] <= 2)], "BOS with very tight stops"),
-        ("BOS + SL 3-6", lambda df: df[(df["BOS/CH"] == "BOS") & (df["SL"] >= 3) & (df["SL"] <= 6)], "BOS with medium stops"),
-        ("CH + SL ≤ 2", lambda df: df[(df["BOS/CH"] == "CH") & (df["SL"] <= 2)], "CH with very tight stops"),
-        ("CH + SL 3-6", lambda df: df[(df["BOS/CH"] == "CH") & (df["SL"] >= 3) & (df["SL"] <= 6)], "CH with medium stops"),
+        ("BOS + SL ≤ 5", lambda df: df[(df["BOS/CH"] == "BOS") & (df["SL"] <= 5)], "BOS with very tight stops"),
+        ("BOS + SL ≤ 10", lambda df: df[(df["BOS/CH"] == "BOS") & (df["SL"] <= 10)], "BOS with medium stops"),
+        ("BOS + SL ≤ 15", lambda df: df[(df["BOS/CH"] == "BOS") & (df["SL"] <= 15)], "BOS with medium stops"),
+        ("CH + SL ≤ 5", lambda df: df[(df["BOS/CH"] == "CH") & (df["SL"] <= 5)], "CH with very tight stops"),
+        ("CH + SL ≤ 10", lambda df: df[(df["BOS/CH"] == "CH") & (df["SL"] <= 10)], "CH with medium stops"),
+        ("CH + SL ≤ 15", lambda df: df[(df["BOS/CH"] == "CH") & (df["SL"] <= 15)], "CH with medium stops"),
     ])
 
     # BOS/CH + News filters
@@ -1277,9 +1274,9 @@ def _create_double_setup_strategies() -> List[Tuple[str, Callable, str]]:
 
     # EMA + Risk management
     strategies.extend([
-        ("EMA + SL ≤ 2", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] <= 2)], "EMA trend with tight stops"),
-        ("EMA + SL 3-6", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] >= 3) & (df["SL"] <= 6)], "EMA trend with medium stops"),
-        ("EMA + SL < 10", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] < 10)], "EMA trend excluding large stops"),
+        ("EMA + SL ≤ 5", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] <= 5)], "EMA trend with tight stops"),
+        ("EMA + SL ≤ 10", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] <= 10)], "EMA trend with medium stops"),
+        ("EMA + SL ≤ 15", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] <= 15)], "EMA trend with wide stops"),
     ])
 
     # EMA + News filters
@@ -1311,61 +1308,21 @@ def _create_triple_setup_strategies() -> List[Tuple[str, Callable, str]]:
 
     # EMA + BOS + SL variations (tight to moderate risk management)
     strategies.extend([
-        ("EMA + BOS + SL < 8", lambda df: df[
+        ("EMA + BOS + SL ≤ 5", lambda df: df[
             (df["EMA"] == df["Direction"]) &
             (df["BOS/CH"] == "BOS") &
-            (df["SL"] < 8)
-        ], "EMA + BOS with very tight stops"),
-        ("EMA + BOS + SL < 10", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] < 10)
+            (df["SL"] <= 5)
         ], "EMA + BOS with tight stops"),
-        ("EMA + BOS + SL < 12", lambda df: df[
+        ("EMA + BOS + SL ≤ 10", lambda df: df[
             (df["EMA"] == df["Direction"]) &
             (df["BOS/CH"] == "BOS") &
-            (df["SL"] < 12)
-        ], "EMA + BOS with controlled stops"),
-        ("EMA + BOS + SL < 15", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] < 15)
+            (df["SL"] <= 10)
         ], "EMA + BOS with moderate stops"),
-        ("EMA + BOS + SL > 3", lambda df: df[
+        ("EMA + BOS + SL ≤ 15", lambda df: df[
             (df["EMA"] == df["Direction"]) &
             (df["BOS/CH"] == "BOS") &
-            (df["SL"] > 3)
-        ], "EMA + BOS excluding tiny stops"),
-        ("EMA + BOS + skip SL <= 4", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] > 4)
-        ], "EMA + BOS excluding small stops"),
-        ("EMA + BOS + SL > 5", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] > 5)
-        ], "EMA + BOS with meaningful stops"),
-        ("EMA + BOS + 3 < SL < 10", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] > 3) & (df["SL"] < 10)
-        ], "EMA + BOS optimal stop range"),
-        ("EMA + BOS + 4 < SL < 12", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] > 4) & (df["SL"] < 12)
-        ], "EMA + BOS balanced stop range"),
-        ("EMA + BOS + 5 < SL < 15", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] > 5) & (df["SL"] < 15)
-        ], "EMA + BOS moderate stop range"),
-        ("EMA + BOS + 3 < SL < 8", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] > 3) & (df["SL"] < 8)
-        ], "EMA + BOS tight optimal range"),
+            (df["SL"] <= 15)
+        ], "EMA + BOS with wide stops"),
     ])
 
     # EMA + BOS + 30M Trend alignment
@@ -1376,6 +1333,12 @@ def _create_triple_setup_strategies() -> List[Tuple[str, Callable, str]]:
             ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
              (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell")))
         ], "EMA + BOS with 30M trend confirmation"),
+        ("EMA + CH + 30M Trend", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            (df["BOS/CH"] == "CH") &
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell")))
+        ], "EMA + CH with 30M trend confirmation"),
     ])
 
     # EMA + BOS + News filtering
@@ -1446,30 +1409,16 @@ def _create_triple_setup_strategies() -> List[Tuple[str, Callable, str]]:
 
     # Complex SL range combinations
     strategies.extend([
-        ("30M Trend + 3 < SL < 10", lambda df: df[
+        ("30M Trend + 5 < SL < 10", lambda df: df[
             ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
              (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
-            (df["SL"] > 3) & (df["SL"] < 10)
+            (df["SL"] > 5) & (df["SL"] < 10)
         ], "30M trend with optimal stops"),
         ("30M Trend + 5 < SL < 15", lambda df: df[
             ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
              (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
             (df["SL"] > 5) & (df["SL"] < 15)
         ], "30M trend with moderate stops"),
-        ("30M Trend + EMA + 3 < SL < 10", lambda df: df[
-            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
-             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
-            (df["EMA"] == df["Direction"]) & (df["SL"] > 3) & (df["SL"] < 10)
-        ], "30M + EMA with optimal stops"),
-    ])
-
-    # Triple combinations with news filtering
-    strategies.extend([
-        ("30M Trend + CH + No News", lambda df: df[
-            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
-             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
-            (df["BOS/CH"] == "CH") & df["News Event"].isna()
-        ], "30M + CH in clean conditions"),
     ])
 
     return strategies
