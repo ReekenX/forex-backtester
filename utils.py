@@ -1953,7 +1953,7 @@ def display_double_setup_strategy_analysis(df: pd.DataFrame):
 
         # Add RRR column to each row
         if not top_df.empty:
-            top_df['RRR'] = f'{rrr_label} RRR'
+            top_df['RRR'] = rrr_label
             # Remove Entry column as it will be replaced by RRR
             if 'Entry' in top_df.columns:
                 top_df = top_df.drop('Entry', axis=1)
@@ -2022,7 +2022,7 @@ def display_single_setup_strategy_analysis(df: pd.DataFrame):
 
         # Add RRR column to each row
         if not top_df.empty:
-            top_df['RRR'] = f'{rrr_label} RRR'
+            top_df['RRR'] = rrr_label
             # Remove Entry column as it will be replaced by RRR
             if 'Entry' in top_df.columns:
                 top_df = top_df.drop('Entry', axis=1)
@@ -2091,7 +2091,7 @@ def display_triple_setup_strategy_analysis(df: pd.DataFrame):
 
         # Add RRR column to each row
         if not top_df.empty:
-            top_df['RRR'] = f'{rrr_label} RRR'
+            top_df['RRR'] = rrr_label
             # Remove Entry column as it will be replaced by RRR
             if 'Entry' in top_df.columns:
                 top_df = top_df.drop('Entry', axis=1)
