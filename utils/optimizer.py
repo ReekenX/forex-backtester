@@ -207,6 +207,7 @@ def generate_all_combinations(
         List of tuples: [(strategy_name, combined_filter_function), ...]
     """
     all_strategies = []
+    seen_names = set()  # Track unique strategy names to avoid duplicates
 
     # Generate combinations for each size (1 filter, 2 filters, 3 filters, etc.)
     for num_dimensions in range(min_filters, max_filters + 1):
@@ -231,7 +232,13 @@ def generate_all_combinations(
                 if len(filters) == 0:
                     strategy_name = "Plain Strategy"
                 else:
-                    strategy_name = " + ".join(filters)
+                    strategy_name = " + ".join(sorted(filters))  # Sort for consistency
+
+                # Skip if we've already seen this exact strategy name
+                if strategy_name in seen_names:
+                    continue
+
+                seen_names.add(strategy_name)
 
                 # Create combined filter function
                 def create_combined_filter(dims, opts):
