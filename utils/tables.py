@@ -2178,6 +2178,12 @@ def create_sortable_table(
         sortable_columns.append(table_df_copy.columns.get_loc('Trades Required') + 1)  # +1 for index column
     if 'Drawdown' in table_df_copy.columns:
         sortable_columns.append(table_df_copy.columns.get_loc('Drawdown') + 1)  # +1 for index column
+    if 'Days' in table_df_copy.columns:
+        sortable_columns.append(table_df_copy.columns.get_loc('Days') + 1)  # +1 for index column
+    if 'Trades' in table_df_copy.columns:
+        sortable_columns.append(table_df_copy.columns.get_loc('Trades') + 1)  # +1 for index column
+    if 'Wins' in table_df_copy.columns:
+        sortable_columns.append(table_df_copy.columns.get_loc('Wins') + 1)  # +1 for index column
 
     # Build the complete HTML with JavaScript
     html = f"""
