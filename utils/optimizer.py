@@ -332,6 +332,9 @@ def optimize_strategies(
             total_trades = len(filtered_df)
             win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0
 
+            # Calculate unique trading days
+            unique_days = filtered_df['Date'].nunique() if 'Date' in filtered_df.columns else 0
+
             # Calculate edge (win rate - breakeven rate)
             breakeven_rates = {1: 50.0, 2: 33.3, 3: 25.0}
             breakeven_rate = breakeven_rates.get(rrr_ratio, 50.0)
@@ -350,11 +353,18 @@ def optimize_strategies(
             # Calculate drawdown percentage
             drawdown_pct = (losses / total_trades * 100) if total_trades > 0 else 0.0
 
+            # Calculate outcome (wins * RRR - losses)
+            outcome = (wins * rrr_ratio) - losses
+
             # Store result
             all_results.append({
                 "Strategy": strategy.name,
-                "Trades": total_trades,
                 "RRR": f"1:{rrr_ratio}",
+                "Days": unique_days,
+                "Trades": total_trades,
+                "Wins": wins,
+                "Losses": losses,
+                "Outcome": outcome,
                 "Win %": f"{win_rate:.1f}%",
                 "Edge": f"{edge_value:.1f}%",
                 "Profit Factor": f"{profit_factor:.2f}" if profit_factor != float('inf') else "∞",
