@@ -291,6 +291,9 @@ def optimize_strategies(
         DataFrame with optimization results sorted by edge (descending)
     """
 
+    # Calculate total unique days in dataset
+    total_days = df['Date'].nunique() if 'Date' in df.columns else 0
+
     # Create filter dimensions
     dimensions = custom_dimensions if custom_dimensions else create_filter_dimensions()
 
@@ -332,8 +335,11 @@ def optimize_strategies(
             total_trades = len(filtered_df)
             win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0
 
-            # Calculate unique trading days
-            unique_days = filtered_df['Date'].nunique() if 'Date' in filtered_df.columns else 0
+            # Calculate unique days with at least one win
+            days_with_wins = winning_trades['Date'].nunique() if 'Date' in winning_trades.columns and len(winning_trades) > 0 else 0
+
+            # Calculate days percentage
+            days_percentage = (days_with_wins / total_days * 100) if total_days > 0 else 0.0
 
             # Calculate edge (win rate - breakeven rate)
             breakeven_rates = {1: 50.0, 2: 33.3, 3: 25.0}
@@ -360,7 +366,8 @@ def optimize_strategies(
             all_results.append({
                 "Strategy": strategy.name,
                 "RRR": f"1:{rrr_ratio}",
-                "Days": unique_days,
+                "Days": days_with_wins,
+                "Days %": f"{days_percentage:.0f}%",
                 "Trades": total_trades,
                 "Wins": wins,
                 "Losses": losses,
