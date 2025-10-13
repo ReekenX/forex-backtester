@@ -272,6 +272,7 @@ def optimize_strategies(
     sl_column: str = "SL",
     custom_dimensions: Optional[List[FilterDimension]] = None,
     top_n: Optional[int] = None,
+    max_trades: Optional[int] = None,
 ) -> pd.DataFrame:
     """
     Run exhaustive strategy optimization across all filter combinations.
@@ -286,6 +287,7 @@ def optimize_strategies(
         sl_column: Stop loss column name
         custom_dimensions: Optional custom filter dimensions (uses default if None)
         top_n: If specified, return only top N strategies by edge
+        max_trades: If specified, limit analysis to first N trades per strategy
 
     Returns:
         DataFrame with optimization results sorted by edge (descending)
@@ -321,6 +323,10 @@ def optimize_strategies(
         # Skip if not enough trades
         if len(filtered_df) < min_trades:
             continue
+
+        # Limit to max_trades if specified
+        if max_trades is not None:
+            filtered_df = filtered_df.head(max_trades)
 
         # Calculate stats for each RRR ratio
         for rrr_ratio in rrr_ratios:
