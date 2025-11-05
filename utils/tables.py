@@ -1821,6 +1821,7 @@ def analyze_ema_30m_trend_alignment(df: pd.DataFrame) -> pd.DataFrame:
     scenarios = [
         ("Plain trading", lambda d: d, 1.0),
         ("EMA aligned with trade", lambda d: d[d["EMA"] == d["Direction"]], 1.0),
+        ("EMA + BOS", lambda d: d[(d["EMA"] == d["Direction"]) & (d["BOS/CH"] == "BOS")], 1.0),
         ("30M Trend aligned with trade", lambda d: d[
             ((d["Direction"] == "Buy") & d["30M Leg"].isin(["Above H", "Above L"])) |
             ((d["Direction"] == "Sell") & d["30M Leg"].isin(["Below H", "Below L"]))
@@ -1832,10 +1833,10 @@ def analyze_ema_30m_trend_alignment(df: pd.DataFrame) -> pd.DataFrame:
                 ((d["Direction"] == "Sell") & d["30M Leg"].isin(["Below H", "Below L"]))
             )
         ], 1.0),
-        ("EMA aligned with trade + 1 pip pullback", lambda d: d[(d["EMA"] == d["Direction"]) & (d["Pullback"] >= 1)], 1.0),
-        ("EMA aligned with trade + half SL", lambda d: d[d["EMA"] == d["Direction"]], 0.5),
-        ("EMA aligned with trade + third SL", lambda d: d[d["EMA"] == d["Direction"]], 0.33),
-        ("EMA aligned with trade + two thirds SL", lambda d: d[d["EMA"] == d["Direction"]], 0.66),
+        ("EMA aligned with trade + 1 pip pullback", lambda d: d[(d["EMA"] == d["Direction"]) & (d["BOS/CH"] == "BOS") & (d["Pullback"] >= 1)], 1.0),
+        ("EMA aligned with trade + half SL", lambda d: d[(d["EMA"] == d["Direction"]) & (d["BOS/CH"] == "BOS")], 0.5),
+        ("EMA aligned with trade + third SL", lambda d: d[(d["EMA"] == d["Direction"]) & (d["BOS/CH"] == "BOS")], 0.33),
+        ("EMA aligned with trade + two thirds SL", lambda d: d[(d["EMA"] == d["Direction"]) & (d["BOS/CH"] == "BOS")], 0.66),
     ]
 
     # Analyze each scenario for all RRR ratios
