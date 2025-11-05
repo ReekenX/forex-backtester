@@ -1816,36 +1816,45 @@ def analyze_ema_30m_trend_alignment(df: pd.DataFrame) -> pd.DataFrame:
     rows = []
 
     # Configuration for different alignment scenarios
+    # Each scenario is a tuple: (name, filter_func, sl_multiplier)
+    # sl_multiplier adjusts the effective SL for win condition (1.0 = full SL, 0.5 = half SL)
     scenarios = [
-        ("Plain trading", lambda d: d),
-        ("EMA aligned with trade", lambda d: d[d["EMA"] == d["Direction"]]),
+        ("Plain trading", lambda d: d, 1.0),
+        ("EMA aligned with trade", lambda d: d[d["EMA"] == d["Direction"]], 1.0),
         ("30M Trend aligned with trade", lambda d: d[
             ((d["Direction"] == "Buy") & d["30M Leg"].isin(["Above H", "Above L"])) |
             ((d["Direction"] == "Sell") & d["30M Leg"].isin(["Below H", "Below L"]))
-        ]),
+        ], 1.0),
         ("EMA + 30M Trend aligned with trade", lambda d: d[
             (d["EMA"] == d["Direction"]) &
             (
                 ((d["Direction"] == "Buy") & d["30M Leg"].isin(["Above H", "Above L"])) |
                 ((d["Direction"] == "Sell") & d["30M Leg"].isin(["Below H", "Below L"]))
             )
-        ]),
-        ("EMA aligned with trade + 1 pip pullback", lambda d: d[(d["EMA"] == d["Direction"]) & (d["Pullback"] >= 1)]),
+        ], 1.0),
+        ("EMA aligned with trade + 1 pip pullback", lambda d: d[(d["EMA"] == d["Direction"]) & (d["Pullback"] >= 1)], 1.0),
+        ("EMA aligned with trade + half SL", lambda d: d[d["EMA"] == d["Direction"]], 0.5),
+        ("EMA aligned with trade + third SL", lambda d: d[d["EMA"] == d["Direction"]], 0.33),
+        ("EMA aligned with trade + two thirds SL", lambda d: d[d["EMA"] == d["Direction"]], 0.66),
     ]
 
     # Analyze each scenario for all RRR ratios
-    for scenario_name, filter_func in scenarios:
+    for scenario_name, filter_func, sl_multiplier in scenarios:
         filtered_df = filter_func(df)
 
         for ratio, breakeven_rate in RRR_CONFIGS:
             total_trades = len(filtered_df)
 
             if total_trades > 0:
-                # Win condition: SL != Pullback AND Pullback < SL AND TP >= (ratio * SL)
+                # Calculate effective SL based on multiplier
+                effective_sl = filtered_df["SL"] * sl_multiplier
+                # Apply broker minimum SL limit of 1.1 pips
+                effective_sl = effective_sl.clip(lower=1.1)
+
                 profitable = filtered_df[
-                    (filtered_df["SL"] != filtered_df["Pullback"])
-                    & (filtered_df["Pullback"] < filtered_df["SL"])
-                    & (filtered_df["TP"] >= (ratio * filtered_df["SL"]))
+                    (effective_sl != filtered_df["Pullback"])
+                    & (filtered_df["Pullback"] < effective_sl)
+                    & (filtered_df["TP"] >= (ratio * effective_sl))
                 ]
                 wins = len(profitable)
                 losses = total_trades - wins
