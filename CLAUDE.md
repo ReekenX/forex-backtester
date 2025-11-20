@@ -16,6 +16,7 @@ This project uses a modular structure with specialized Jupyter notebooks and uti
 - **export.ipynb** - CSV data export functionality
 - **correlations.ipynb** - Correlation analysis (e.g., SL size vs Win Rate)
 - **optimizer.ipynb** - Meta Trader-style exhaustive strategy optimization
+- **hours.ipynb** - Hour-by-hour trading performance analysis
 
 **Utility Modules (utils/ package):**
 - **tables.py** - Analysis functions for strategy evaluation
@@ -23,6 +24,10 @@ This project uses a modular structure with specialized Jupyter notebooks and uti
 - **export.py** - Data export utilities
 - **correlations.py** - Correlation analysis functions
 - **optimizer.py** - Combinatorial strategy optimizer (Meta Trader-style)
+- **hours.py** - Hour analysis functions
+
+**Test Modules (tests/ directory):**
+- **hours.py** - Tests for hours analysis module
 
 If you need to run any commands, like `jupyter`, then prefix it with `poetry run`. For example: `poetry run jupyter notebook labs/tables.ipynb`
 
@@ -75,6 +80,44 @@ The utils package contains all backtesting logic organized into specialized modu
    - Buy trend: "Above H" or "Above L"
    - Sell trend: "Below H" or "Below L"
 
+## Development Flow for New Features
+
+When building new analysis features, always follow this three-file pattern:
+
+### 1. Notebook (labs/*.ipynb)
+- **Purpose**: Clean, minimal interface for users
+- **Content**: Only imports and function calls
+- **Example**: `labs/hours.ipynb`
+- Keep code to minimum - just load data and call display functions
+
+### 2. Python Module (utils/*.py)
+- **Purpose**: All business logic and calculations
+- **Content**: Analysis functions, data processing, HTML generation
+- **Example**: `utils/hours.py`
+- Build from scratch without reusing existing code
+- Simple, easy-to-understand implementation
+- Include comprehensive docstrings
+
+### 3. Test Module (tests/*.py)
+- **Purpose**: Verify functionality with small datasets
+- **Content**: Unit tests using 10-row sample data
+- **Example**: `tests/hours.py`
+- Test all core functions and edge cases
+- Run with: `poetry run python tests/<module>.py`
+
+### Reference Implementation
+
+See the "hours" implementation as the reference example:
+- **labs/hours.ipynb** - Clean notebook with just imports and function calls
+- **utils/hours.py** - Complete analysis logic built from scratch
+- **tests/hours.py** - 18 comprehensive tests using 10-row datasets
+
+This pattern ensures:
+- Clean separation of concerns
+- Easy testing and maintenance
+- Simple, understandable code
+- Consistent project structure
+
 ## Notebook Structure Guidelines
 
 ### labs/ Notebooks Requirements
@@ -98,5 +141,40 @@ The utils package contains all backtesting logic organized into specialized modu
 
   # In labs/optimizer.ipynb
   from utils.optimizer import optimize_strategies, display_optimization_results
+
+  # In labs/hours.ipynb
+  from utils.hours import display_hour_analysis
   ```
+
+## Standard Table Structure
+
+All analysis tables should follow this standardized column format:
+
+### Standard Columns (in order)
+1. **Strategy** - Strategy name or grouping identifier (e.g., "10h" for hour 10)
+2. **RRR** - Risk-reward ratio (e.g., "1:1", "1:2", "1:3")
+3. **Trades** - Total number of trades
+4. **Notation** - Win/Loss notation (e.g., "12W – 33L")
+5. **Win Rate** - Percentage of winning trades (e.g., "65.5%")
+6. **Outcome** - Net result in R multiples (e.g., "15R")
+7. **Edge** - Profitability above breakeven (e.g., "15.5%")
+8. **Days** - Number of unique days with at least one win
+9. **Days %** - Percentage of trading days with wins (e.g., "67%")
+10. **Trades Required** - Trades needed to earn 1R (e.g., "2.5" or "N/A")
+11. **Drawdown** - Drawdown metric (e.g., "N/A" or percentage)
+
+### Table Styling
+- Use dark mode optimized colors:
+  - Background: `#1e1e1e`
+  - Text: `#e0e0e0`
+  - Positive Edge: `#4ade80` (green)
+  - Negative Edge: `#f87171` (red)
+  - Borders: `#404040`
+- Strategy column width: 300px
+- Apply highlighting to Edge column based on positive/negative values
+
+### Days Calculation
+- **Days**: Count unique dates where at least one trade was a win
+- **Days %**: `(Days with wins / Total trading days) * 100`
+- Trading days are counted from the filtered dataset, not calendar days
 

@@ -25,14 +25,18 @@ forex-backtester/
 │   ├── charts.ipynb         # Visualization of profitable strategies
 │   ├── export.ipynb         # CSV data export functionality
 │   ├── correlations.ipynb   # Correlation analysis (SL vs Win Rate, etc.)
-│   └── optimizer.ipynb      # Meta Trader-style strategy optimizer
+│   ├── optimizer.ipynb      # Meta Trader-style strategy optimizer
+│   └── hours.ipynb          # Hour-by-hour trading performance analysis
 ├── utils/                   # Python package with analysis modules
 │   ├── __init__.py          # Package initialization and shared utilities
 │   ├── tables.py            # Strategy analysis functions
 │   ├── charts.py            # Charting and visualization functions
 │   ├── export.py            # Data export utilities
 │   ├── correlations.py      # Correlation analysis functions
-│   └── optimizer.py         # Combinatorial strategy optimizer
+│   ├── optimizer.py         # Combinatorial strategy optimizer
+│   └── hours.py             # Hour analysis functions
+├── tests/                   # Test modules
+│   └── hours.py             # Tests for hours analysis (run: poetry run python tests/hours.py)
 ├── pyproject.toml           # Poetry configuration and dependencies
 └── Makefile                 # Build automation commands
 ```
@@ -69,6 +73,7 @@ This will open Jupyter in the current directory, allowing you to navigate to the
 - **correlations.ipynb** - For analyzing correlations between trading variables
 - **export.ipynb** - For exporting filtered data to CSV
 - **optimizer.ipynb** - For Meta Trader-style exhaustive strategy optimization
+- **hours.ipynb** - For hour-by-hour trading performance analysis
 
 ### Data Format
 
@@ -105,12 +110,62 @@ The project uses enhanced trading data format in `data/eurusd.csv`:
 - **pandas**: Data manipulation and analysis
 - **numpy**: Numerical computing
 
+## Development Guidelines
+
+### Three-File Pattern for New Features
+
+When creating new analysis features, follow this standardized pattern:
+
+1. **Notebook** (`labs/*.ipynb`) - Clean interface with minimal code
+   - Only imports and function calls
+   - Example: `labs/hours.ipynb`
+
+2. **Python Module** (`utils/*.py`) - All business logic
+   - Analysis functions, calculations, HTML generation
+   - Built from scratch, simple and clear
+   - Example: `utils/hours.py`
+
+3. **Test Module** (`tests/*.py`) - Comprehensive tests
+   - Unit tests with 10-row sample datasets
+   - Test all functions and edge cases
+   - Example: `tests/hours.py`
+
+**Reference**: See the "hours" implementation (labs/hours.ipynb, utils/hours.py, tests/hours.py) as the standard example.
+
+### Standard Table Structure
+
+All analysis tables use this consistent column format:
+
+| Column | Description | Example |
+|--------|-------------|---------|
+| Strategy | Strategy name/identifier | "10h" |
+| RRR | Risk-reward ratio | "1:2" |
+| Trades | Total trade count | 45 |
+| Notation | Wins and losses | "12W – 33L" |
+| Win Rate | Winning percentage | "65.5%" |
+| Outcome | Net result in R | "15R" |
+| Edge | Above breakeven | "15.5%" |
+| Days | Days with ≥1 win | 23 |
+| Days % | Win days percentage | "67%" |
+| Trades Required | Trades to earn 1R | "2.5" or "N/A" |
+| Drawdown | Drawdown metric | "N/A" |
+
+**Styling**: Dark mode optimized with green positive/red negative edge highlighting.
+
 ## Makefile Commands
 
 - `make install`: Install all Poetry dependencies
 - `make clean`: Remove Python cache files and Jupyter checkpoints
 - `make format`: Format code in utils/ package using Black
 - `make lint`: Lint and auto-fix code in utils/ package using Ruff
+
+## Running Tests
+
+Tests are located in the `tests/` directory and can be run directly:
+
+```bash
+poetry run python tests/hours.py
+```
 
 ## Commit Convention
 
