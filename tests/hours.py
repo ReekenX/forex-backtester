@@ -50,8 +50,8 @@ def test_calculate_hour_statistics_basic():
     assert len(result) == 12
 
     # Check columns exist
-    expected_columns = ['Strategy', 'RRR', 'Trades', 'Wins', 'Losses',
-                        'Win Rate', 'Edge', 'Outcome', 'Trades Required', 'Drawdown']
+    expected_columns = ['Strategy', 'RRR', 'Trades', 'Notation',
+                        'Win Rate', 'Outcome', 'Edge', 'Days', 'Days %', 'Trades Required', 'Drawdown']
     assert list(result.columns) == expected_columns
 
 
@@ -84,14 +84,14 @@ def test_calculate_stats_for_hour_and_rrr():
         'Hour': [10, 10, 10],
         'SL': [10.0, 10.0, 10.0],
         'Pullback': [5.0, 10.0, 2.0],  # 1st wins, 2nd loses (equal), 3rd wins
-        'TP': [20.0, 20.0, 20.0]
+        'TP': [20.0, 20.0, 20.0],
+        'Date': ['2025-01-01', '2025-01-02', '2025-01-03']
     })
 
     stats = _calculate_stats_for_hour_and_rrr(trades, 10, 1, 50.0)
 
     # Should have 2 wins (pullback < SL and TP >= 1*SL)
-    assert stats['Wins'] == 2
-    assert stats['Losses'] == 1
+    assert stats['Notation'] == '2W – 1L'
     assert stats['Trades'] == 3
     assert stats['Strategy'] == '10h'  # Shows hour for RRR=1
     assert stats['RRR'] == '1:1'
@@ -103,7 +103,8 @@ def test_calculate_stats_for_hour_and_rrr_second_rrr():
         'Hour': [10, 10],
         'SL': [10.0, 10.0],
         'Pullback': [5.0, 2.0],
-        'TP': [20.0, 20.0]
+        'TP': [20.0, 20.0],
+        'Date': ['2025-01-01', '2025-01-02']
     })
 
     stats = _calculate_stats_for_hour_and_rrr(trades, 10, 2, 33.3)
@@ -118,12 +119,12 @@ def test_win_condition_rrr_1():
         'Hour': [10, 10, 10],
         'SL': [10.0, 10.0, 10.0],
         'Pullback': [5.0, 9.9, 10.1],  # Win, Win, Lose
-        'TP': [10.0, 10.0, 10.0]  # All meet 1:1 TP requirement
+        'TP': [10.0, 10.0, 10.0],  # All meet 1:1 TP requirement
+        'Date': ['2025-01-01', '2025-01-02', '2025-01-03']
     })
 
     stats = _calculate_stats_for_hour_and_rrr(trades, 10, 1, 50.0)
-    assert stats['Wins'] == 2
-    assert stats['Losses'] == 1
+    assert stats['Notation'] == '2W – 1L'
 
 
 def test_win_condition_rrr_2():
@@ -132,12 +133,12 @@ def test_win_condition_rrr_2():
         'Hour': [10, 10, 10],
         'SL': [10.0, 10.0, 10.0],
         'Pullback': [5.0, 5.0, 5.0],  # All pullbacks are winning
-        'TP': [20.0, 19.9, 30.0]  # Win (>=20), Lose (<20), Win (>=20)
+        'TP': [20.0, 19.9, 30.0],  # Win (>=20), Lose (<20), Win (>=20)
+        'Date': ['2025-01-01', '2025-01-02', '2025-01-03']
     })
 
     stats = _calculate_stats_for_hour_and_rrr(trades, 10, 2, 33.3)
-    assert stats['Wins'] == 2
-    assert stats['Losses'] == 1
+    assert stats['Notation'] == '2W – 1L'
 
 
 def test_create_empty_stats():
@@ -147,8 +148,7 @@ def test_create_empty_stats():
     assert stats['Strategy'] == '10h'
     assert stats['RRR'] == '1:1'
     assert stats['Trades'] == 0
-    assert stats['Wins'] == 0
-    assert stats['Losses'] == 0
+    assert stats['Notation'] == '0W – 0L'
     assert stats['Win Rate'] == "0.0%"
     assert stats['Edge'] == "-50.0%"
 
@@ -159,7 +159,8 @@ def test_edge_calculation():
         'Hour': [10, 10, 10, 10],
         'SL': [10.0, 10.0, 10.0, 10.0],
         'Pullback': [5.0, 5.0, 5.0, 15.0],  # 3 wins, 1 loss
-        'TP': [10.0, 10.0, 10.0, 10.0]
+        'TP': [10.0, 10.0, 10.0, 10.0],
+        'Date': ['2025-01-01', '2025-01-02', '2025-01-03', '2025-01-04']
     })
 
     stats = _calculate_stats_for_hour_and_rrr(trades, 10, 1, 50.0)
@@ -175,7 +176,8 @@ def test_outcome_calculation():
         'Hour': [10, 10, 10],
         'SL': [10.0, 10.0, 10.0],
         'Pullback': [5.0, 5.0, 15.0],  # 2 wins, 1 loss
-        'TP': [20.0, 20.0, 20.0]
+        'TP': [20.0, 20.0, 20.0],
+        'Date': ['2025-01-01', '2025-01-02', '2025-01-03']
     })
 
     # For 1:2 RRR: outcome = (2 * 2) - 1 = 3R
@@ -189,7 +191,8 @@ def test_trades_required_positive_outcome():
         'Hour': [10, 10, 10, 10],
         'SL': [10.0, 10.0, 10.0, 10.0],
         'Pullback': [5.0, 5.0, 5.0, 15.0],  # 3 wins, 1 loss
-        'TP': [20.0, 20.0, 20.0, 20.0]
+        'TP': [20.0, 20.0, 20.0, 20.0],
+        'Date': ['2025-01-01', '2025-01-02', '2025-01-03', '2025-01-04']
     })
 
     # Outcome = (3 * 2) - 1 = 5R
@@ -204,7 +207,8 @@ def test_trades_required_negative_outcome():
         'Hour': [10, 10],
         'SL': [10.0, 10.0],
         'Pullback': [15.0, 15.0],  # 0 wins, 2 losses
-        'TP': [20.0, 20.0]
+        'TP': [20.0, 20.0],
+        'Date': ['2025-01-01', '2025-01-02']
     })
 
     stats = _calculate_stats_for_hour_and_rrr(trades, 10, 1, 50.0)
@@ -239,13 +243,63 @@ def test_filter_invalid_hours():
         'Hour': [0, 10, None, 11],  # 0 and None should be filtered
         'SL': [10.0, 10.0, 10.0, 10.0],
         'Pullback': [5.0, 5.0, 5.0, 5.0],
-        'TP': [20.0, 20.0, 20.0, 20.0]
+        'TP': [20.0, 20.0, 20.0, 20.0],
+        'Date': ['2025-01-01', '2025-01-02', '2025-01-03', '2025-01-04']
     })
 
     result = calculate_hour_statistics(data)
 
     # Should only have data for hours 10 and 11 (2 hours × 3 RRR = 6 rows)
     assert len(result) == 6
+
+
+def test_days_calculation():
+    """Test Days and Days % calculation."""
+    trades = pd.DataFrame({
+        'Hour': [10, 10, 10, 10],
+        'SL': [10.0, 10.0, 10.0, 10.0],
+        'Pullback': [5.0, 5.0, 15.0, 15.0],  # 2 wins on different days, 2 losses
+        'TP': [10.0, 10.0, 10.0, 10.0],
+        'Date': ['2025-01-01', '2025-01-02', '2025-01-03', '2025-01-03']  # 3 unique days, 2 with wins
+    })
+
+    stats = _calculate_stats_for_hour_and_rrr(trades, 10, 1, 50.0)
+
+    # 2 unique days with wins out of 3 total days = 66.67% ≈ 67%
+    assert stats['Days'] == 2
+    assert stats['Days %'] == "67%"
+
+
+def test_days_all_wins():
+    """Test Days % when all trading days have wins."""
+    trades = pd.DataFrame({
+        'Hour': [10, 10, 10],
+        'SL': [10.0, 10.0, 10.0],
+        'Pullback': [5.0, 5.0, 5.0],  # All wins
+        'TP': [10.0, 10.0, 10.0],
+        'Date': ['2025-01-01', '2025-01-02', '2025-01-03']  # 3 unique days, all with wins
+    })
+
+    stats = _calculate_stats_for_hour_and_rrr(trades, 10, 1, 50.0)
+
+    assert stats['Days'] == 3
+    assert stats['Days %'] == "100%"
+
+
+def test_days_no_wins():
+    """Test Days % when no trading days have wins."""
+    trades = pd.DataFrame({
+        'Hour': [10, 10],
+        'SL': [10.0, 10.0],
+        'Pullback': [15.0, 15.0],  # All losses
+        'TP': [10.0, 10.0],
+        'Date': ['2025-01-01', '2025-01-02']  # 2 unique days, 0 with wins
+    })
+
+    stats = _calculate_stats_for_hour_and_rrr(trades, 10, 1, 50.0)
+
+    assert stats['Days'] == 0
+    assert stats['Days %'] == "0%"
 
 
 def run_all_tests():
@@ -266,6 +320,9 @@ def run_all_tests():
         test_create_html_table_basic,
         test_create_html_table_empty,
         test_filter_invalid_hours,
+        test_days_calculation,
+        test_days_all_wins,
+        test_days_no_wins,
     ]
 
     passed = 0

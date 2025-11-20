@@ -90,6 +90,15 @@ def _calculate_stats_for_hour_and_rrr(
     edge = win_rate - breakeven_rate
     outcome = (wins * rrr_ratio) - losses
 
+    # Calculate unique days with at least one win
+    days_with_wins = winning_trades['Date'].nunique() if 'Date' in winning_trades.columns and len(winning_trades) > 0 else 0
+
+    # Calculate total unique trading days for this hour (days with any trades)
+    total_strategy_days = trades['Date'].nunique() if 'Date' in trades.columns else 0
+
+    # Calculate days percentage
+    days_percentage = (days_with_wins / total_strategy_days * 100) if total_strategy_days > 0 else 0.0
+
     # Calculate trades required to earn 1R
     if outcome > 0:
         trades_required = f"{total_trades / outcome:.1f}"
@@ -99,15 +108,19 @@ def _calculate_stats_for_hour_and_rrr(
     # Show hour label only on first RRR row (1:1)
     hour_label = f"{int(hour):02d}h" if rrr_ratio == 1 else ''
 
+    # Create notation column (Wins – Losses format)
+    notation = f"{wins}W – {losses}L"
+
     return {
         'Strategy': hour_label,
         'RRR': f'1:{rrr_ratio}',
         'Trades': total_trades,
-        'Wins': wins,
-        'Losses': losses,
+        'Notation': notation,
         'Win Rate': f"{win_rate:.1f}%",
-        'Edge': f"{edge:.1f}%",
         'Outcome': f"{outcome}R",
+        'Edge': f"{edge:.1f}%",
+        'Days': days_with_wins,
+        'Days %': f"{days_percentage:.0f}%",
         'Trades Required': trades_required,
         'Drawdown': "N/A"
     }
@@ -121,11 +134,12 @@ def _create_empty_stats(hour: int, rrr_ratio: int, breakeven_rate: float) -> Dic
         'Strategy': hour_label,
         'RRR': f'1:{rrr_ratio}',
         'Trades': 0,
-        'Wins': 0,
-        'Losses': 0,
+        'Notation': "0W – 0L",
         'Win Rate': "0.0%",
-        'Edge': f"{-breakeven_rate:.1f}%",
         'Outcome': "0R",
+        'Edge': f"{-breakeven_rate:.1f}%",
+        'Days': 0,
+        'Days %': "0%",
         'Trades Required': "N/A",
         'Drawdown': "N/A"
     }
