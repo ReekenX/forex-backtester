@@ -19,132 +19,318 @@ RRR_RATIOS: List[Tuple[int, float]] = [
 def create_ema_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]:
     """
     Create a comprehensive list of EMA-based trading strategies.
+    Each strategy is tested with: original (no SL filter), 5 < SL < 10, and SL < 10.
 
     Returns:
         List of tuples containing (strategy_name, filter_function)
     """
     strategies = []
 
-    # Single Setup Strategies
+    # 1. EMA Aligned
     strategies.extend([
         ("EMA Aligned", lambda df: df[df["EMA"] == df["Direction"]]),
-        ("EMA Counter-Trend", lambda df: df[df["EMA"] != df["Direction"]]),
+        ("EMA Aligned + 5 < SL < 10", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] > 5) & (df["SL"] < 10)]),
+        ("EMA Aligned + SL < 10", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] < 10)]),
     ])
 
-    # Double Setup Strategies
+    # 2. EMA Counter-Trend
+    strategies.extend([
+        ("EMA Counter-Trend", lambda df: df[df["EMA"] != df["Direction"]]),
+        ("EMA Counter-Trend + 5 < SL < 10", lambda df: df[(df["EMA"] != df["Direction"]) & (df["SL"] > 5) & (df["SL"] < 10)]),
+        ("EMA Counter-Trend + SL < 10", lambda df: df[(df["EMA"] != df["Direction"]) & (df["SL"] < 10)]),
+    ])
+
+    # 3. EMA + BOS
     strategies.extend([
         ("EMA + BOS", lambda df: df[(df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS")]),
-        ("EMA + CH", lambda df: df[(df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH")]),
-        ("EMA + 30M Trend Continuation", lambda df: df[
-            ((df["30M Leg"].isin(["Above H"]) & (df["Direction"] == "Buy")) |
-             (df["30M Leg"].isin(["Below L"]) & (df["Direction"] == "Sell"))) &
-            (df["EMA"] == df["Direction"])
+        ("EMA + BOS + 5 < SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 5) & (df["SL"] < 10)
         ]),
-        ("EMA + 30M Trend Reversal", lambda df: df[
-            ((df["30M Leg"].isin(["Above L"]) & (df["Direction"] == "Buy")) |
-             (df["30M Leg"].isin(["Below H"]) & (df["Direction"] == "Sell"))) &
-            (df["EMA"] == df["Direction"])
+        ("EMA + BOS + SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") & (df["SL"] < 10)
         ]),
     ])
 
-    # EMA + 30M Trend
+    # 4. EMA + CH
+    strategies.extend([
+        ("EMA + CH", lambda df: df[(df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH")]),
+        ("EMA + CH + 5 < SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH") &
+            (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("EMA + CH + SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH") & (df["SL"] < 10)
+        ]),
+    ])
+
+    # 5. EMA + 30M Trend
     strategies.extend([
         ("EMA + 30M Trend", lambda df: df[
             ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
              (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
             (df["EMA"] == df["Direction"])
         ]),
+        ("EMA + 30M Trend + 5 < SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("EMA + 30M Trend + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["SL"] < 10)
+        ]),
+    ])
+
+    # 6. EMA + 30M Trend Continuation
+    strategies.extend([
+        ("EMA + 30M Trend Continuation", lambda df: df[
+            ((df["30M Leg"].isin(["Above H"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"])
+        ]),
+        ("EMA + 30M Trend Continuation + 5 < SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("EMA + 30M Trend Continuation + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["SL"] < 10)
+        ]),
+    ])
+
+    # 7. EMA + 30M Trend Reversal
+    strategies.extend([
+        ("EMA + 30M Trend Reversal", lambda df: df[
+            ((df["30M Leg"].isin(["Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"])
+        ]),
+        ("EMA + 30M Trend Reversal + 5 < SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("EMA + 30M Trend Reversal + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["SL"] < 10)
+        ]),
+    ])
+
+    # 8. EMA + BOS + 30M Trend
+    strategies.extend([
         ("EMA + BOS + 30M Trend", lambda df: df[
             ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
              (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
             (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS")
         ]),
+        ("EMA + BOS + 30M Trend + 5 < SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("EMA + BOS + 30M Trend + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") & (df["SL"] < 10)
+        ]),
+    ])
+
+    # 9. EMA + BOS + 30M Trend Continuation
+    strategies.extend([
         ("EMA + BOS + 30M Trend Continuation", lambda df: df[
             ((df["30M Leg"].isin(["Above H"]) & (df["Direction"] == "Buy")) |
              (df["30M Leg"].isin(["Below L"]) & (df["Direction"] == "Sell"))) &
             (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS")
         ]),
+        ("EMA + BOS + 30M Trend Continuation + 5 < SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("EMA + BOS + 30M Trend Continuation + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") & (df["SL"] < 10)
+        ]),
+    ])
+
+    # 10. EMA + BOS + 30M Trend Reversal
+    strategies.extend([
         ("EMA + BOS + 30M Trend Reversal", lambda df: df[
             ((df["30M Leg"].isin(["Above L"]) & (df["Direction"] == "Buy")) |
              (df["30M Leg"].isin(["Below H"]) & (df["Direction"] == "Sell"))) &
             (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS")
         ]),
+        ("EMA + BOS + 30M Trend Reversal + 5 < SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("EMA + BOS + 30M Trend Reversal + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") & (df["SL"] < 10)
+        ]),
+    ])
+
+    # 11. EMA + CH + 30M Trend
+    strategies.extend([
         ("EMA + CH + 30M Trend", lambda df: df[
             ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
              (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
             (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH")
         ]),
+        ("EMA + CH + 30M Trend + 5 < SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH") &
+            (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("EMA + CH + 30M Trend + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH") & (df["SL"] < 10)
+        ]),
     ])
 
-    # EMA + Risk Management (SL)
+    # 12. EMA + CH + 30M Trend Continuation
     strategies.extend([
-        ("EMA + SL ≤ 5", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] <= 5)]),
-        ("EMA + SL ≤ 10", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] <= 10)]),
-        ("EMA + SL ≤ 15", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] <= 15)]),
-        ("EMA + BOS + SL ≤ 5", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] <= 5)
+        ("EMA + CH + 30M Trend Continuation", lambda df: df[
+            ((df["30M Leg"].isin(["Above H"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH")
         ]),
-        ("⭐ EMA + BOS + SL ≤ 10", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] <= 10)
+        ("EMA + CH + 30M Trend Continuation + 5 < SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH") &
+            (df["SL"] > 5) & (df["SL"] < 10)
         ]),
-        ("EMA + BOS + SL ≤ 15", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] <= 15)
+        ("EMA + CH + 30M Trend Continuation + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH") & (df["SL"] < 10)
         ]),
     ])
 
-    # EMA + News Filters
+    # 13. EMA + CH + 30M Trend Reversal
+    strategies.extend([
+        ("EMA + CH + 30M Trend Reversal", lambda df: df[
+            ((df["30M Leg"].isin(["Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH")
+        ]),
+        ("EMA + CH + 30M Trend Reversal + 5 < SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH") &
+            (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("EMA + CH + 30M Trend Reversal + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H"]) & (df["Direction"] == "Sell"))) &
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH") & (df["SL"] < 10)
+        ]),
+    ])
+
+    # 14. EMA + No News
     strategies.extend([
         ("EMA + No News", lambda df: df[(df["EMA"] == df["Direction"]) & df["News Event"].isna()]),
-        ("EMA + News > 2hrs", lambda df: df[(df["EMA"] == df["Direction"]) & (~df["News Event"].isna()) & (df["Hours Until News"] >= 2)]),
-        ("EMA + BOS + No News", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            df["News Event"].isna()
+        ("EMA + No News + 5 < SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & df["News Event"].isna() &
+            (df["SL"] > 5) & (df["SL"] < 10)
         ]),
-        ("EMA + BOS + News > 2hrs", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (~df["News Event"].isna()) & (df["Hours Until News"] >= 2)
+        ("EMA + No News + SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & df["News Event"].isna() & (df["SL"] < 10)
         ]),
     ])
 
-    # Complex Combinations
+    # 15. EMA + News > 2hrs
     strategies.extend([
-        ("EMA + BOS + SL < 10 + No News", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] < 10) & df["News Event"].isna()
+        ("EMA + News > 2hrs", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (~df["News Event"].isna()) & (df["Hours Until News"] >= 2)
         ]),
-        ("EMA + BOS + SL < 10 + News > 2hrs", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] < 10) & (~df["News Event"].isna()) & (df["Hours Until News"] >= 2)
+        ("EMA + News > 2hrs + 5 < SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (~df["News Event"].isna()) & (df["Hours Until News"] >= 2) &
+            (df["SL"] > 5) & (df["SL"] < 10)
         ]),
-        ("EMA + BOS + 5 < SL < 10 + No News", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] > 5) & (df["SL"] < 10) & df["News Event"].isna()
+        ("EMA + News > 2hrs + SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (~df["News Event"].isna()) & (df["Hours Until News"] >= 2) &
+            (df["SL"] < 10)
         ]),
-        ("EMA + BOS + 5 < SL < 10", lambda df: df[
-            (df["EMA"] == df["Direction"]) &
-            (df["BOS/CH"] == "BOS") &
-            (df["SL"] > 5) & (df["SL"] < 10) & df["News Event"].isna()
+    ])
+
+    # 16. EMA + BOS + No News
+    strategies.extend([
+        ("EMA + BOS + No News", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") & df["News Event"].isna()
         ]),
-        ("30M + EMA + SL < 10", lambda df: df[
-            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
-             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
-            (df["EMA"] == df["Direction"]) & (df["SL"] < 10)
+        ("EMA + BOS + No News + 5 < SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") & df["News Event"].isna() &
+            (df["SL"] > 5) & (df["SL"] < 10)
         ]),
-        ("30M + EMA + BOS + SL < 10", lambda df: df[
-            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
-             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
-            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") & (df["SL"] < 10)
+        ("EMA + BOS + No News + SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") & df["News Event"].isna() &
+            (df["SL"] < 10)
+        ]),
+    ])
+
+    # 17. EMA + BOS + News > 2hrs
+    strategies.extend([
+        ("EMA + BOS + News > 2hrs", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") &
+            (~df["News Event"].isna()) & (df["Hours Until News"] >= 2)
+        ]),
+        ("EMA + BOS + News > 2hrs + 5 < SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") &
+            (~df["News Event"].isna()) & (df["Hours Until News"] >= 2) &
+            (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("EMA + BOS + News > 2hrs + SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") &
+            (~df["News Event"].isna()) & (df["Hours Until News"] >= 2) &
+            (df["SL"] < 10)
+        ]),
+    ])
+
+    # 18. EMA + CH + No News
+    strategies.extend([
+        ("EMA + CH + No News", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH") & df["News Event"].isna()
+        ]),
+        ("EMA + CH + No News + 5 < SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH") & df["News Event"].isna() &
+            (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("EMA + CH + No News + SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH") & df["News Event"].isna() &
+            (df["SL"] < 10)
+        ]),
+    ])
+
+    # 19. EMA + CH + News > 2hrs
+    strategies.extend([
+        ("EMA + CH + News > 2hrs", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH") &
+            (~df["News Event"].isna()) & (df["Hours Until News"] >= 2)
+        ]),
+        ("EMA + CH + News > 2hrs + 5 < SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH") &
+            (~df["News Event"].isna()) & (df["Hours Until News"] >= 2) &
+            (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("EMA + CH + News > 2hrs + SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "CH") &
+            (~df["News Event"].isna()) & (df["Hours Until News"] >= 2) &
+            (df["SL"] < 10)
         ]),
     ])
 

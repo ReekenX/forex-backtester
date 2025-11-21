@@ -2,12 +2,11 @@
 Tests for utils.ema module
 
 These tests use a small dataset of 10 rows to verify the EMA strategy analysis functionality.
-Run with: python tests/ema.py
+Run with: poetry run pytest tests/ema.py
 """
 
 import pandas as pd
-import sys
-sys.path.insert(0, '.')
+import pytest
 
 from utils.ema import (
     calculate_ema_statistics,
@@ -19,7 +18,8 @@ from utils.ema import (
 )
 
 
-def get_sample_data():
+@pytest.fixture
+def sample_data():
     """Create a sample dataset with 10 trades."""
     return pd.DataFrame({
         'EMA': ['Buy', 'Buy', 'Sell', 'Buy', 'Buy', 'Sell', 'Buy', 'Sell', 'Buy', 'Sell'],
@@ -35,7 +35,8 @@ def get_sample_data():
     })
 
 
-def get_empty_data():
+@pytest.fixture
+def empty_data():
     """Create an empty dataset."""
     return pd.DataFrame({
         'EMA': [],
@@ -55,8 +56,8 @@ def test_create_ema_strategies():
     """Test that EMA strategies are created correctly."""
     strategies = create_ema_strategies()
 
-    # Should have multiple strategies
-    assert len(strategies) > 0
+    # Should have 57 strategies (19 base strategies × 3 variations each)
+    assert len(strategies) == 57
 
     # Each strategy should be a tuple with (name, function)
     for strategy in strategies:
@@ -67,21 +68,25 @@ def test_create_ema_strategies():
     # Check that key strategies exist
     strategy_names = [s[0] for s in strategies]
     assert "EMA Aligned" in strategy_names
+    assert "EMA Aligned + 5 < SL < 10" in strategy_names
+    assert "EMA Aligned + SL < 10" in strategy_names
     assert "EMA Counter-Trend" in strategy_names
     assert "EMA + BOS" in strategy_names
+    assert "EMA + BOS + 5 < SL < 10" in strategy_names
+    assert "EMA + BOS + SL < 10" in strategy_names
     assert "EMA + CH" in strategy_names
 
 
-def test_calculate_ema_statistics_basic():
+def test_calculate_ema_statistics_basic(sample_data):
     """Test basic EMA statistics calculation."""
-    sample_data = get_sample_data()
     result = calculate_ema_statistics(sample_data)
 
     # Should have rows for each strategy × each RRR ratio
-    # Number of strategies × 3 RRR ratios
+    # 57 strategies × 3 RRR ratios = 171 rows
     strategies = create_ema_strategies()
     expected_rows = len(strategies) * 3
     assert len(result) == expected_rows
+    assert expected_rows == 171
 
     # Check columns exist
     expected_columns = ['Strategy', 'RRR', 'Trades', 'Notation',
@@ -89,9 +94,8 @@ def test_calculate_ema_statistics_basic():
     assert list(result.columns) == expected_columns
 
 
-def test_calculate_ema_statistics_empty():
+def test_calculate_ema_statistics_empty(empty_data):
     """Test with empty dataset."""
-    empty_data = get_empty_data()
     result = calculate_ema_statistics(empty_data)
 
     # Should have entries for all strategies but with 0 trades
@@ -104,9 +108,8 @@ def test_calculate_ema_statistics_empty():
         assert row['Trades'] == 0
 
 
-def test_ema_aligned_filter():
+def test_ema_aligned_filter(sample_data):
     """Test EMA Aligned strategy filter."""
-    sample_data = get_sample_data()
     strategies = create_ema_strategies()
 
     # Find EMA Aligned strategy
@@ -118,9 +121,8 @@ def test_ema_aligned_filter():
     assert len(filtered) == 8
 
 
-def test_ema_counter_trend_filter():
+def test_ema_counter_trend_filter(sample_data):
     """Test EMA Counter-Trend strategy filter."""
-    sample_data = get_sample_data()
     strategies = create_ema_strategies()
 
     # Find EMA Counter-Trend strategy
@@ -132,9 +134,8 @@ def test_ema_counter_trend_filter():
     assert len(filtered) == 2
 
 
-def test_ema_bos_filter():
+def test_ema_bos_filter(sample_data):
     """Test EMA + BOS strategy filter."""
-    sample_data = get_sample_data()
     strategies = create_ema_strategies()
 
     # Find EMA + BOS strategy
@@ -275,9 +276,8 @@ def test_trades_required_negative_outcome():
     assert stats['Trades Required'] == "N/A"
 
 
-def test_create_html_table_basic():
+def test_create_html_table_basic(sample_data):
     """Test HTML table creation."""
-    sample_data = get_sample_data()
     stats = calculate_ema_statistics(sample_data)
     html = create_html_table(stats)
 
@@ -349,9 +349,8 @@ def test_days_no_wins():
     assert stats['Days %'] == "0%"
 
 
-def test_ema_30m_trend_filter():
+def test_ema_30m_trend_filter(sample_data):
     """Test EMA + 30M Trend strategy filter."""
-    sample_data = get_sample_data()
     strategies = create_ema_strategies()
 
     # Find EMA + 30M Trend strategy
@@ -366,23 +365,36 @@ def test_ema_30m_trend_filter():
     assert len(filtered) == 8
 
 
-def test_ema_sl_filter():
-    """Test EMA + SL ≤ 10 strategy filter."""
-    sample_data = get_sample_data()
+def test_ema_sl_filter(sample_data):
+    """Test EMA Aligned + SL < 10 strategy filter."""
     strategies = create_ema_strategies()
 
-    # Find EMA + SL ≤ 10 strategy
-    ema_sl = [s for s in strategies if s[0] == "EMA + SL ≤ 10"][0]
+    # Find EMA Aligned + SL < 10 strategy
+    ema_sl = [s for s in strategies if s[0] == "EMA Aligned + SL < 10"][0]
     filtered = ema_sl[1](sample_data)
 
-    # Should only include trades where EMA == Direction AND SL <= 10
-    # From sample data: rows 0, 3, 4, 6, 7, 8, 9
-    assert len(filtered) == 7
+    # Should only include trades where EMA == Direction AND SL < 10
+    # From sample data: rows 3, 4, 6, 8, 9 (SL: 6, 7, 9, 5, 6)
+    # Row 0 has SL=10 (not < 10), Row 2 doesn't match Direction
+    assert len(filtered) == 5
 
 
-def test_ema_news_filter():
+def test_ema_sl_filter_5_to_10(sample_data):
+    """Test EMA Aligned + 5 < SL < 10 strategy filter."""
+    strategies = create_ema_strategies()
+
+    # Find EMA Aligned + 5 < SL < 10 strategy
+    ema_sl_5_10 = [s for s in strategies if s[0] == "EMA Aligned + 5 < SL < 10"][0]
+    filtered = ema_sl_5_10[1](sample_data)
+
+    # Should only include trades where EMA == Direction AND 5 < SL < 10
+    # From sample data: rows 3, 4, 6, 9 (SL: 6, 7, 9, 6)
+    # Row 8 has SL=5 (not > 5)
+    assert len(filtered) == 4
+
+
+def test_ema_news_filter(sample_data):
     """Test EMA + No News strategy filter."""
-    sample_data = get_sample_data()
     strategies = create_ema_strategies()
 
     # Find EMA + No News strategy
@@ -394,52 +406,28 @@ def test_ema_news_filter():
     assert len(filtered) == 6
 
 
-def run_all_tests():
-    """Run all tests and report results."""
-    tests = [
-        test_create_ema_strategies,
-        test_calculate_ema_statistics_basic,
-        test_calculate_ema_statistics_empty,
-        test_ema_aligned_filter,
-        test_ema_counter_trend_filter,
-        test_ema_bos_filter,
-        test_calculate_stats_for_strategy_and_rrr,
-        test_create_empty_stats,
-        test_win_condition_rrr_1,
-        test_win_condition_rrr_2,
-        test_edge_calculation,
-        test_outcome_calculation,
-        test_trades_required_positive_outcome,
-        test_trades_required_negative_outcome,
-        test_create_html_table_basic,
-        test_create_html_table_empty,
-        test_days_calculation,
-        test_days_all_wins,
-        test_days_no_wins,
-        test_ema_30m_trend_filter,
-        test_ema_sl_filter,
-        test_ema_news_filter,
-    ]
+def test_ema_bos_sl_filter(sample_data):
+    """Test EMA + BOS + SL < 10 strategy filter."""
+    strategies = create_ema_strategies()
 
-    passed = 0
-    failed = 0
+    # Find EMA + BOS + SL < 10 strategy
+    ema_bos_sl = [s for s in strategies if s[0] == "EMA + BOS + SL < 10"][0]
+    filtered = ema_bos_sl[1](sample_data)
 
-    for test in tests:
-        try:
-            test()
-            print(f"✓ {test.__name__}")
-            passed += 1
-        except AssertionError as e:
-            print(f"✗ {test.__name__}: {e}")
-            failed += 1
-        except Exception as e:
-            print(f"✗ {test.__name__}: ERROR - {e}")
-            failed += 1
-
-    print(f"\n{passed} passed, {failed} failed")
-    return failed == 0
+    # Should only include trades where EMA == Direction AND BOS/CH == "BOS" AND SL < 10
+    # From sample data: rows 0, 3, 6, 8, 9
+    # But row 0 has SL=10 (not < 10), so: rows 3, 6, 8, 9
+    assert len(filtered) == 4
 
 
-if __name__ == '__main__':
-    success = run_all_tests()
-    sys.exit(0 if success else 1)
+def test_ema_ch_sl_filter(sample_data):
+    """Test EMA + CH + SL < 10 strategy filter."""
+    strategies = create_ema_strategies()
+
+    # Find EMA + CH + SL < 10 strategy
+    ema_ch_sl = [s for s in strategies if s[0] == "EMA + CH + SL < 10"][0]
+    filtered = ema_ch_sl[1](sample_data)
+
+    # Should only include trades where EMA == Direction AND BOS/CH == "CH" AND SL < 10
+    # From sample data: rows 4 (EMA=Buy, Direction=Buy, CH, SL=7)
+    assert len(filtered) == 1
