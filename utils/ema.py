@@ -43,11 +43,11 @@ def create_ema_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
     # 3. EMA + BOS
     strategies.extend([
         ("EMA + BOS", lambda df: df[(df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS")]),
-        ("EMA + BOS + 5 < SL < 10", lambda df: df[
+        ("⚠️ EMA + BOS + 5 < SL < 10", lambda df: df[
             (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") &
             (df["SL"] > 5) & (df["SL"] < 10)
         ]),
-        ("EMA + BOS + SL < 10", lambda df: df[
+        ("⚠️ EMA + BOS + SL < 10", lambda df: df[
             (df["EMA"] == df["Direction"]) & (df["BOS/CH"] == "BOS") & (df["SL"] < 10)
         ]),
     ])
@@ -363,7 +363,8 @@ def calculate_ema_statistics(df: pd.DataFrame) -> pd.DataFrame:
             stats = _calculate_stats_for_strategy_and_rrr(
                 filtered_df, strategy_name, rrr_ratio, breakeven_rate
             )
-            results.append(stats)
+            if stats['Trades'] > 100: # Skip strategies with less than 100 trades
+                results.append(stats)
 
     return pd.DataFrame(results)
 
