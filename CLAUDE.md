@@ -17,6 +17,7 @@ This project uses a modular structure with specialized Jupyter notebooks and uti
 - **correlations.ipynb** - Correlation analysis (e.g., SL size vs Win Rate)
 - **optimizer.ipynb** - Meta Trader-style exhaustive strategy optimization
 - **hours.ipynb** - Hour-by-hour trading performance analysis
+- **ema.ipynb** - EMA-based strategy analysis
 
 **Utility Modules (utils/ package):**
 - **tables.py** - Analysis functions for strategy evaluation
@@ -25,9 +26,11 @@ This project uses a modular structure with specialized Jupyter notebooks and uti
 - **correlations.py** - Correlation analysis functions
 - **optimizer.py** - Combinatorial strategy optimizer (Meta Trader-style)
 - **hours.py** - Hour analysis functions
+- **ema.py** - EMA strategy analysis functions
 
 **Test Modules (tests/ directory):**
 - **hours.py** - Tests for hours analysis module
+- **ema.py** - Tests for EMA analysis module
 
 If you need to run any commands, like `jupyter`, then prefix it with `poetry run`. For example: `poetry run jupyter notebook labs/tables.ipynb`
 
@@ -144,6 +147,9 @@ This pattern ensures:
 
   # In labs/hours.ipynb
   from utils.hours import display_hour_analysis
+
+  # In labs/ema.ipynb
+  from utils.ema import display_ema_analysis
   ```
 
 ## Standard Table Structure
@@ -161,7 +167,6 @@ All analysis tables should follow this standardized column format:
 8. **Days** - Number of unique days with at least one win
 9. **Days %** - Percentage of trading days with wins (e.g., "67%")
 10. **Trades Required** - Trades needed to earn 1R (e.g., "2.5" or "N/A")
-11. **Drawdown** - Drawdown metric (e.g., "N/A" or percentage)
 
 ### Table Styling
 - Use dark mode optimized colors:

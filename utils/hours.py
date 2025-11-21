@@ -121,8 +121,7 @@ def _calculate_stats_for_hour_and_rrr(
         'Edge': f"{edge:.1f}%",
         'Days': days_with_wins,
         'Days %': f"{days_percentage:.0f}%",
-        'Trades Required': trades_required,
-        'Drawdown': "N/A"
+        'Trades Required': trades_required
     }
 
 
@@ -140,8 +139,7 @@ def _create_empty_stats(hour: int, rrr_ratio: int, breakeven_rate: float) -> Dic
         'Edge': f"{-breakeven_rate:.1f}%",
         'Days': 0,
         'Days %': "0%",
-        'Trades Required': "N/A",
-        'Drawdown': "N/A"
+        'Trades Required': "N/A"
     }
 
 

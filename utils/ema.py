@@ -86,7 +86,7 @@ def create_ema_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
             (df["BOS/CH"] == "BOS") &
             (df["SL"] <= 5)
         ]),
-        ("EMA + BOS + SL ≤ 10", lambda df: df[
+        ("⭐ EMA + BOS + SL ≤ 10", lambda df: df[
             (df["EMA"] == df["Direction"]) &
             (df["BOS/CH"] == "BOS") &
             (df["SL"] <= 10)
@@ -244,8 +244,7 @@ def _calculate_stats_for_strategy_and_rrr(
         'Edge': f'{edge:.1f}%',
         'Days': days_with_wins,
         'Days %': f'{int(round(days_percentage))}%',
-        'Trades Required': trades_required,
-        'Drawdown': 'N/A'
+        'Trades Required': trades_required
     }
 
 
@@ -271,8 +270,7 @@ def _create_empty_stats(strategy_name: str, rrr_ratio: int, breakeven_rate: floa
         'Edge': f'{-breakeven_rate:.1f}%',
         'Days': 0,
         'Days %': '0%',
-        'Trades Required': 'N/A',
-        'Drawdown': 'N/A'
+        'Trades Required': 'N/A'
     }
 
 
@@ -338,7 +336,6 @@ def create_html_table(stats_df: pd.DataFrame) -> str:
                 <th>Days</th>
                 <th>Days %</th>
                 <th>Trades Required</th>
-                <th>Drawdown</th>
             </tr>
         </thead>
         <tbody>
@@ -362,7 +359,6 @@ def create_html_table(stats_df: pd.DataFrame) -> str:
                 <td>{row['Days']}</td>
                 <td>{row['Days %']}</td>
                 <td>{row['Trades Required']}</td>
-                <td>{row['Drawdown']}</td>
             </tr>
         """
 

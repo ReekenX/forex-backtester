@@ -51,7 +51,7 @@ def test_calculate_hour_statistics_basic():
 
     # Check columns exist
     expected_columns = ['Strategy', 'RRR', 'Trades', 'Notation',
-                        'Win Rate', 'Outcome', 'Edge', 'Days', 'Days %', 'Trades Required', 'Drawdown']
+                        'Win Rate', 'Outcome', 'Edge', 'Days', 'Days %', 'Trades Required']
     assert list(result.columns) == expected_columns
 
 
