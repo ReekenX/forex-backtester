@@ -271,85 +271,6 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     return {"Pullback Analysis": final_table}
 
 
-def analyze_hour_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
-    """
-    Analyze which hours produce the most profitable trades.
-
-    Creates a table showing wins, losses, and win percentage for each trading hour
-    across different RRR ratios (1:1, 1:2, 1:3).
-
-    Args:
-        df: Trading data with Hour, Pullback, TP, and SL columns
-
-    Returns:
-        Dictionary containing the hour analysis DataFrame
-    """
-    # Extract hour if not already present
-    hour_df = df.copy()
-    if 'Hour' not in hour_df.columns:
-        # If no Hour column, try to extract from Date or Time columns
-        if 'Date' in hour_df.columns:
-            hour_df['Hour'] = pd.to_datetime(hour_df['Date']).dt.hour
-        else:
-            # Hour column should already exist in the data
-            raise ValueError("No Hour column found in data")
-
-    # Remove rows with NaN or empty hours before analysis
-    hour_df = hour_df.dropna(subset=['Hour'])
-    hour_df = hour_df[hour_df['Hour'] != 0]
-
-    # Check if we have any data left after filtering
-    if len(hour_df) == 0:
-        # Return empty table if no hour data available
-        empty_df = pd.DataFrame(columns=['Hour', 'RRR', 'Trades', 'Wins', 'Losses', 'Win %'])
-        return {"Hour Analysis": empty_df}
-
-    # Get unique hours and sort them
-    unique_hours = sorted(hour_df['Hour'].unique())
-
-    hour_rows = []
-
-    for hour in unique_hours:
-        # Filter trades for this hour
-        hour_filtered = hour_df[hour_df['Hour'] == hour]
-
-        for ratio, breakeven_rate in RRR_CONFIGS:
-            total_trades = len(hour_filtered)
-
-            if total_trades > 0:
-                # Calculate wins based on RRR ratio
-                profitable = hour_filtered[
-                    (hour_filtered["SL"] != hour_filtered["Pullback"])
-                    & (hour_filtered["Pullback"] < hour_filtered["SL"])
-                    & (hour_filtered["TP"] >= (ratio * hour_filtered["SL"]))
-                ]
-                wins = len(profitable)
-                losses = total_trades - wins
-                win_rate = wins / total_trades * 100
-                outcome = (wins * ratio) - losses
-            else:
-                wins = 0
-                losses = 0
-                win_rate = 0.0
-                outcome = 0
-
-            # Format hour display - only show hour on first RRR row
-            hour_display = f"{int(hour):02d}h" if ratio == 1 else ''
-
-            hour_rows.append({
-                'Hour': hour_display,
-                'RRR': f'1:{ratio}',
-                'Trades': total_trades,
-                'Wins': wins,
-                'Losses': losses,
-                'Outcome': f"{outcome}R",
-                'Win %': f"{win_rate:.1f}%"
-            })
-
-    final_table = pd.DataFrame(hour_rows)
-    return {"Hour Analysis": final_table}
-
-
 def analyze_weekday_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze which weekdays produce the most profitable trades.
@@ -1668,19 +1589,6 @@ def get_top_strategies_by_edge(
 # ============================================================================
 # VISUALIZATION AND DISPLAY FUNCTIONS
 # ============================================================================
-
-
-def display_hour_analysis(df: pd.DataFrame):
-    """Display hour profitability analysis with proper formatting."""
-    from IPython.display import display, HTML
-
-    display(HTML("<h2>Hour Analysis</h2>"))
-    hour_tables = analyze_hour_profitability(df)
-
-    for table_name, table_df in hour_tables.items():
-        html_table = create_sortable_table(table_df)
-        display(HTML(html_table))
-        print('')
 
 
 def display_weekday_analysis(df: pd.DataFrame):
