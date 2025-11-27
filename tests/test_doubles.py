@@ -65,8 +65,8 @@ def test_get_double_setup_strategies():
     """Test that we get all expected strategies."""
     strategies = get_double_setup_strategies()
 
-    # Should have 27 strategies (9 EMA + 9 30M + 9 BOS)
-    assert len(strategies) == 27
+    # Should have 30 strategies (10 EMA + 10 30M + 10 BOS)
+    assert len(strategies) == 30
 
     # Check that each strategy returns a tuple of (name, function)
     for name, func in strategies:
