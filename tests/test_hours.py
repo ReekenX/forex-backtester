@@ -212,7 +212,7 @@ def test_trades_required_negative_outcome():
     })
 
     stats = _calculate_stats_for_hour_and_rrr(trades, 10, 1, 50.0)
-    assert stats['Trades Required'] == "N/A"
+    assert stats['Trades Required'] == ""
 
 
 def test_create_html_table_basic():

@@ -103,7 +103,7 @@ def _calculate_stats_for_hour_and_rrr(
     if outcome > 0:
         trades_required = f"{total_trades / outcome:.1f}"
     else:
-        trades_required = "N/A"
+        trades_required = ""
 
     # Show hour label only on first RRR row (1:1)
     hour_label = f"{int(hour):02d}h" if rrr_ratio == 1 else ''
@@ -139,7 +139,7 @@ def _create_empty_stats(hour: int, rrr_ratio: int, breakeven_rate: float) -> Dic
         'Edge': f"{-breakeven_rate:.1f}%",
         'Days': 0,
         'Days %': "0%",
-        'Trades Required': "N/A"
+        'Trades Required': ""
     }
 
 
