@@ -1483,58 +1483,6 @@ def create_triple_setup_strategy_library() -> List[Strategy]:
     return [Strategy(name, func, desc) for name, func, desc in triple_strategies]
 
 
-def _create_single_setup_strategies() -> List[Tuple[str, Callable, str]]:
-    """Create single setup strategies (no combinations)."""
-    strategies = []
-
-    # Technical Indicators (Individual)
-    strategies.extend([
-        ("EMA Aligned", lambda df: df[df["EMA"] == df["Direction"]], "EMA matches trade direction"),
-        ("EMA Counter-Trend", lambda df: df[df["EMA"] != df["Direction"]], "EMA opposite to trade direction"),
-        ("BOS Only", lambda df: df[df["BOS/CH"] == "BOS"], "Break of Structure trades only"),
-        ("CH Only", lambda df: df[df["BOS/CH"] == "CH"], "Change of Character trades only"),
-    ])
-
-    # Risk Management (Individual)
-    strategies.extend([
-        ("SL ≤ 2 pips", lambda df: df[df["SL"] <= 2], "Very tight stop losses"),
-        ("SL ≤ 5 pips", lambda df: df[(df["SL"] <= 5)], "Medium stop losses"),
-        ("SL ≤ 10 pips", lambda df: df[(df["SL"] <= 10)], "Wide stop losses"),
-        ("SL ≤ 15 pips", lambda df: df[(df["SL"] <= 15)], "Very wide stop losses"),
-    ])
-
-    # 30M Trend (Individual)
-    strategies.extend([
-        ("30M Trend", lambda df: df[
-            (df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
-            (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))
-        ], "Higher timeframe trend alignment only"),
-    ])
-
-    # News Events (Individual)
-    strategies.extend([
-        ("No News", lambda df: df[df["News Event"].isna()], "Avoid news volatility"),
-        ("With News", lambda df: df[~df["News Event"].isna()], "Trade during news periods"),
-        ("News > 2hrs", lambda df: df[(~df["News Event"].isna()) & (df["Hours Until News"] >= 2)], "Safe distance from news"),
-    ])
-
-    return strategies
-
-
-def create_single_setup_strategy_library() -> List[Strategy]:
-    """
-    Create a library of single setup trading strategies for backtesting.
-
-    Unlike the main strategy library, this focuses on individual components
-    rather than combinations, allowing for analysis of single factors.
-
-    Returns:
-        List of single setup Strategy objects ready for backtesting
-    """
-    single_strategies = _create_single_setup_strategies()
-    return [Strategy(name, func, desc) for name, func, desc in single_strategies]
-
-
 def evaluate_all_strategies(
     df: pd.DataFrame, strategies: List[Strategy]
 ) -> Dict[str, pd.DataFrame]:
@@ -1968,75 +1916,6 @@ def display_double_setup_strategy_analysis(df: pd.DataFrame):
 
         # Display the combined table with sortable columns
         display(HTML(f"<h2>Double Setup Strategies</h2>"))
-        html_table = create_sortable_table(combined_df, first_column_width='300px', highlight_column='Edge', highlight_color='green')
-        display(HTML(html_table))
-        print()
-
-
-def display_single_setup_strategy_analysis(df: pd.DataFrame):
-    """Display single setup strategy analysis with proper formatting."""
-    from IPython.display import display, HTML
-
-    strategies = [
-        Strategy(
-            "Plain Strategy",
-            lambda df: df,
-            "Baseline: All trades without any filtering"
-        )
-    ]
-    strategies.extend(create_single_setup_strategy_library())
-    strategy_results = evaluate_all_strategies(df, strategies)
-
-    # Collect all results for all RRR levels
-    all_results = []
-
-    rrr_configs = [
-        ('1:1 RRR', '1:1'),
-        ('1:2 RRR', '1:2'),
-        ('1:3 RRR', '1:3'),
-    ]
-
-    for rrr_column, rrr_label in rrr_configs:
-        top_df = get_top_strategies_by_edge(strategy_results, rrr_column, df, strategies)
-
-        # Add RRR column to each row
-        if not top_df.empty:
-            top_df['RRR'] = rrr_label
-            # Remove Entry column as it will be replaced by RRR
-            if 'Entry' in top_df.columns:
-                top_df = top_df.drop('Entry', axis=1)
-            all_results.append(top_df)
-
-    # Combine all results and sort by edge
-    if all_results:
-        combined_df = pd.concat(all_results, ignore_index=True)
-
-        # Extract edge values for sorting
-        combined_df['edge_value'] = combined_df['Edge'].apply(
-            lambda x: float(x.strip('%')) if isinstance(x, str) and x.strip().endswith('%') else 0.0
-        )
-
-        # Sort by edge value in descending order
-        combined_df = combined_df.sort_values('edge_value', ascending=False)
-
-        # Drop the temporary sorting column
-        combined_df = combined_df.drop('edge_value', axis=1)
-
-        # Reorder columns to put RRR second, Trades Required and Drawdown at the end
-        cols = combined_df.columns.tolist()
-        if 'RRR' in cols:
-            cols.remove('RRR')
-            cols.insert(1, 'RRR')
-        if 'Trades Required' in cols:
-            cols.remove('Trades Required')
-            cols.append('Trades Required')
-        if 'Drawdown' in cols:
-            cols.remove('Drawdown')
-            cols.append('Drawdown')
-        combined_df = combined_df[cols]
-
-        # Display the combined table with sortable columns
-        display(HTML(f"<h2>Single Setup Strategies</h2>"))
         html_table = create_sortable_table(combined_df, first_column_width='300px', highlight_column='Edge', highlight_color='green')
         display(HTML(html_table))
         print()
