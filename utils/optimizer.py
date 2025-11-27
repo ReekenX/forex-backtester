@@ -107,6 +107,14 @@ def create_filter_dimensions() -> List[FilterDimension]:
                 (df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Sell")) |
                 (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Buy"))
             ],
+            "Continuation": lambda df: df[
+                (df["30M Leg"].isin(["Above H"]) & (df["Direction"] == "Buy")) |
+                (df["30M Leg"].isin(["Below L"]) & (df["Direction"] == "Sell"))
+            ],
+            "Reversal": lambda df: df[
+                (df["30M Leg"].isin(["Below H"]) & (df["Direction"] == "Sell")) |
+                (df["30M Leg"].isin(["Above L"]) & (df["Direction"] == "Buy"))
+            ],
         }
     ))
 
@@ -138,47 +146,47 @@ def create_filter_dimensions() -> List[FilterDimension]:
     ))
 
     # Hour Dimension
-    dimensions.append(FilterDimension(
-        name="Hour",
-        options={
-            "Any": lambda df: df,
-            "10-12": lambda df: df[(df["Hour"] >= 10) & (df["Hour"] < 12)],
-            "12-15": lambda df: df[(df["Hour"] >= 12) & (df["Hour"] < 15)],
-            "15-18": lambda df: df[(df["Hour"] >= 15) & (df["Hour"] <= 18)],
-            "10": lambda df: df[df["Hour"] == 10],
-            "11": lambda df: df[df["Hour"] == 11],
-            "12": lambda df: df[df["Hour"] == 12],
-            "13": lambda df: df[df["Hour"] == 13],
-            "14": lambda df: df[df["Hour"] == 14],
-            "15": lambda df: df[df["Hour"] == 15],
-            "16": lambda df: df[df["Hour"] == 16],
-            "17": lambda df: df[df["Hour"] == 17],
-            "18": lambda df: df[df["Hour"] == 18],
-        }
-    ))
+    # dimensions.append(FilterDimension(
+    #     name="Hour",
+    #     options={
+    #         "Any": lambda df: df,
+    #         "10-12": lambda df: df[(df["Hour"] >= 10) & (df["Hour"] < 12)],
+    #         "12-15": lambda df: df[(df["Hour"] >= 12) & (df["Hour"] < 15)],
+    #         "15-18": lambda df: df[(df["Hour"] >= 15) & (df["Hour"] <= 18)],
+    #         "10": lambda df: df[df["Hour"] == 10],
+    #         "11": lambda df: df[df["Hour"] == 11],
+    #         "12": lambda df: df[df["Hour"] == 12],
+    #         "13": lambda df: df[df["Hour"] == 13],
+    #         "14": lambda df: df[df["Hour"] == 14],
+    #         "15": lambda df: df[df["Hour"] == 15],
+    #         "16": lambda df: df[df["Hour"] == 16],
+    #         "17": lambda df: df[df["Hour"] == 17],
+    #         "18": lambda df: df[df["Hour"] == 18],
+    #     }
+    # ))
 
     # Weekday Dimension
-    dimensions.append(FilterDimension(
-        name="Weekday",
-        options={
-            "Any": lambda df: df,
-            "Monday": lambda df: df[df["Weekday"] == "Monday"],
-            "Tuesday": lambda df: df[df["Weekday"] == "Tuesday"],
-            "Wednesday": lambda df: df[df["Weekday"] == "Wednesday"],
-            "Thursday": lambda df: df[df["Weekday"] == "Thursday"],
-            "Friday": lambda df: df[df["Weekday"] == "Friday"],
-        }
-    ))
+    # dimensions.append(FilterDimension(
+    #     name="Weekday",
+    #     options={
+    #         "Any": lambda df: df,
+    #         "Monday": lambda df: df[df["Weekday"] == "Monday"],
+    #         "Tuesday": lambda df: df[df["Weekday"] == "Tuesday"],
+    #         "Wednesday": lambda df: df[df["Weekday"] == "Wednesday"],
+    #         "Thursday": lambda df: df[df["Weekday"] == "Thursday"],
+    #         "Friday": lambda df: df[df["Weekday"] == "Friday"],
+    #     }
+    # ))
 
     # Direction Dimension
-    dimensions.append(FilterDimension(
-        name="Direction",
-        options={
-            "Any": lambda df: df,
-            "Buy": lambda df: df[df["Direction"] == "Buy"],
-            "Sell": lambda df: df[df["Direction"] == "Sell"],
-        }
-    ))
+    # dimensions.append(FilterDimension(
+    #     name="Direction",
+    #     options={
+    #         "Any": lambda df: df,
+    #         "Buy": lambda df: df[df["Direction"] == "Buy"],
+    #         "Sell": lambda df: df[df["Direction"] == "Sell"],
+    #     }
+    # ))
 
     return dimensions
 
