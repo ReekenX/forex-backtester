@@ -81,7 +81,7 @@ def test_strategy_names():
 
     expected_names = [
         'EMA Aligned',
-        'EMA Counter-Trend',
+        'EMA Counter',
         'BOS Only',
         'CH Only',
         '30M Trend'
@@ -101,7 +101,7 @@ def test_calculate_strategy_statistics_basic():
 
     # Check columns exist
     expected_columns = ['Strategy', 'RRR', 'Trades', 'Notation',
-                        'Win Rate', 'Edge', 'Outcome', 'Days', 'Days %', 'Profit Factor']
+                        'Win Rate', 'Edge', 'Outcome', 'Days', 'Days %', 'Factor']
     assert list(result.columns) == expected_columns
 
 
@@ -227,7 +227,7 @@ def test_profit_factor_calculation():
     })
 
     stats = _calculate_stats_for_strategy_and_rrr(trades, 'Test', 2, 33.3)
-    assert stats['Profit Factor'] == "6.00"
+    assert stats['Factor'] == "6.00"
 
 
 def test_profit_factor_no_losses():
@@ -240,7 +240,7 @@ def test_profit_factor_no_losses():
     })
 
     stats = _calculate_stats_for_strategy_and_rrr(trades, 'Test', 1, 50.0)
-    assert stats['Profit Factor'] == "∞"
+    assert stats['Factor'] == "∞"
 
 
 def test_days_calculation():

@@ -11,7 +11,6 @@ from typing import Dict, List, Tuple, Callable
 
 # Risk-Reward Ratio configurations with breakeven win rates
 RRR_RATIOS: List[Tuple[int, float]] = [
-    (1, 50.0),  # 1:1 RRR - need 50% win rate to break even
     (2, 33.3),  # 1:2 RRR - need 33.3% win rate to break even
     (3, 25.0),  # 1:3 RRR - need 25% win rate to break even
 ]
