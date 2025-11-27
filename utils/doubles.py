@@ -316,6 +316,13 @@ def create_html_table(df: pd.DataFrame) -> str:
                     css_class = "positive-edge" if edge_val > 0 else "negative-edge"
                 except:
                     pass
+            elif col == 'Days %':
+                # Highlight days % above 50%
+                try:
+                    days_pct_val = float(str(value).replace('%', ''))
+                    css_class = "positive-edge" if days_pct_val > 50 else ""
+                except:
+                    pass
 
             html += f'<td class="{css_class}">{value}</td>'
         html += "</tr>"
