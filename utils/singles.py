@@ -27,15 +27,9 @@ def get_single_setup_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd
     return [
         # Technical Indicators
         ("EMA Aligned", lambda df: df[df["EMA"] == df["Direction"]]),
-        ("EMA Counter-Trend", lambda df: df[df["EMA"] != df["Direction"]]),
+        ("EMA Counter", lambda df: df[df["EMA"] != df["Direction"]]),
         ("BOS Only", lambda df: df[df["BOS/CH"] == "BOS"]),
         ("CH Only", lambda df: df[df["BOS/CH"] == "CH"]),
-
-        # Risk Management (SL ranges)
-        # ("SL ≤ 2 pips", lambda df: df[df["SL"] <= 2]),
-        # ("SL ≤ 5 pips", lambda df: df[df["SL"] <= 5]),
-        # ("SL ≤ 10 pips", lambda df: df[df["SL"] <= 10]),
-        # ("SL ≤ 15 pips", lambda df: df[df["SL"] <= 15]),
 
         # 30M Trend Alignment
         ("30M Trend", lambda df: df[
@@ -43,10 +37,17 @@ def get_single_setup_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd
             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))
         ]),
 
-        # News Events
-        # ("No News", lambda df: df[df["News Event"].isna()]),
-        # ("With News", lambda df: df[~df["News Event"].isna()]),
-        # ("News > 2hrs", lambda df: df[(~df["News Event"].isna()) & (df["Hours Until News"] >= 2)]),
+        # NOTE: following are commented out because they produce 2-3 times less trades. All
+        # strategies above produce almost the same trades count, so this means that they
+        # could be compared with each other. More or less.
+        # ("30M Trend Continuation", lambda df: df[
+        #     (df["30M Leg"].isin(["Above H"]) & (df["Direction"] == "Buy")) |
+        #     (df["30M Leg"].isin(["Below L"]) & (df["Direction"] == "Sell"))
+        # ]),
+        # ("30M Trend Reversal", lambda df: df[
+        #     (df["30M Leg"].isin(["Below H"]) & (df["Direction"] == "Sell")) |
+        #     (df["30M Leg"].isin(["Above L"]) & (df["Direction"] == "Buy"))
+        # ]),
     ]
 
 
@@ -162,7 +163,7 @@ def _calculate_stats_for_strategy_and_rrr(
         'Outcome': f"{outcome}R",
         'Days': days_with_wins,
         'Days %': f"{days_percentage:.0f}%",
-        'Profit Factor': f"{profit_factor:.2f}" if profit_factor != float('inf') else "∞",
+        'Factor': f"{profit_factor:.2f}" if profit_factor != float('inf') else "∞",
         'edge_value': edge  # For sorting (will be dropped later)
     }
 
@@ -179,7 +180,7 @@ def _create_empty_stats(strategy_name: str, rrr_ratio: int, breakeven_rate: floa
         'Outcome': "0R",
         'Days': 0,
         'Days %': "0%",
-        'Profit Factor': "∞",
+        'Factor': "∞",
         'edge_value': -breakeven_rate
     }
 
