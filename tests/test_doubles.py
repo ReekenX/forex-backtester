@@ -385,15 +385,15 @@ def test_ema_with_news_filter():
 
 
 def test_sl_range_filter():
-    """Test 5 < SL < 10 range filter."""
+    """Test SL 5-10 range filter."""
     sample_data = get_sample_data()
     strategies = get_double_setup_strategies()
 
     # Find the strategy
-    strategy = [func for name, func in strategies if name == 'EMA Aligned + 5 < SL < 10'][0]
+    strategy = [func for name, func in strategies if name == 'EMA Aligned + SL 5-10'][0]
     filtered = strategy(sample_data)
 
-    # Should only have rows where EMA aligned AND 5 < SL < 10
+    # Should only have rows where EMA aligned AND SL 5-10
     assert len(filtered) >= 0
     for _, row in filtered.iterrows():
         assert row['EMA'] == row['Direction']

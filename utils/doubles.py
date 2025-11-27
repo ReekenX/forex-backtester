@@ -28,9 +28,10 @@ def get_double_setup_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd
     # EMA Aligned + various filters
     strategies.extend([
         ("EMA Aligned + SL < 10", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] < 10)]),
-        ("EMA Aligned + 5 < SL < 10", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] > 5) & (df["SL"] < 10)]),
-        ("EMA Aligned + SL > 2", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] > 2)]),
+        ("EMA Aligned + SL 5-10", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] > 5) & (df["SL"] < 10)]),
+        ("EMA Aligned + SL > 3", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] > 3)]),
         ("EMA Aligned + SL > 5", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] > 5)]),
+        ("EMA Aligned + SL < 5", lambda df: df[(df["EMA"] == df["Direction"]) & (df["SL"] < 5)]),
         ("EMA Aligned + No News", lambda df: df[(df["EMA"] == df["Direction"]) & df["News Event"].isna()]),
         ("EMA Aligned + With News", lambda df: df[(df["EMA"] == df["Direction"]) & (~df["News Event"].isna())]),
         ("EMA Aligned + 50% Pullback", lambda df: df[(df["EMA"] == df["Direction"]) & (df["Pullback"] >= df["SL"] * 0.5) & (df["Pullback"] >= 2)]),
@@ -45,20 +46,25 @@ def get_double_setup_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd
              (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
             (df["SL"] < 10)
         ]),
-        ("30M Trend + 5 < SL < 10", lambda df: df[
+        ("30M Trend + SL 5-10", lambda df: df[
             ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
              (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
             (df["SL"] > 5) & (df["SL"] < 10)
         ]),
-        ("30M Trend + SL > 2", lambda df: df[
+        ("30M Trend + SL > 3", lambda df: df[
             ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
              (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
-            (df["SL"] > 2)
+            (df["SL"] > 3)
         ]),
         ("30M Trend + SL > 5", lambda df: df[
             ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
              (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
             (df["SL"] > 5)
+        ]),
+        ("30M Trend + SL < 5", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["SL"] < 5)
         ]),
         ("30M Trend + No News", lambda df: df[
             ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
@@ -90,9 +96,10 @@ def get_double_setup_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd
     # BOS + various filters
     strategies.extend([
         ("BOS + SL < 10", lambda df: df[(df["BOS/CH"] == "BOS") & (df["SL"] < 10)]),
-        ("BOS + 5 < SL < 10", lambda df: df[(df["BOS/CH"] == "BOS") & (df["SL"] > 5) & (df["SL"] < 10)]),
-        ("BOS + SL > 2", lambda df: df[(df["BOS/CH"] == "BOS") & (df["SL"] > 2)]),
+        ("BOS + SL 5-10", lambda df: df[(df["BOS/CH"] == "BOS") & (df["SL"] > 5) & (df["SL"] < 10)]),
+        ("BOS + SL > 3", lambda df: df[(df["BOS/CH"] == "BOS") & (df["SL"] > 3)]),
         ("BOS + SL > 5", lambda df: df[(df["BOS/CH"] == "BOS") & (df["SL"] > 5)]),
+        ("BOS + SL < 5", lambda df: df[(df["BOS/CH"] == "BOS") & (df["SL"] < 5)]),
         ("BOS + No News", lambda df: df[(df["BOS/CH"] == "BOS") & df["News Event"].isna()]),
         ("BOS + With News", lambda df: df[(df["BOS/CH"] == "BOS") & (~df["News Event"].isna())]),
         ("BOS + 50% Pullback", lambda df: df[(df["BOS/CH"] == "BOS") & (df["Pullback"] >= df["SL"] * 0.5) & (df["Pullback"] >= 2)]),
