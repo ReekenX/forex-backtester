@@ -488,7 +488,9 @@ def analyze_30m_leg_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     # Add combination rows
     combinations = [
         ('Above H & Above L', ['Above H', 'Above L']),
-        ('Below H & Below L', ['Below H', 'Below L'])
+        ('Below H & Below L', ['Below H', 'Below L']),
+        ('Continuation', ['Above H', 'Below L']),
+        ('Reversal', ['Below H', 'Above L']),
     ]
 
     for combo_name, legs in combinations:
