@@ -121,6 +121,17 @@ This pattern ensures:
 - Simple, understandable code
 - Consistent project structure
 
+### Acceptance Criteria
+
+Before announcing that any feature or modification is complete and working:
+
+1. **All tests must pass** - Run the corresponding test module(s) and verify all tests succeed
+2. **Test execution** - Use `poetry run python tests/<module>.py` to run tests
+3. **No exceptions** - Tests must complete without errors or warnings
+4. **Test coverage** - All new functionality must have corresponding tests
+
+Only after all tests pass successfully should you confirm the work is complete. If any tests fail, fix the issues before announcing completion.
+
 ## Notebook Structure Guidelines
 
 ### labs/ Notebooks Requirements
