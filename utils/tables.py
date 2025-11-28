@@ -271,75 +271,6 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     return {"Pullback Analysis": final_table}
 
 
-def analyze_weekday_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
-    """
-    Analyze which weekdays produce the most profitable trades.
-
-    Creates a table showing wins, losses, and win percentage for each weekday
-    across different RRR ratios (1:1, 1:2, 1:3).
-
-    Args:
-        df: Trading data with Weekday, Pullback, TP, and SL columns
-
-    Returns:
-        Dictionary containing the weekday analysis DataFrame
-    """
-    # Work with copy of data
-    weekday_df = df.copy()
-
-    # Check if Weekday column exists
-    if 'Weekday' not in weekday_df.columns:
-        raise ValueError("No Weekday column found in data")
-
-    # Define proper weekday order
-    weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-
-    weekday_rows = []
-
-    for weekday in weekday_order:
-        # Filter trades for this weekday (skip if no data)
-        weekday_filtered = weekday_df[weekday_df['Weekday'] == weekday]
-
-        if len(weekday_filtered) == 0:
-            continue
-
-        for ratio, breakeven_rate in RRR_CONFIGS:
-            total_trades = len(weekday_filtered)
-
-            if total_trades > 0:
-                # Calculate wins based on RRR ratio
-                profitable = weekday_filtered[
-                    (weekday_filtered["SL"] != weekday_filtered["Pullback"])
-                    & (weekday_filtered["Pullback"] < weekday_filtered["SL"])
-                    & (weekday_filtered["TP"] >= (ratio * weekday_filtered["SL"]))
-                ]
-                wins = len(profitable)
-                losses = total_trades - wins
-                win_rate = wins / total_trades * 100
-                outcome = (wins * ratio) - losses
-            else:
-                wins = 0
-                losses = 0
-                win_rate = 0.0
-                outcome = 0
-
-            # Format weekday display - only show weekday on first RRR row
-            weekday_display = weekday if ratio == 1 else ''
-
-            weekday_rows.append({
-                'Weekday': weekday_display,
-                'RRR': f'1:{ratio}',
-                'Trades': total_trades,
-                'Wins': wins,
-                'Losses': losses,
-                'Outcome': f"{outcome}R",
-                'Win %': f"{win_rate:.1f}%"
-            })
-
-    final_table = pd.DataFrame(weekday_rows)
-    return {"Weekday Analysis": final_table}
-
-
 def analyze_30m_leg_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze which 30M Leg values produce the most profitable trades.
@@ -1482,19 +1413,6 @@ def get_top_strategies_by_edge(
 # ============================================================================
 # VISUALIZATION AND DISPLAY FUNCTIONS
 # ============================================================================
-
-
-def display_weekday_analysis(df: pd.DataFrame):
-    """Display weekday profitability analysis with proper formatting."""
-    from IPython.display import display, HTML
-
-    display(HTML("<h2>Weekday Analysis</h2>"))
-    weekday_tables = analyze_weekday_profitability(df)
-
-    for table_name, table_df in weekday_tables.items():
-        html_table = create_sortable_table(table_df)
-        display(HTML(html_table))
-        print('')
 
 
 def display_30m_leg_analysis(df: pd.DataFrame):
