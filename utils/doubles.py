@@ -2,7 +2,9 @@
 Double Setup Strategy Analysis Module
 
 This module provides functions to analyze trading strategies that combine
-exactly two factors (EMA + filters, 30M Trend + filters, BOS + filters).
+two or three factors:
+- Double combinations: EMA + filters, 30M Trend + filters, BOS + filters
+- Triple combinations: EMA + 30M Trend + filters, EMA + BOS + filters, 30M Trend + BOS + filters
 """
 
 import pandas as pd
@@ -11,14 +13,18 @@ from typing import Dict, List, Tuple, Callable
 
 # Risk-Reward Ratio configurations with breakeven win rates
 RRR_RATIOS: List[Tuple[int, float]] = [
-    (2, 33.3),  # 1:2 RRR - need 33.3% win rate to break even
+    # (2, 33.3),  # 1:2 RRR - need 33.3% win rate to break even
     (3, 25.0),  # 1:3 RRR - need 25% win rate to break even
 ]
 
 
 def get_double_setup_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]:
     """
-    Get list of double setup strategy definitions (exactly 2 factors combined).
+    Get list of double and triple setup strategy definitions.
+
+    Includes:
+    - Double combinations (2 factors): EMA + filters, 30M Trend + filters, BOS + filters
+    - Triple combinations (3 factors): EMA + 30M Trend + filters, EMA + BOS + filters, 30M Trend + BOS + filters
 
     Returns:
         List of tuples (strategy_name, filter_function)
@@ -105,6 +111,212 @@ def get_double_setup_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd
         ("BOS + 50% Pullback", lambda df: df[(df["BOS/CH"] == "BOS") & (df["Pullback"] >= df["SL"] * 0.5) & (df["Pullback"] >= 2)]),
         ("BOS + 1 pip Pullback", lambda df: df[(df["BOS/CH"] == "BOS") & (df["Pullback"] >= 1)]),
         ("BOS + 80% Pullback", lambda df: df[(df["BOS/CH"] == "BOS") & (df["Pullback"] >= df["SL"] * 0.8)]),
+    ])
+
+    # EMA + 30M Trend + various filters
+    strategies.extend([
+        ("EMA + 30M Trend + SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["SL"] < 10)
+        ]),
+        ("EMA + 30M Trend + SL 5-10", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("EMA + 30M Trend + SL > 3", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["SL"] > 3)
+        ]),
+        ("EMA + 30M Trend + SL > 5", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["SL"] > 5)
+        ]),
+        ("EMA + 30M Trend + SL < 5", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["SL"] < 5)
+        ]),
+        ("EMA + 30M Trend + No News", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            df["News Event"].isna()
+        ]),
+        ("EMA + 30M Trend + With News", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (~df["News Event"].isna())
+        ]),
+        ("EMA + 30M Trend + 50% Pullback", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["Pullback"] >= df["SL"] * 0.5) & (df["Pullback"] >= 2)
+        ]),
+        ("EMA + 30M Trend + 1 pip Pullback", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["Pullback"] >= 1)
+        ]),
+        ("EMA + 30M Trend + 80% Pullback", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["Pullback"] >= df["SL"] * 0.8)
+        ]),
+    ])
+
+    # EMA + BOS + various filters
+    strategies.extend([
+        ("EMA + BOS + SL < 10", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] < 10)
+        ]),
+        ("EMA + BOS + SL 5-10", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("EMA + BOS + SL > 3", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 3)
+        ]),
+        ("EMA + BOS + SL > 5", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 5)
+        ]),
+        ("EMA + BOS + SL < 5", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] < 5)
+        ]),
+        ("EMA + BOS + No News", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            (df["BOS/CH"] == "BOS") &
+            df["News Event"].isna()
+        ]),
+        ("EMA + BOS + With News", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            (df["BOS/CH"] == "BOS") &
+            (~df["News Event"].isna())
+        ]),
+        ("EMA + BOS + 50% Pullback", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            (df["BOS/CH"] == "BOS") &
+            (df["Pullback"] >= df["SL"] * 0.5) & (df["Pullback"] >= 2)
+        ]),
+        ("EMA + BOS + 1 pip Pullback", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            (df["BOS/CH"] == "BOS") &
+            (df["Pullback"] >= 1)
+        ]),
+        ("EMA + BOS + 80% Pullback", lambda df: df[
+            (df["EMA"] == df["Direction"]) &
+            (df["BOS/CH"] == "BOS") &
+            (df["Pullback"] >= df["SL"] * 0.8)
+        ]),
+    ])
+
+    # 30M Trend + BOS + various filters
+    strategies.extend([
+        ("30M Trend + BOS + SL < 10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] < 10)
+        ]),
+        ("30M Trend + BOS + SL 1-10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 1) & (df["SL"] < 10)
+        ]),
+        ("30M Trend + BOS + SL 2-10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 2) & (df["SL"] < 10)
+        ]),
+        ("30M Trend + BOS + SL 3-10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 3) & (df["SL"] < 10)
+        ]),
+        ("30M Trend + BOS + SL 4-10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 4) & (df["SL"] < 10)
+        ]),
+        ("30M Trend + BOS + SL 5-10", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 5) & (df["SL"] < 10)
+        ]),
+        ("30M Trend + BOS + SL > 3", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 3)
+        ]),
+        ("30M Trend + BOS + SL > 5", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] > 5)
+        ]),
+        ("30M Trend + BOS + SL < 5", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") &
+            (df["SL"] < 5)
+        ]),
+        ("30M Trend + BOS + No News", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") &
+            df["News Event"].isna()
+        ]),
+        ("30M Trend + BOS + With News", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") &
+            (~df["News Event"].isna())
+        ]),
+        ("30M Trend + BOS + 50% Pullback", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") &
+            (df["Pullback"] >= df["SL"] * 0.5) & (df["Pullback"] >= 2)
+        ]),
+        ("30M Trend + BOS + 1 pip Pullback", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") &
+            (df["Pullback"] >= 1)
+        ]),
+        ("30M Trend + BOS + 80% Pullback", lambda df: df[
+            ((df["30M Leg"].isin(["Above H", "Above L"]) & (df["Direction"] == "Buy")) |
+             (df["30M Leg"].isin(["Below H", "Below L"]) & (df["Direction"] == "Sell"))) &
+            (df["BOS/CH"] == "BOS") &
+            (df["Pullback"] >= df["SL"] * 0.8)
+        ]),
     ])
 
     return strategies
