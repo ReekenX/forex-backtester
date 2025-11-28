@@ -2,8 +2,13 @@ name: forex-backtester
 
 startup_window: shell
 
+on_project_start:
+  - git stash
+  - git pull
+  - git stash pop
+
 windows:
   - shell:
   - claude:
-      - alias run="tmux rename-window -t\${TMUX_PANE} 'claude'; clear; claude --dangerously-skip-permissions; tmux rename-window -t\${TMUX_PANE} '🔴 claude'"
+      - alias run="while true; do tmux rename-window -t\${TMUX_PANE} 'claude'; clear; claude --dangerously-skip-permissions; tmux rename-window -t\${TMUX_PANE} '🔴 claude'; sleep 1; done"
       - run
