@@ -8,7 +8,12 @@ on_project_start:
   - git stash pop
 
 windows:
+  - editor: nvim .
   - shell:
   - claude:
       - alias run="while true; do tmux rename-window -t\${TMUX_PANE} 'claude'; clear; claude --dangerously-skip-permissions; tmux rename-window -t\${TMUX_PANE} '🔴 claude'; sleep 1; done"
+      - run
+  - git: lazygit
+  - webserver:
+      - alias run="poetry run jupyter notebook"
       - run
