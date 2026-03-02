@@ -1,87 +1,26 @@
-# CLAUDE.md
+# AI Rules
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+A Jupyter-based project for analyzing and backtesting forex trading data.
 
-## Important: Read README.md First
+## Background
 
-Always read the README.md file for complete project information including installation, usage, data format specifications, and commit conventions.
+Forex trader trades EURUSD at London Session with one strategy consistently and stores trade data in a CSV file at `data/eurusd_2026_1m_confirmation_candle.csv`
 
-## Project Focus
+### Trading Data CSV Fields
 
-This project uses a modular structure with specialized Jupyter notebooks and utility modules:
+1. SL column is a number in pips that was from entry signal to "safe stop"
+2. Pullback column is a number of pips that trade reached after entry and before reaching TP
+3. TP column is a number in pips that trade could have reached
+4. Empty TP column means that trade was not profitable
+5. If Pullback equals SL, it means that trade was an immediate loss
+6. If Pullback is higher than SL, it means that overall trade could have been profitable but a higher SL was needed than "safe stop"
+7. R column (if not empty) is a number of how many R's this trade achieved (e.g., 10 pips for TP and 3 pips for SL would have achieved 10/3=3 R)
+8. Minimum broker SL is 1.1 pips
+9. Win condition: TP > (RRR ratio × SL)
 
-**Jupyter Notebooks (labs/ directory):**
-- **tables.ipynb** - Deep strategy analysis and customization testing
-- **charts.ipynb** - Visualization of profitable strategies
-- **export.ipynb** - CSV data export functionality
-- **correlations.ipynb** - Correlation analysis (e.g., SL size vs Win Rate)
-- **optimizer.ipynb** - Meta Trader-style exhaustive strategy optimization
-- **hours.ipynb** - Hour-by-hour trading performance analysis
-- **ema.ipynb** - EMA-based strategy analysis
+**Example 1**: SL 3.1 pips, Pullback 2.4 pips and TP 10 pips. When entering a position, safe stop loss was 3.1 pips away from entry. Then price at some point went 2.4 pips against the entry but later recovered and shot 10 pips from entry. Total reward (R) was 10/3.1=3R.
 
-**Utility Modules (utils/ package):**
-- **tables.py** - Analysis functions for strategy evaluation
-- **charts.py** - Charting and visualization functions
-- **export.py** - Data export utilities
-- **correlations.py** - Correlation analysis functions
-- **optimizer.py** - Combinatorial strategy optimizer (Meta Trader-style)
-- **hours.py** - Hour analysis functions
-- **ema.py** - EMA strategy analysis functions
-
-**Test Modules (tests/ directory):**
-- **hours.py** - Tests for hours analysis module
-- **ema.py** - Tests for EMA analysis module
-
-If you need to run any commands, like `jupyter`, then prefix it with `poetry run`. For example: `poetry run jupyter notebook labs/tables.ipynb`
-
-## Architecture and Key Components
-
-### Core Package: utils/
-
-The utils package contains all backtesting logic organized into specialized modules:
-
-1. **Data Loading** (`load_and_clean_data`): Handles CSV loading and NaN cleanup
-
-2. **Strategy Framework**:
-   - `Strategy` class: Encapsulates filtering logic and metadata
-   - `create_strategy_library()`: Generates 50+ predefined strategies across categories:
-     - Technical indicators (EMA, BOS/CH combinations)
-     - Risk management (SL-based filters)
-     - 30M timeframe trend alignment
-     - News event filters
-     - Multi-factor combinations
-
-3. **Risk-Reward Analysis**:
-   - `calculate_rrr_stats()`: Computes metrics for 1:1, 1:2, 1:3 RRR
-   - Win rate, edge (above breakeven), and outcome calculations
-   - Support for three entry methods: 1M CC, 5M CC, 5M Stop
-
-4. **Specialized Analyzers**:
-   - `analyze_entry_timing_detailed()`: Compares entry method effectiveness
-   - `analyze_pullback_profitability()`: Evaluates pullback impact
-   - `analyze_sl_reduction_profitability()`: Tests stop loss optimization
-
-5. **Performance Evaluation**:
-   - `evaluate_all_strategies()`: Batch processes all strategies
-   - `get_top_strategies_by_edge()`: Ranks strategies by profitability edge
-
-6. **Strategy Optimizer** (utils/optimizer.py):
-   - `FilterDimension`: Defines filter dimensions with multiple options
-   - `create_filter_dimensions()`: Creates all available filter dimensions (EMA, BOS/CH, SL, News, Hour, Weekday, etc.)
-   - `generate_all_combinations()`: Generates Cartesian product of all filter combinations
-   - `optimize_strategies()`: Exhaustively backtests all strategy combinations
-   - `display_optimization_results()`: Shows results in sortable HTML tables
-   - `export_optimization_results()`: Exports results to CSV (Meta Trader format)
-
-
-### Trading Logic Constraints
-
-1. Pullback == SL means instant loss
-2. Minimum broker SL is 1.1 pips
-3. Win condition: TP > (RRR ratio × SL) and Pullback < SL
-4. 30M trend alignment:
-   - Buy trend: "Above H" or "Above L"
-   - Sell trend: "Below H" or "Below L"
+**Example 2**: SL 2.1 pips, Pullback 3.4 pips and TP 10 pips. This trade would be a loss, but only if the safe stop had been higher - it would have been a winner.
 
 ## Development Flow for New Features
 
@@ -91,7 +30,7 @@ When building new analysis features, always follow this three-file pattern:
 - **Purpose**: Clean, minimal interface for users
 - **Content**: Only imports and function calls
 - **Example**: `labs/hours.ipynb`
-- Keep code to minimum - just load data and call display functions
+- Keep code to a minimum - just load data and call display functions
 
 ### 2. Python Module (utils/*.py)
 - **Purpose**: All business logic and calculations
