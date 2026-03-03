@@ -138,3 +138,34 @@ All analysis tables should follow this standardized column format:
 - **Days %**: `(Days with wins / Total trading days) * 100`
 - Trading days are counted from the filtered dataset, not calendar days
 
+## Previewing Lab Data
+
+To view analysis results from a notebook without opening Jupyter, run the underlying Python functions directly:
+
+```bash
+poetry run python -c "
+import pandas as pd
+from utils.confirmation_candle import load_data, calculate_buffer_statistics
+
+df = load_data('data/eurusd_2026_1m_confirmation_candle.csv')
+stats = calculate_buffer_statistics(df)
+pd.set_option('display.max_rows', None)
+pd.set_option('display.width', 200)
+print(stats.to_string(index=False))
+"
+```
+
+Each lab notebook has a corresponding utils module. To preview any lab's data:
+1. Find the utils module it imports (e.g., `labs/hours.ipynb` → `utils/hours.py`)
+2. Call the calculation functions directly with the CSV path relative to project root (not `../data/` as notebooks use)
+3. Use pandas display options for readable terminal output
+
+Filter results as needed:
+```python
+# Show only specific strategies
+filtered = stats[stats['Strategy'].str.contains('EMA')]
+
+# Show top N rows
+print(stats.head(20).to_string(index=False))
+```
+
