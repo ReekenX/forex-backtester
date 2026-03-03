@@ -1,7 +1,7 @@
 """
-1M Confirmation Candle Direction Analysis Module
+1M Confirmation Candle Analysis Module
 
-Analyzes trading strategies based on trade direction alignment with EMA(50) and EMA(200).
+Analyzes trading strategies based on EMA(50) and EMA(200) alignment.
 All strategies are evaluated at fixed 1:1 RRR only.
 
 CSV columns: Date, Weekday, Trade, Direction, EMA(50), EMA(200), SL, Pullback, TP, R
@@ -40,7 +40,7 @@ def load_data(filepath: str = "../data/eurusd_2026_1m_confirmation_candle.csv") 
 
 def get_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]:
     """
-    Get all direction-based strategy definitions.
+    Get all strategy definitions.
 
     Returns:
         List of tuples (strategy_name, filter_function)
@@ -175,7 +175,7 @@ def get_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]
 
 def calculate_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate statistics for all direction strategies at 1:1 RRR.
+    Calculate statistics for all strategies at 1:1 RRR.
 
     Args:
         df: DataFrame with trading data
@@ -282,11 +282,11 @@ def create_html_table(df: pd.DataFrame) -> str:
         HTML string with styled table
     """
     if df.empty:
-        return "<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable direction strategies found at 1:1 RRR</p>"
+        return "<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable strategies found at 1:1 RRR</p>"
 
     html = """
     <style>
-        .direction-analysis-table {
+        .analysis-table {
             border-collapse: collapse;
             width: 100%;
             background-color: #1e1e1e;
@@ -294,7 +294,7 @@ def create_html_table(df: pd.DataFrame) -> str:
             font-family: 'Courier New', monospace;
             font-size: 12px;
         }
-        .direction-analysis-table th {
+        .analysis-table th {
             background-color: #2d2d2d;
             color: #e0e0e0;
             padding: 8px;
@@ -302,14 +302,14 @@ def create_html_table(df: pd.DataFrame) -> str:
             border: 1px solid #404040;
             font-weight: bold;
         }
-        .direction-analysis-table td {
+        .analysis-table td {
             padding: 6px 8px;
             border: 1px solid #404040;
         }
-        .direction-analysis-table tr:hover {
+        .analysis-table tr:hover {
             background-color: #2a2a2a;
         }
-        .direction-strategy-col {
+        .strategy-col {
             width: 300px;
         }
         .positive-edge {
@@ -319,13 +319,13 @@ def create_html_table(df: pd.DataFrame) -> str:
             color: #f87171;
         }
     </style>
-    <table class="direction-analysis-table">
+    <table class="analysis-table">
         <thead>
             <tr>
     """
 
     for col in df.columns:
-        cls = ' class="direction-strategy-col"' if col == "Strategy" else ""
+        cls = ' class="strategy-col"' if col == "Strategy" else ""
         html += f"<th{cls}>{col}</th>"
     html += """
             </tr>
@@ -340,7 +340,7 @@ def create_html_table(df: pd.DataFrame) -> str:
             css_class = ""
 
             if col == "Strategy":
-                css_class = "direction-strategy-col"
+                css_class = "strategy-col"
             elif col == "Edge":
                 try:
                     edge_val = float(str(value).replace("%", ""))
@@ -510,9 +510,9 @@ def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return result_df
 
 
-def display_direction_analysis(df: pd.DataFrame):
+def display_analysis(df: pd.DataFrame):
     """
-    Display direction strategy analysis with SL buffers in a single table.
+    Display strategy analysis with SL buffers in a single table.
 
     Shows each strategy at every buffer level (0, 0.5, 1.0, ..., 5.0 pips).
     Buffer 0 means no extra pips added to SL (original strategy).
@@ -529,13 +529,13 @@ def display_direction_analysis(df: pd.DataFrame):
         .output_scroll { box-shadow: none !important; border: none !important; }
     </style>"""))
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>1M Confirmation Candle Direction Analysis (1:1 RRR)</h2>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>1M Confirmation Candle Analysis (1:1 RRR)</h2>"
     display(HTML(title_html))
 
     stats_df = calculate_buffer_statistics(df)
 
     if stats_df.empty:
-        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable direction strategies found at 1:1 RRR</p>"))
+        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable strategies found at 1:1 RRR</p>"))
     else:
         html_table = create_html_table(stats_df)
         display(HTML(html_table))

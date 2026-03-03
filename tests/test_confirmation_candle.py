@@ -1,15 +1,15 @@
 """
-Tests for utils.direction module
+Tests for utils.confirmation_candle module
 
-These tests use a small dataset of 10 rows to verify the direction analysis functionality.
-Run with: poetry run python tests/test_direction.py
+These tests use a small dataset of 10 rows to verify the analysis functionality.
+Run with: poetry run python tests/test_confirmation_candle.py
 """
 
 import pandas as pd
 import sys
 sys.path.insert(0, '.')
 
-from utils.direction import (
+from utils.confirmation_candle import (
     calculate_statistics,
     calculate_buffer_statistics,
     create_html_table,
@@ -310,13 +310,13 @@ def test_create_html_table_basic():
     html = create_html_table(stats)
 
     assert '<table' in html
-    assert 'direction-analysis-table' in html
+    assert 'analysis-table' in html
 
 
 def test_create_html_table_empty():
     """Test HTML table with empty data."""
     html = create_html_table(pd.DataFrame())
-    assert 'No profitable direction strategies found' in html
+    assert 'No profitable strategies found' in html
 
 
 def test_emas_agree_filter():
