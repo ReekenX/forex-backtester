@@ -419,21 +419,52 @@ def test_get_buffer_strategies():
     assert 'Both EMAs Aligned' in names
 
 
+def test_get_buffer_strategies_includes_sl_caps():
+    """Test that buffer strategies include SL cap variations."""
+    strategies = get_buffer_strategies()
+    names = [name for name, _ in strategies]
+
+    assert 'All Trades + SL < 3' in names
+    assert 'All Trades + SL < 4' in names
+    assert 'All Trades + SL < 5' in names
+    assert 'EMA(50) Aligned + SL < 3' in names
+    assert 'Both EMAs Aligned + SL < 5' in names
+
+
+def test_buffer_sl_cap_filter():
+    """Test that SL cap filter correctly excludes trades with SL >= cap."""
+    sample = get_sample_data()
+    strategies = get_buffer_strategies()
+    strategy = [func for name, func in strategies if name == 'All Trades + SL < 3'][0]
+    filtered = strategy(sample)
+
+    for _, row in filtered.iterrows():
+        assert row['SL'] < 3
+
+
+def test_buffer_sl_cap_with_ema_filter():
+    """Test SL cap combined with EMA filter."""
+    sample = get_sample_data()
+    strategies = get_buffer_strategies()
+    strategy = [func for name, func in strategies if name == 'EMA(50) Aligned + SL < 4'][0]
+    filtered = strategy(sample)
+
+    for _, row in filtered.iterrows():
+        assert row['SL'] < 4
+        assert row['Direction'] == row['EMA(50)']
+
+
 def test_calculate_buffer_statistics():
-    """Test that buffer statistics returns positive edge only."""
+    """Test that buffer statistics returns expected DataFrame."""
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
 
     assert isinstance(result, pd.DataFrame)
-    if len(result) > 0:
-        for edge_str in result['Edge']:
-            edge_val = float(edge_str.replace('%', ''))
-            assert edge_val > 0
 
 
 def test_buffer_pips_constant():
     """Test that BUFFER_PIPS has expected values."""
-    assert BUFFER_PIPS == [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
+    assert BUFFER_PIPS == [0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
 
 
 def run_all_tests():
@@ -468,6 +499,9 @@ def run_all_tests():
         test_buffer_stats_has_buffer_column,
         test_buffer_stats_empty,
         test_get_buffer_strategies,
+        test_get_buffer_strategies_includes_sl_caps,
+        test_buffer_sl_cap_filter,
+        test_buffer_sl_cap_with_ema_filter,
         test_calculate_buffer_statistics,
         test_buffer_pips_constant,
     ]

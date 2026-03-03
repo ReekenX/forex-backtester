@@ -1,10 +1,14 @@
 # AI Rules
 
-A Jupyter-based project for analyzing and backtesting forex trading data.
+A Jupyter-based project for analyzing and backtesting Forex trading data in `data/eurusd_2026_1m_confirmation_candle.csv`.
 
-## Background
+## Background About Trades
 
-Forex trader trades EURUSD at London Session with one strategy consistently and stores trade data in a CSV file at `data/eurusd_2026_1m_confirmation_candle.csv`
+This CSV file contains real trading data.
+
+It is EURUSD currency traded during London session.
+
+One strategy is being tested – 15 minute market structure following and execution on 1 minute confirmation candle.
 
 ### Trading Data CSV Fields
 

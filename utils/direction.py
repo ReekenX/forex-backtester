@@ -435,7 +435,7 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
     Returns:
         List of tuples (strategy_name, filter_function)
     """
-    return [
+    base_strategies = [
         ("All Trades", lambda df: df),
         ("Buy Only", lambda df: df[df["Direction"] == "Buy"]),
         ("Sell Only", lambda df: df[df["Direction"] == "Sell"]),
@@ -456,6 +456,18 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
             (df["EMA(50)"] == df["EMA(200)"]) & (df["Direction"] != df["EMA(50)"])
         ]),
     ]
+
+    sl_caps = [3, 4, 5]
+    strategies = list(base_strategies)
+
+    for name, base_func in base_strategies:
+        for cap in sl_caps:
+            strategies.append((
+                f"{name} + SL < {cap}",
+                lambda df, f=base_func, c=cap: f(df[df["SL"] < c])
+            ))
+
+    return strategies
 
 
 def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
