@@ -2,7 +2,7 @@
 1M Confirmation Candle Analysis Module
 
 Analyzes trading strategies based on EMA(50) and EMA(200) alignment.
-All strategies are evaluated at fixed 1:1 RRR only.
+All strategies are evaluated at 1:1 and 1:2 RRR.
 
 CSV columns: Date, Weekday, Trade, Direction, EMA(50), EMA(200), SL, Pullback, TP, R
 """
@@ -11,9 +11,8 @@ import pandas as pd
 from typing import Dict, List, Tuple, Callable
 
 
-# Fixed 1:1 RRR
-RRR_RATIO = 1
-BREAKEVEN_RATE = 50.0
+# RRR ratios to test
+RRR_RATIOS = [1, 2]
 
 # Extra pip buffer values to test
 BUFFER_PIPS = [0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
@@ -175,7 +174,7 @@ def get_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]
 
 def calculate_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate statistics for all strategies at 1:1 RRR.
+    Calculate statistics for all strategies at 1:1 and 1:2 RRR.
 
     Args:
         df: DataFrame with trading data
@@ -188,8 +187,9 @@ def calculate_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
     for strategy_name, filter_func in strategies:
         filtered_df = filter_func(df)
-        stats = _calculate_stats(filtered_df, strategy_name)
-        results.append(stats)
+        for rrr in RRR_RATIOS:
+            stats = _calculate_stats(filtered_df, strategy_name, rrr)
+            results.append(stats)
 
     result_df = pd.DataFrame(results)
 
@@ -208,45 +208,64 @@ def calculate_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return result_df
 
 
-def _calculate_stats(trades: pd.DataFrame, strategy_name: str) -> Dict:
+def _breakeven_rate(rrr_ratio: int) -> float:
     """
-    Calculate trading statistics for a strategy at 1:1 RRR.
+    Calculate the breakeven win rate for a given RRR ratio.
+
+    For 1:N RRR, breakeven = 100 / (1 + N).
+    1:1 → 50%, 1:2 → 33.3%.
+
+    Args:
+        rrr_ratio: The reward multiplier (1 for 1:1, 2 for 1:2)
+
+    Returns:
+        Breakeven win rate as a percentage
+    """
+    return 100.0 / (1 + rrr_ratio)
+
+
+def _calculate_stats(trades: pd.DataFrame, strategy_name: str, rrr_ratio: int = 1) -> Dict:
+    """
+    Calculate trading statistics for a strategy at a given RRR.
 
     Args:
         trades: DataFrame containing filtered trades
         strategy_name: Name of the strategy
+        rrr_ratio: Risk-reward ratio (1 for 1:1, 2 for 1:2)
 
     Returns:
         Dictionary with calculated statistics
     """
+    breakeven = _breakeven_rate(rrr_ratio)
+    rrr_label = f"1:{rrr_ratio}"
     total_trades = len(trades)
 
     if total_trades == 0:
         return {
             "Strategy": strategy_name,
-            "RRR": "1:1",
+            "RRR": rrr_label,
             "Trades": 0,
             "Notation": "0W – 0L",
             "Win Rate": "0.0%",
             "Outcome": "0R",
-            "Edge": f"{-BREAKEVEN_RATE:.1f}%",
+            "Edge": f"{-breakeven:.1f}%",
             "Days": 0,
             "Days %": "0%",
             "Trades Required": "N/A",
-            "edge_value": -BREAKEVEN_RATE,
+            "edge_value": -breakeven,
         }
 
-    # Win condition for 1:1 RRR: Pullback < SL AND TP >= SL
+    # Win condition: Pullback < SL AND TP >= rrr_ratio * SL
     winning_trades = trades[
         (trades["Pullback"] < trades["SL"]) &
-        (trades["TP"] >= RRR_RATIO * trades["SL"])
+        (trades["TP"] >= rrr_ratio * trades["SL"])
     ]
 
     wins = len(winning_trades)
     losses = total_trades - wins
     win_rate = (wins / total_trades) * 100
-    edge = win_rate - BREAKEVEN_RATE
-    outcome = (wins * RRR_RATIO) - losses
+    edge = win_rate - breakeven
+    outcome = (wins * rrr_ratio) - losses
 
     # Days with wins
     days_with_wins = winning_trades["Date"].nunique() if "Date" in winning_trades.columns and len(winning_trades) > 0 else 0
@@ -258,7 +277,7 @@ def _calculate_stats(trades: pd.DataFrame, strategy_name: str) -> Dict:
 
     return {
         "Strategy": strategy_name,
-        "RRR": "1:1",
+        "RRR": rrr_label,
         "Trades": total_trades,
         "Notation": f"{wins}W – {losses}L",
         "Win Rate": f"{win_rate:.1f}%",
@@ -282,7 +301,7 @@ def create_html_table(df: pd.DataFrame) -> str:
         HTML string with styled table
     """
     if df.empty:
-        return "<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable strategies found at 1:1 RRR</p>"
+        return "<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable strategies found</p>"
 
     html = """
     <style>
@@ -359,52 +378,55 @@ def create_html_table(df: pd.DataFrame) -> str:
     return html
 
 
-def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffer: float) -> Dict:
+def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffer: float, rrr_ratio: int = 1) -> Dict:
     """
     Calculate trading statistics with extra pips added to SL.
 
     With buffer, effective SL = SL + buffer. Trade survives if Pullback < effective SL.
-    At 1:1 RRR, trade wins if TP >= effective SL.
+    Trade wins if TP >= rrr_ratio * effective SL.
 
     Args:
         trades: DataFrame containing filtered trades
         strategy_name: Name of the strategy
         buffer: Extra pips to add to SL
+        rrr_ratio: Risk-reward ratio (1 for 1:1, 2 for 1:2)
 
     Returns:
         Dictionary with calculated statistics
     """
+    breakeven = _breakeven_rate(rrr_ratio)
+    rrr_label = f"1:{rrr_ratio}"
     total_trades = len(trades)
 
     if total_trades == 0:
         return {
             "Strategy": strategy_name,
             "Buffer": f"+{buffer}",
-            "RRR": "1:1",
+            "RRR": rrr_label,
             "Trades": 0,
             "Notation": "0W – 0L",
             "Win Rate": "0.0%",
             "Outcome": "0R",
-            "Edge": f"{-BREAKEVEN_RATE:.1f}%",
+            "Edge": f"{-breakeven:.1f}%",
             "Days": 0,
             "Days %": "0%",
             "Trades Required": "N/A",
-            "edge_value": -BREAKEVEN_RATE,
+            "edge_value": -breakeven,
         }
 
     effective_sl = trades["SL"] + buffer
 
-    # Win condition with buffer: Pullback < effective_sl AND TP >= effective_sl
+    # Win condition with buffer: Pullback < effective_sl AND TP >= rrr_ratio * effective_sl
     winning_trades = trades[
         (trades["Pullback"] < effective_sl) &
-        (trades["TP"] >= RRR_RATIO * effective_sl)
+        (trades["TP"] >= rrr_ratio * effective_sl)
     ]
 
     wins = len(winning_trades)
     losses = total_trades - wins
     win_rate = (wins / total_trades) * 100
-    edge = win_rate - BREAKEVEN_RATE
-    outcome = (wins * RRR_RATIO) - losses
+    edge = win_rate - breakeven
+    outcome = (wins * rrr_ratio) - losses
 
     days_with_wins = winning_trades["Date"].nunique() if "Date" in winning_trades.columns and len(winning_trades) > 0 else 0
     total_days = trades["Date"].nunique() if "Date" in trades.columns else 0
@@ -415,7 +437,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
     return {
         "Strategy": strategy_name,
         "Buffer": f"+{buffer}",
-        "RRR": "1:1",
+        "RRR": rrr_label,
         "Trades": total_trades,
         "Notation": f"{wins}W – {losses}L",
         "Win Rate": f"{win_rate:.1f}%",
@@ -472,26 +494,26 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
 
 def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate statistics for key strategies with each SL buffer value.
+    Calculate statistics for key strategies with each SL buffer value at 1:1 and 1:2 RRR.
 
-    For each strategy, tests what happens if extra pips (0.5, 1, 1.5, 2, 3, 4, 5)
-    are added to the SL. A wider SL means more trades survive but the 1:1 target
-    is also higher.
+    For each strategy, tests what happens if extra pips (0, 0.5, 1, 1.5, 2, 3, 4, 5)
+    are added to the SL. A wider SL means more trades survive but the target is also higher.
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with buffer statistics, sorted by edge descending, positive edge only
+        DataFrame with buffer statistics, sorted by edge descending
     """
     strategies = get_buffer_strategies()
     results = []
 
     for strategy_name, filter_func in strategies:
         filtered_df = filter_func(df)
-        for buffer in BUFFER_PIPS:
-            stats = _calculate_stats_with_buffer(filtered_df, strategy_name, buffer)
-            results.append(stats)
+        for rrr in RRR_RATIOS:
+            for buffer in BUFFER_PIPS:
+                stats = _calculate_stats_with_buffer(filtered_df, strategy_name, buffer, rrr)
+                results.append(stats)
 
     result_df = pd.DataFrame(results)
 
@@ -529,13 +551,13 @@ def display_analysis(df: pd.DataFrame):
         .output_scroll { box-shadow: none !important; border: none !important; }
     </style>"""))
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>1M Confirmation Candle Analysis (1:1 RRR)</h2>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>1M Confirmation Candle Analysis (1:1 & 1:2 RRR)</h2>"
     display(HTML(title_html))
 
     stats_df = calculate_buffer_statistics(df)
 
     if stats_df.empty:
-        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable strategies found at 1:1 RRR</p>"))
+        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable strategies found</p>"))
     else:
         html_table = create_html_table(stats_df)
         display(HTML(html_table))

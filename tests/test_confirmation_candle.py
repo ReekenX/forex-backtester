@@ -17,8 +17,8 @@ from utils.confirmation_candle import (
     get_buffer_strategies,
     _calculate_stats,
     _calculate_stats_with_buffer,
-    RRR_RATIO,
-    BREAKEVEN_RATE,
+    _breakeven_rate,
+    RRR_RATIOS,
     BUFFER_PIPS,
 )
 
@@ -462,9 +462,110 @@ def test_calculate_buffer_statistics():
     assert isinstance(result, pd.DataFrame)
 
 
+def test_calculate_buffer_statistics_has_both_rrr():
+    """Test that buffer statistics includes both 1:1 and 1:2 RRR rows."""
+    sample = get_sample_data()
+    result = calculate_buffer_statistics(sample)
+
+    rrr_values = result['RRR'].unique()
+    assert '1:1' in rrr_values
+    assert '1:2' in rrr_values
+
+
 def test_buffer_pips_constant():
     """Test that BUFFER_PIPS has expected values."""
     assert BUFFER_PIPS == [0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
+
+
+def test_rrr_ratios_constant():
+    """Test that RRR_RATIOS has expected values."""
+    assert RRR_RATIOS == [1, 2]
+
+
+def test_breakeven_rate():
+    """Test breakeven rate calculation for different RRR ratios."""
+    assert _breakeven_rate(1) == 50.0
+    assert abs(_breakeven_rate(2) - 33.333) < 0.01
+
+
+def test_1_2_rrr_win_condition():
+    """Test win condition at 1:2 RRR: Pullback < SL AND TP >= 2 * SL."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02', '2026-01-03'],
+        'SL': [5.0, 5.0, 5.0],
+        'Pullback': [2.0, 2.0, 2.0],
+        'TP': [9.9, 10.0, 15.0],
+    })
+
+    stats = _calculate_stats(trades, 'Test', rrr_ratio=2)
+
+    # Trade 1: TP(9.9) < 2*SL(10) => LOSS
+    # Trade 2: TP(10.0) >= 2*SL(10) => WIN
+    # Trade 3: TP(15.0) >= 2*SL(10) => WIN
+    assert stats['Notation'] == '2W – 1L'
+    assert stats['RRR'] == '1:2'
+
+
+def test_1_2_rrr_edge_calculation():
+    """Test edge calculation at 1:2 RRR: edge = win_rate - 33.3%."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02', '2026-01-03'],
+        'SL': [5.0, 5.0, 5.0],
+        'Pullback': [2.0, 2.0, 6.0],
+        'TP': [10.0, 10.0, 10.0],
+    })
+
+    stats = _calculate_stats(trades, 'Test', rrr_ratio=2)
+
+    # 2 wins out of 3 = 66.7% win rate
+    # Breakeven at 1:2 = 33.3%
+    # Edge = 66.7% - 33.3% = 33.3%
+    assert stats['Win Rate'] == '66.7%'
+    assert abs(stats['edge_value'] - 33.3) < 0.1
+
+
+def test_1_2_rrr_outcome():
+    """Test outcome at 1:2 RRR: wins * 2 - losses."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02', '2026-01-03'],
+        'SL': [5.0, 5.0, 5.0],
+        'Pullback': [2.0, 2.0, 6.0],
+        'TP': [10.0, 10.0, 10.0],
+    })
+
+    stats = _calculate_stats(trades, 'Test', rrr_ratio=2)
+
+    # 2 wins * 2R - 1 loss = 3R
+    assert stats['Outcome'] == '3R'
+
+
+def test_1_2_rrr_buffer():
+    """Test 1:2 RRR with buffer: TP must reach 2 * effective_sl."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [3.0],
+        'Pullback': [1.0],
+        'TP': [8.0],
+    })
+
+    # Buffer +1.0: effective SL = 4.0, target = 2 * 4.0 = 8.0, TP(8.0) >= 8.0 => WIN
+    stats = _calculate_stats_with_buffer(trades, 'Test', 1.0, rrr_ratio=2)
+    assert stats['Notation'] == '1W – 0L'
+    assert stats['RRR'] == '1:2'
+
+    # Buffer +1.5: effective SL = 4.5, target = 2 * 4.5 = 9.0, TP(8.0) < 9.0 => LOSS
+    stats = _calculate_stats_with_buffer(trades, 'Test', 1.5, rrr_ratio=2)
+    assert stats['Notation'] == '0W – 1L'
+
+
+def test_1_2_rrr_empty():
+    """Test 1:2 RRR with empty dataset."""
+    empty = get_empty_data()
+    stats = _calculate_stats(empty, 'Empty', rrr_ratio=2)
+
+    assert stats['Trades'] == 0
+    assert stats['RRR'] == '1:2'
+    assert stats['Edge'] == '-33.3%'
 
 
 def run_all_tests():
@@ -503,7 +604,15 @@ def run_all_tests():
         test_buffer_sl_cap_filter,
         test_buffer_sl_cap_with_ema_filter,
         test_calculate_buffer_statistics,
+        test_calculate_buffer_statistics_has_both_rrr,
         test_buffer_pips_constant,
+        test_rrr_ratios_constant,
+        test_breakeven_rate,
+        test_1_2_rrr_win_condition,
+        test_1_2_rrr_edge_calculation,
+        test_1_2_rrr_outcome,
+        test_1_2_rrr_buffer,
+        test_1_2_rrr_empty,
     ]
 
     passed = 0
