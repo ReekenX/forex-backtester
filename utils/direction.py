@@ -16,7 +16,7 @@ RRR_RATIO = 1
 BREAKEVEN_RATE = 50.0
 
 # Extra pip buffer values to test
-BUFFER_PIPS = [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
+BUFFER_PIPS = [0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
 
 
 def load_data(filepath: str = "../data/eurusd_2026_1m_confirmation_candle.csv") -> pd.DataFrame:
@@ -484,7 +484,7 @@ def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     result_df = pd.DataFrame(results)
 
     # Filter to only show strategies with positive edge
-    result_df = result_df[result_df["edge_value"] > 0].copy()
+    # result_df = result_df[result_df["edge_value"] > 0].copy()
 
     # Sort by edge descending
     result_df = result_df.sort_values("edge_value", ascending=False)
@@ -500,7 +500,10 @@ def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
 def display_direction_analysis(df: pd.DataFrame):
     """
-    Display direction strategy analysis with HTML formatting in Jupyter notebook.
+    Display direction strategy analysis with SL buffers in a single table.
+
+    Shows each strategy at every buffer level (0, 0.5, 1.0, ..., 5.0 pips).
+    Buffer 0 means no extra pips added to SL (original strategy).
 
     Args:
         df: DataFrame with trading data
@@ -510,7 +513,7 @@ def display_direction_analysis(df: pd.DataFrame):
     title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>1M Confirmation Candle Direction Analysis (1:1 RRR)</h2>"
     display(HTML(title_html))
 
-    stats_df = calculate_statistics(df)
+    stats_df = calculate_buffer_statistics(df)
 
     if stats_df.empty:
         display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable direction strategies found at 1:1 RRR</p>"))
