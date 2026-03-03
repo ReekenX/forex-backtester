@@ -15,5 +15,5 @@ windows:
       - run
   - git: lazygit
   - webserver:
-      - alias run="poetry run jupyter notebook"
+      - alias run="poetry run jupyter notebook labs/"
       - run
