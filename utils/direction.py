@@ -15,6 +15,9 @@ from typing import Dict, List, Tuple, Callable
 RRR_RATIO = 1
 BREAKEVEN_RATE = 50.0
 
+# Extra pip buffer values to test
+BUFFER_PIPS = [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
+
 
 def load_data(filepath: str = "../data/eurusd_2026_1m_confirmation_candle.csv") -> pd.DataFrame:
     """
@@ -356,6 +359,145 @@ def create_html_table(df: pd.DataFrame) -> str:
     return html
 
 
+def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffer: float) -> Dict:
+    """
+    Calculate trading statistics with extra pips added to SL.
+
+    With buffer, effective SL = SL + buffer. Trade survives if Pullback < effective SL.
+    At 1:1 RRR, trade wins if TP >= effective SL.
+
+    Args:
+        trades: DataFrame containing filtered trades
+        strategy_name: Name of the strategy
+        buffer: Extra pips to add to SL
+
+    Returns:
+        Dictionary with calculated statistics
+    """
+    total_trades = len(trades)
+
+    if total_trades == 0:
+        return {
+            "Strategy": strategy_name,
+            "Buffer": f"+{buffer}",
+            "RRR": "1:1",
+            "Trades": 0,
+            "Notation": "0W – 0L",
+            "Win Rate": "0.0%",
+            "Outcome": "0R",
+            "Edge": f"{-BREAKEVEN_RATE:.1f}%",
+            "Days": 0,
+            "Days %": "0%",
+            "Trades Required": "N/A",
+            "edge_value": -BREAKEVEN_RATE,
+        }
+
+    effective_sl = trades["SL"] + buffer
+
+    # Win condition with buffer: Pullback < effective_sl AND TP >= effective_sl
+    winning_trades = trades[
+        (trades["Pullback"] < effective_sl) &
+        (trades["TP"] >= RRR_RATIO * effective_sl)
+    ]
+
+    wins = len(winning_trades)
+    losses = total_trades - wins
+    win_rate = (wins / total_trades) * 100
+    edge = win_rate - BREAKEVEN_RATE
+    outcome = (wins * RRR_RATIO) - losses
+
+    days_with_wins = winning_trades["Date"].nunique() if "Date" in winning_trades.columns and len(winning_trades) > 0 else 0
+    total_days = trades["Date"].nunique() if "Date" in trades.columns else 0
+    days_pct = (days_with_wins / total_days * 100) if total_days > 0 else 0.0
+
+    trades_required = (total_trades / outcome) if outcome > 0 else float("inf")
+
+    return {
+        "Strategy": strategy_name,
+        "Buffer": f"+{buffer}",
+        "RRR": "1:1",
+        "Trades": total_trades,
+        "Notation": f"{wins}W – {losses}L",
+        "Win Rate": f"{win_rate:.1f}%",
+        "Outcome": f"{outcome}R",
+        "Edge": f"{edge:.1f}%",
+        "Days": days_with_wins,
+        "Days %": f"{days_pct:.0f}%",
+        "Trades Required": f"{trades_required:.1f}" if outcome > 0 else "N/A",
+        "edge_value": edge,
+    }
+
+
+def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]:
+    """
+    Get key strategies to test with SL buffers.
+
+    Returns:
+        List of tuples (strategy_name, filter_function)
+    """
+    return [
+        ("All Trades", lambda df: df),
+        ("Buy Only", lambda df: df[df["Direction"] == "Buy"]),
+        ("Sell Only", lambda df: df[df["Direction"] == "Sell"]),
+        ("EMA(50) Aligned", lambda df: df[df["Direction"] == df["EMA(50)"]]),
+        ("EMA(50) Against", lambda df: df[df["Direction"] != df["EMA(50)"]]),
+        ("EMA(200) Aligned", lambda df: df[df["Direction"] == df["EMA(200)"]]),
+        ("EMA(200) Against", lambda df: df[df["Direction"] != df["EMA(200)"]]),
+        ("Both EMAs Aligned", lambda df: df[
+            (df["Direction"] == df["EMA(50)"]) & (df["Direction"] == df["EMA(200)"])
+        ]),
+        ("Both EMAs Against", lambda df: df[
+            (df["Direction"] != df["EMA(50)"]) & (df["Direction"] != df["EMA(200)"])
+        ]),
+        ("EMAs Agree + Direction Aligned", lambda df: df[
+            (df["EMA(50)"] == df["EMA(200)"]) & (df["Direction"] == df["EMA(50)"])
+        ]),
+        ("EMAs Agree + Direction Against", lambda df: df[
+            (df["EMA(50)"] == df["EMA(200)"]) & (df["Direction"] != df["EMA(50)"])
+        ]),
+    ]
+
+
+def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate statistics for key strategies with each SL buffer value.
+
+    For each strategy, tests what happens if extra pips (0.5, 1, 1.5, 2, 3, 4, 5)
+    are added to the SL. A wider SL means more trades survive but the 1:1 target
+    is also higher.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with buffer statistics, sorted by edge descending, positive edge only
+    """
+    strategies = get_buffer_strategies()
+    results = []
+
+    for strategy_name, filter_func in strategies:
+        filtered_df = filter_func(df)
+        for buffer in BUFFER_PIPS:
+            stats = _calculate_stats_with_buffer(filtered_df, strategy_name, buffer)
+            results.append(stats)
+
+    result_df = pd.DataFrame(results)
+
+    # Filter to only show strategies with positive edge
+    result_df = result_df[result_df["edge_value"] > 0].copy()
+
+    # Sort by edge descending
+    result_df = result_df.sort_values("edge_value", ascending=False)
+
+    # Drop sorting column
+    result_df = result_df.drop("edge_value", axis=1)
+
+    # Reset index
+    result_df = result_df.reset_index(drop=True)
+
+    return result_df
+
+
 def display_direction_analysis(df: pd.DataFrame):
     """
     Display direction strategy analysis with HTML formatting in Jupyter notebook.
@@ -372,6 +514,27 @@ def display_direction_analysis(df: pd.DataFrame):
 
     if stats_df.empty:
         display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable direction strategies found at 1:1 RRR</p>"))
+    else:
+        html_table = create_html_table(stats_df)
+        display(HTML(html_table))
+
+
+def display_buffer_analysis(df: pd.DataFrame):
+    """
+    Display SL buffer analysis - what if extra pips were added to the stop loss.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>SL Buffer Analysis (1:1 RRR) — What if extra pips were added to SL?</h2>"
+    display(HTML(title_html))
+
+    stats_df = calculate_buffer_statistics(df)
+
+    if stats_df.empty:
+        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable buffer strategies found</p>"))
     else:
         html_table = create_html_table(stats_df)
         display(HTML(html_table))

@@ -11,11 +11,15 @@ sys.path.insert(0, '.')
 
 from utils.direction import (
     calculate_statistics,
+    calculate_buffer_statistics,
     create_html_table,
     get_strategies,
+    get_buffer_strategies,
     _calculate_stats,
+    _calculate_stats_with_buffer,
     RRR_RATIO,
     BREAKEVEN_RATE,
+    BUFFER_PIPS,
 )
 
 
@@ -337,6 +341,101 @@ def test_emas_disagree_filter():
         assert row['EMA(50)'] != row['EMA(200)']
 
 
+def test_buffer_saves_losing_trade():
+    """Test that adding buffer pips can save a trade that would otherwise lose.
+
+    Example from user: SL 3.1, Pullback 4.0, TP 10.
+    Without buffer: Pullback(4.0) >= SL(3.1) => LOSS
+    With +1.0 buffer: effective SL = 4.1, Pullback(4.0) < 4.1 AND TP(10) >= 4.1 => WIN
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [3.1],
+        'Pullback': [4.0],
+        'TP': [10.0],
+    })
+
+    # Without buffer: loss
+    stats_no_buffer = _calculate_stats(trades, 'Test')
+    assert stats_no_buffer['Notation'] == '0W – 1L'
+
+    # With +0.5 buffer: effective SL = 3.6, Pullback(4.0) >= 3.6 => still LOSS
+    stats_05 = _calculate_stats_with_buffer(trades, 'Test', 0.5)
+    assert stats_05['Notation'] == '0W – 1L'
+
+    # With +1.0 buffer: effective SL = 4.1, Pullback(4.0) < 4.1 AND TP(10) >= 4.1 => WIN
+    stats_10 = _calculate_stats_with_buffer(trades, 'Test', 1.0)
+    assert stats_10['Notation'] == '1W – 0L'
+
+
+def test_buffer_tp_must_reach_effective_sl():
+    """Test that TP must reach the effective SL (SL + buffer) to win."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [3.0],
+        'Pullback': [1.0],
+        'TP': [5.0],
+    })
+
+    # With +3.0 buffer: effective SL = 6.0, TP(5.0) < 6.0 => LOSS (TP doesn't reach target)
+    stats = _calculate_stats_with_buffer(trades, 'Test', 3.0)
+    assert stats['Notation'] == '0W – 1L'
+
+    # With +2.0 buffer: effective SL = 5.0, TP(5.0) >= 5.0 => WIN
+    stats = _calculate_stats_with_buffer(trades, 'Test', 2.0)
+    assert stats['Notation'] == '1W – 0L'
+
+
+def test_buffer_stats_has_buffer_column():
+    """Test that buffer stats include the Buffer column."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [5.0],
+        'Pullback': [2.0],
+        'TP': [10.0],
+    })
+
+    stats = _calculate_stats_with_buffer(trades, 'Test', 1.5)
+    assert stats['Buffer'] == '+1.5'
+
+
+def test_buffer_stats_empty():
+    """Test buffer stats with empty dataset."""
+    empty = get_empty_data()
+    stats = _calculate_stats_with_buffer(empty, 'Empty', 1.0)
+
+    assert stats['Trades'] == 0
+    assert stats['Buffer'] == '+1.0'
+    assert stats['Notation'] == '0W – 0L'
+
+
+def test_get_buffer_strategies():
+    """Test that buffer strategies include key strategies."""
+    strategies = get_buffer_strategies()
+    names = [name for name, _ in strategies]
+
+    assert 'All Trades' in names
+    assert 'EMA(50) Aligned' in names
+    assert 'Both EMAs Aligned' in names
+
+
+def test_calculate_buffer_statistics():
+    """Test that buffer statistics returns positive edge only."""
+    sample = get_sample_data()
+    result = calculate_buffer_statistics(sample)
+
+    assert isinstance(result, pd.DataFrame)
+    if len(result) > 0:
+        for edge_str in result['Edge']:
+            edge_val = float(edge_str.replace('%', ''))
+            assert edge_val > 0
+
+
+def test_buffer_pips_constant():
+    """Test that BUFFER_PIPS has expected values."""
+    assert BUFFER_PIPS == [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
+
+
 def run_all_tests():
     """Run all tests and report results."""
     tests = [
@@ -364,6 +463,13 @@ def run_all_tests():
         test_create_html_table_empty,
         test_emas_agree_filter,
         test_emas_disagree_filter,
+        test_buffer_saves_losing_trade,
+        test_buffer_tp_must_reach_effective_sl,
+        test_buffer_stats_has_buffer_column,
+        test_buffer_stats_empty,
+        test_get_buffer_strategies,
+        test_calculate_buffer_statistics,
+        test_buffer_pips_constant,
     ]
 
     passed = 0
