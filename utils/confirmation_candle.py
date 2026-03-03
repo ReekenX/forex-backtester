@@ -179,6 +179,14 @@ def calculate_statistics(df: pd.DataFrame) -> pd.DataFrame:
     # Drop sorting column
     result_df = result_df.drop("edge_value", axis=1)
 
+    # Rename columns to include totals
+    total_trades = len(df)
+    total_days = df["Date"].nunique() if "Date" in df.columns else 0
+    result_df = result_df.rename(columns={
+        "Trades": f"Trades ({total_trades})",
+        "Days": f"Days ({total_days})",
+    })
+
     # Reset index
     result_df = result_df.reset_index(drop=True)
 
@@ -500,6 +508,14 @@ def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
     # Drop sorting column
     result_df = result_df.drop("edge_value", axis=1)
+
+    # Rename columns to include totals
+    total_trades = len(df)
+    total_days = df["Date"].nunique() if "Date" in df.columns else 0
+    result_df = result_df.rename(columns={
+        "Trades": f"Trades ({total_trades})",
+        "Days": f"Days ({total_days})",
+    })
 
     # Reset index
     result_df = result_df.reset_index(drop=True)

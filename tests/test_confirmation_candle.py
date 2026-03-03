@@ -282,14 +282,22 @@ def test_calculate_statistics_sorted_by_edge():
 
 
 def test_calculate_statistics_columns():
-    """Test that result has expected columns."""
+    """Test that result has expected columns with totals in headers."""
     sample = get_sample_data()
     result = calculate_statistics(sample)
 
     if len(result) > 0:
-        expected = ['Strategy', 'RRR', 'Trades', 'Notation',
-                    'Win Rate', 'Outcome', 'Edge', 'Days', 'Days %', 'Trades Required']
-        assert list(result.columns) == expected
+        columns = list(result.columns)
+        assert columns[0] == 'Strategy'
+        assert columns[1] == 'RRR'
+        assert columns[2].startswith('Trades (')
+        assert columns[3] == 'Notation'
+        assert columns[4] == 'Win Rate'
+        assert columns[5] == 'Outcome'
+        assert columns[6] == 'Edge'
+        assert columns[7].startswith('Days (')
+        assert columns[8] == 'Days %'
+        assert columns[9] == 'Trades Required'
 
 
 def test_create_html_table_basic():
