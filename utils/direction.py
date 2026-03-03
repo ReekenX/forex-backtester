@@ -510,6 +510,13 @@ def display_direction_analysis(df: pd.DataFrame):
     """
     from IPython.display import display, HTML
 
+    # Disable Jupyter output scrolling so the full table is visible
+    display(HTML("""<style>
+        .jp-OutputArea-child { max-height: none !important; }
+        .jp-OutputArea-output { max-height: none !important; overflow: visible !important; }
+        .output_scroll { box-shadow: none !important; border: none !important; }
+    </style>"""))
+
     title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>1M Confirmation Candle Direction Analysis (1:1 RRR)</h2>"
     display(HTML(title_html))
 
