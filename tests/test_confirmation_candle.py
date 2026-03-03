@@ -71,11 +71,11 @@ def test_strategy_names_include_base():
     strategies = get_strategies()
     names = [name for name, _ in strategies]
     assert 'All Trades' in names
-    assert 'Buy Only' in names
-    assert 'Sell Only' in names
     assert 'EMA(50) Aligned' in names
     assert 'EMA(200) Aligned' in names
     assert 'Both EMAs Aligned' in names
+    assert 'Buy Only' not in names
+    assert 'Sell Only' not in names
 
 
 def test_strategy_names_include_sl_combos():
@@ -246,17 +246,6 @@ def test_both_emas_aligned_filter():
     for _, row in filtered.iterrows():
         assert row['Direction'] == row['EMA(50)']
         assert row['Direction'] == row['EMA(200)']
-
-
-def test_buy_only_filter():
-    """Test Buy Only filter."""
-    sample = get_sample_data()
-    strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == 'Buy Only'][0]
-    filtered = strategy(sample)
-
-    for _, row in filtered.iterrows():
-        assert row['Direction'] == 'Buy'
 
 
 def test_sl_filter_combination():
@@ -586,7 +575,6 @@ def run_all_tests():
         test_ema50_aligned_filter,
         test_ema200_against_filter,
         test_both_emas_aligned_filter,
-        test_buy_only_filter,
         test_sl_filter_combination,
         test_calculate_statistics_returns_positive_edge_only,
         test_calculate_statistics_sorted_by_edge,

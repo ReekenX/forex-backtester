@@ -49,8 +49,6 @@ def get_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]
     # === Base strategies ===
     strategies.extend([
         ("All Trades", lambda df: df),
-        ("Buy Only", lambda df: df[df["Direction"] == "Buy"]),
-        ("Sell Only", lambda df: df[df["Direction"] == "Sell"]),
     ])
 
     # === EMA alignment strategies ===
@@ -147,27 +145,6 @@ def get_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]
             ])
         ))
 
-    # === Direction + EMA combos ===
-    strategies.extend([
-        ("Buy + EMA(50) Aligned", lambda df: df[
-            (df["Direction"] == "Buy") & (df["EMA(50)"] == "Buy")
-        ]),
-        ("Buy + EMA(200) Aligned", lambda df: df[
-            (df["Direction"] == "Buy") & (df["EMA(200)"] == "Buy")
-        ]),
-        ("Buy + Both EMAs Aligned", lambda df: df[
-            (df["Direction"] == "Buy") & (df["EMA(50)"] == "Buy") & (df["EMA(200)"] == "Buy")
-        ]),
-        ("Sell + EMA(50) Aligned", lambda df: df[
-            (df["Direction"] == "Sell") & (df["EMA(50)"] == "Sell")
-        ]),
-        ("Sell + EMA(200) Aligned", lambda df: df[
-            (df["Direction"] == "Sell") & (df["EMA(200)"] == "Sell")
-        ]),
-        ("Sell + Both EMAs Aligned", lambda df: df[
-            (df["Direction"] == "Sell") & (df["EMA(50)"] == "Sell") & (df["EMA(200)"] == "Sell")
-        ]),
-    ])
 
     return strategies
 
@@ -459,8 +436,6 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
     """
     base_strategies = [
         ("All Trades", lambda df: df),
-        ("Buy Only", lambda df: df[df["Direction"] == "Buy"]),
-        ("Sell Only", lambda df: df[df["Direction"] == "Sell"]),
         ("EMA(50) Aligned", lambda df: df[df["Direction"] == df["EMA(50)"]]),
         ("EMA(50) Against", lambda df: df[df["Direction"] != df["EMA(50)"]]),
         ("EMA(200) Aligned", lambda df: df[df["Direction"] == df["EMA(200)"]]),
