@@ -10,7 +10,17 @@ It is EURUSD currency traded during London session.
 
 One strategy is being tested – 15 minute market structure following and execution on 1 minute confirmation candle.
 
-### Trading Data CSV Fields
+## Background About Trader
+
+Trader's goal is to pass a prop firm challenge.
+
+Prop firm rules are:
+- Gain 8% of profit (R=0.5%) to pass the challenge
+- Daily max drawdown 5%
+- Max total drawdown 10%
+- No minimum trading days
+
+## Trading Data CSV Fields
 
 1. SL column is a number in pips that was from entry signal to "safe stop"
 2. Pullback column is a number of pips that trade reached after entry and before reaching TP
@@ -65,7 +75,7 @@ This pattern ensures:
 - Simple, understandable code
 - Consistent project structure
 
-### Acceptance Criteria
+## Acceptance Criteria
 
 Before announcing that any feature or modification is complete and working:
 
