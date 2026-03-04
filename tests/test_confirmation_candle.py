@@ -38,6 +38,8 @@ def get_sample_data():
                     'Sell', 'Sell', 'Buy', 'Buy', 'Sell'],
         'EMA(200)': ['Buy', 'Buy', 'Sell', 'Buy', 'Sell',
                      'Sell', 'Buy', 'Buy', 'Sell', 'Sell'],
+        'Engulfing': ['Yes', 'No', None, 'Yes', 'Similar',
+                      'No', None, 'Yes', None, 'No'],
         'SL': [3.5, 1.1, 2.0, 4.0, 3.0,
                5.0, 2.5, 6.0, 8.0, 1.5],
         'Pullback': [3.5, 0.8, 2.1, 1.5, 3.0,
@@ -53,7 +55,7 @@ def get_empty_data():
     """Create an empty dataset."""
     return pd.DataFrame({
         'Date': [], 'Weekday': [], 'Trade': [], 'Direction': [],
-        'EMA(50)': [], 'EMA(200)': [], 'SL': [], 'Pullback': [], 'TP': [], 'R': [],
+        'EMA(50)': [], 'EMA(200)': [], 'Engulfing': [], 'SL': [], 'Pullback': [], 'TP': [], 'R': [],
     })
 
 
@@ -565,6 +567,112 @@ def test_1_2_rrr_empty():
     assert stats['Edge'] == '-33.3%'
 
 
+def test_engulfing_yes_filter():
+    """Test Engulfing: Yes filter."""
+    sample = get_sample_data()
+    strategies = get_strategies()
+    strategy = [func for name, func in strategies if name == 'Engulfing: Yes'][0]
+    filtered = strategy(sample)
+
+    assert len(filtered) == 3  # rows 0, 3, 7 have 'Yes'
+    for _, row in filtered.iterrows():
+        assert row['Engulfing'] == 'Yes'
+
+
+def test_engulfing_no_filter():
+    """Test Engulfing: No filter."""
+    sample = get_sample_data()
+    strategies = get_strategies()
+    strategy = [func for name, func in strategies if name == 'Engulfing: No'][0]
+    filtered = strategy(sample)
+
+    assert len(filtered) == 3  # rows 1, 5, 9 have 'No'
+    for _, row in filtered.iterrows():
+        assert row['Engulfing'] == 'No'
+
+
+def test_engulfing_similar_filter():
+    """Test Engulfing: Similar filter."""
+    sample = get_sample_data()
+    strategies = get_strategies()
+    strategy = [func for name, func in strategies if name == 'Engulfing: Similar'][0]
+    filtered = strategy(sample)
+
+    assert len(filtered) == 1  # row 4 has 'Similar'
+    for _, row in filtered.iterrows():
+        assert row['Engulfing'] == 'Similar'
+
+
+def test_engulfing_yes_or_similar_filter():
+    """Test Engulfing: Yes or Similar filter."""
+    sample = get_sample_data()
+    strategies = get_strategies()
+    strategy = [func for name, func in strategies if name == 'Engulfing: Yes or Similar'][0]
+    filtered = strategy(sample)
+
+    assert len(filtered) == 4  # 3 Yes + 1 Similar
+    for _, row in filtered.iterrows():
+        assert row['Engulfing'] in ['Yes', 'Similar']
+
+
+def test_has_engulfing_data_filter():
+    """Test Has Engulfing Data filter (non-empty values)."""
+    sample = get_sample_data()
+    strategies = get_strategies()
+    strategy = [func for name, func in strategies if name == 'Has Engulfing Data'][0]
+    filtered = strategy(sample)
+
+    assert len(filtered) == 7  # 3 Yes + 3 No + 1 Similar
+    for _, row in filtered.iterrows():
+        assert pd.notna(row['Engulfing'])
+
+
+def test_engulfing_yes_ema50_aligned_filter():
+    """Test Engulfing: Yes + EMA(50) Aligned filter."""
+    sample = get_sample_data()
+    strategies = get_strategies()
+    strategy = [func for name, func in strategies if name == 'Engulfing: Yes + EMA(50) Aligned'][0]
+    filtered = strategy(sample)
+
+    for _, row in filtered.iterrows():
+        assert row['Engulfing'] == 'Yes'
+        assert row['Direction'] == row['EMA(50)']
+
+
+def test_engulfing_yes_sl_filter():
+    """Test Engulfing: Yes + SL filter combination."""
+    sample = get_sample_data()
+    strategies = get_strategies()
+    strategy = [func for name, func in strategies if name == 'Engulfing: Yes + SL < 5'][0]
+    filtered = strategy(sample)
+
+    for _, row in filtered.iterrows():
+        assert row['Engulfing'] == 'Yes'
+        assert row['SL'] < 5
+
+
+def test_strategy_names_include_engulfing():
+    """Test that engulfing strategies are present."""
+    strategies = get_strategies()
+    names = [name for name, _ in strategies]
+    assert 'Engulfing: Yes' in names
+    assert 'Engulfing: No' in names
+    assert 'Engulfing: Similar' in names
+    assert 'Engulfing: Yes or Similar' in names
+    assert 'Has Engulfing Data' in names
+
+
+def test_buffer_strategies_include_engulfing():
+    """Test that buffer strategies include engulfing variants."""
+    strategies = get_buffer_strategies()
+    names = [name for name, _ in strategies]
+    assert 'Engulfing: Yes' in names
+    assert 'Engulfing: No' in names
+    assert 'Engulfing: Yes or Similar' in names
+    assert 'Has Engulfing Data' in names
+    assert 'Engulfing: Yes + SL < 3' in names
+
+
 def run_all_tests():
     """Run all tests and report results."""
     tests = [
@@ -609,6 +717,15 @@ def run_all_tests():
         test_1_2_rrr_outcome,
         test_1_2_rrr_buffer,
         test_1_2_rrr_empty,
+        test_engulfing_yes_filter,
+        test_engulfing_no_filter,
+        test_engulfing_similar_filter,
+        test_engulfing_yes_or_similar_filter,
+        test_has_engulfing_data_filter,
+        test_engulfing_yes_ema50_aligned_filter,
+        test_engulfing_yes_sl_filter,
+        test_strategy_names_include_engulfing,
+        test_buffer_strategies_include_engulfing,
     ]
 
     passed = 0

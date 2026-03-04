@@ -1,10 +1,10 @@
 """
 1M Confirmation Candle Analysis Module
 
-Analyzes trading strategies based on EMA(50) and EMA(200) alignment.
+Analyzes trading strategies based on EMA(50), EMA(200) alignment, and engulfing candle patterns.
 All strategies are evaluated at 1:1 and 1:2 RRR.
 
-CSV columns: Date, Weekday, Trade, Direction, EMA(50), EMA(200), SL, Pullback, TP, R
+CSV columns: Date, Weekday, Trade, Direction, EMA(50), EMA(200), Engulfing, SL, Pullback, TP, R
 """
 
 import pandas as pd
@@ -83,6 +83,37 @@ def get_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]
         ]),
     ])
 
+    # === Engulfing strategies ===
+    strategies.extend([
+        ("Engulfing: Yes", lambda df: df[df["Engulfing"] == "Yes"]),
+        ("Engulfing: No", lambda df: df[df["Engulfing"] == "No"]),
+        ("Engulfing: Similar", lambda df: df[df["Engulfing"] == "Similar"]),
+        ("Engulfing: Yes or Similar", lambda df: df[df["Engulfing"].isin(["Yes", "Similar"])]),
+        ("Has Engulfing Data", lambda df: df[df["Engulfing"].notna()]),
+    ])
+
+    # === Engulfing + EMA combinations ===
+    engulfing_filters = [
+        ("Engulfing: Yes", lambda df: df[df["Engulfing"] == "Yes"]),
+        ("Engulfing: No", lambda df: df[df["Engulfing"] == "No"]),
+        ("Engulfing: Yes or Similar", lambda df: df[df["Engulfing"].isin(["Yes", "Similar"])]),
+    ]
+
+    ema_filters = [
+        ("EMA(50) Aligned", lambda df: df[df["Direction"] == df["EMA(50)"]]),
+        ("EMA(200) Aligned", lambda df: df[df["Direction"] == df["EMA(200)"]]),
+        ("Both EMAs Aligned", lambda df: df[
+            (df["Direction"] == df["EMA(50)"]) & (df["Direction"] == df["EMA(200)"])
+        ]),
+    ]
+
+    for eng_name, eng_func in engulfing_filters:
+        for ema_name, ema_func in ema_filters:
+            strategies.append((
+                f"{eng_name} + {ema_name}",
+                lambda df, ef=eng_func, emf=ema_func: emf(ef(df))
+            ))
+
     # === SL filter strategies ===
     sl_filters = [
         ("SL < 3", lambda df: df[df["SL"] < 3]),
@@ -145,6 +176,26 @@ def get_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]
             ])
         ))
 
+    # === Engulfing: Yes + SL filters ===
+    for sl_name, sl_func in sl_filters:
+        strategies.append((
+            f"Engulfing: Yes + {sl_name}",
+            lambda df, f=sl_func: f(df[df["Engulfing"] == "Yes"])
+        ))
+
+    # === Engulfing: No + SL filters ===
+    for sl_name, sl_func in sl_filters:
+        strategies.append((
+            f"Engulfing: No + {sl_name}",
+            lambda df, f=sl_func: f(df[df["Engulfing"] == "No"])
+        ))
+
+    # === Engulfing: Yes or Similar + SL filters ===
+    for sl_name, sl_func in sl_filters:
+        strategies.append((
+            f"Engulfing: Yes or Similar + {sl_name}",
+            lambda df, f=sl_func: f(df[df["Engulfing"].isin(["Yes", "Similar"])])
+        ))
 
     return strategies
 
@@ -460,6 +511,10 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
         ("EMAs Agree + Direction Against", lambda df: df[
             (df["EMA(50)"] == df["EMA(200)"]) & (df["Direction"] != df["EMA(50)"])
         ]),
+        ("Engulfing: Yes", lambda df: df[df["Engulfing"] == "Yes"]),
+        ("Engulfing: No", lambda df: df[df["Engulfing"] == "No"]),
+        ("Engulfing: Yes or Similar", lambda df: df[df["Engulfing"].isin(["Yes", "Similar"])]),
+        ("Has Engulfing Data", lambda df: df[df["Engulfing"].notna()]),
     ]
 
     sl_caps = [3, 4, 5]
