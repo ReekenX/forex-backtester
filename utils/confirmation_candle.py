@@ -597,7 +597,7 @@ def display_analysis(df: pd.DataFrame):
         .output_scroll { box-shadow: none !important; border: none !important; }
     </style>"""))
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>1M Confirmation Candle Analysis (1:1 & 1:2 RRR)</h2>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>1M Confirmation Candle Analysis</h2>"
     display(HTML(title_html))
 
     stats_df = calculate_buffer_statistics(df)
