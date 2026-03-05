@@ -45,9 +45,9 @@ def test_calculate_hour_statistics_basic():
 
     # Should have rows for each hour × each RRR ratio
     # Hours: 10, 11, 12, 13 = 4 hours
-    # RRR ratios: 1:1, 1:2, 1:3 = 3 ratios
-    # Total: 4 × 3 = 12 rows
-    assert len(result) == 12
+    # RRR ratios: 1:1 = 1 ratio
+    # Total: 4 × 1 = 4 rows
+    assert len(result) == 4
 
     # Check columns exist
     expected_columns = ['Strategy', 'RRR', 'Trades', 'Notation',
@@ -64,10 +64,9 @@ def test_calculate_hour_statistics_hour_10():
     hour_10_rows = result[result['Strategy'] == '10h']
     assert len(hour_10_rows) == 1  # Only first RRR shows hour label
 
-    # Hour 10 has 3 trades
-    hour_10_all = result.iloc[0:3]  # First 3 rows are hour 10
-    for _, row in hour_10_all.iterrows():
-        assert row['Trades'] == 3
+    # Hour 10 has 3 trades (1 row per hour with single RRR)
+    hour_10_row = result.iloc[0]  # First row is hour 10
+    assert hour_10_row['Trades'] == 3
 
 
 def test_calculate_hour_statistics_empty():
@@ -249,8 +248,8 @@ def test_filter_invalid_hours():
 
     result = calculate_hour_statistics(data)
 
-    # Should only have data for hours 10 and 11 (2 hours × 3 RRR = 6 rows)
-    assert len(result) == 6
+    # Should only have data for hours 10 and 11 (2 hours × 1 RRR = 2 rows)
+    assert len(result) == 2
 
 
 def test_days_calculation():
