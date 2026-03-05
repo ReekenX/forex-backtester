@@ -1,4 +1,4 @@
-.PHONY: install clean format lint
+.PHONY: install clean format lint test
 
 install:
 	@poetry install --no-root
@@ -13,3 +13,6 @@ format:
 
 lint:
 	@ruff check utils/ --fix
+
+test:
+	@poetry run python -m pytest tests/ -v
