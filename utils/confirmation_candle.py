@@ -609,6 +609,106 @@ def display_analysis(df: pd.DataFrame):
         display(HTML(html_table))
 
 
+def calculate_bruteforce(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Bruteforce scan of all buffer (extra SL pips) and RRR combinations.
+
+    Tests buffer values from 0.0 to 10.0 in 0.5 pip steps, combined with
+    RRR from 1:1 to 1:5, to find which combination gives the best outcome.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with results for every buffer × RRR combination, sorted by outcome descending
+    """
+    buffers = [round(x * 0.5, 1) for x in range(21)]  # 0.0 to 10.0 in 0.5 steps
+    rrr_range = [1, 2, 3]
+
+    total_trades = len(df)
+    results = []
+
+    for buffer in buffers:
+        effective_sl = df["SL"] + buffer
+
+        for rrr in rrr_range:
+            breakeven = 100.0 / (1 + rrr)
+
+            winning_trades = df[
+                (df["Pullback"] < effective_sl) &
+                (df["TP"] >= rrr * effective_sl)
+            ]
+
+            wins = len(winning_trades)
+            losses = total_trades - wins
+            win_rate = (wins / total_trades) * 100 if total_trades > 0 else 0
+            edge = win_rate - breakeven
+            outcome = (wins * rrr) - losses
+
+            days_with_wins = winning_trades["Date"].nunique() if "Date" in winning_trades.columns and len(winning_trades) > 0 else 0
+            total_days = df["Date"].nunique() if "Date" in df.columns else 0
+            days_pct = (days_with_wins / total_days * 100) if total_days > 0 else 0.0
+            trades_required = (total_trades / outcome) if outcome > 0 else float("inf")
+
+            results.append({
+                "Buffer": f"+{buffer}",
+                "RRR": f"1:{rrr}",
+                "Trades": total_trades,
+                "Notation": f"{wins}W – {losses}L",
+                "Win Rate": f"{win_rate:.1f}%",
+                "Outcome": f"{outcome}R",
+                "Edge": f"{edge:.1f}%",
+                "Days": days_with_wins,
+                "Days %": f"{days_pct:.0f}%",
+                "Trades Required": f"{trades_required:.1f}" if outcome > 0 else "N/A",
+                "outcome_value": outcome,
+                "edge_value": edge,
+            })
+
+    result_df = pd.DataFrame(results)
+
+    # Sort by outcome descending, then edge descending
+    result_df = result_df.sort_values(["outcome_value", "edge_value"], ascending=[False, False])
+
+    # Drop sorting columns
+    result_df = result_df.drop(["outcome_value", "edge_value"], axis=1)
+
+    # Rename columns to include totals
+    total_days = df["Date"].nunique() if "Date" in df.columns else 0
+    result_df = result_df.rename(columns={
+        "Trades": f"Trades ({total_trades})",
+        "Days": f"Days ({total_days})",
+    })
+
+    result_df = result_df.reset_index(drop=True)
+
+    return result_df
+
+
+def display_bruteforce(df: pd.DataFrame):
+    """
+    Display bruteforce analysis scanning all buffer × RRR combinations.
+
+    Tests extra SL pips from 0.0 to 10.0 (0.5 steps) with RRR 1:1 to 1:5
+    to find which combination gives the best outcome for all trades.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Bruteforce: Buffer × RRR Scan (All Trades)</h2>"
+    display(HTML(title_html))
+
+    stats_df = calculate_bruteforce(df)
+
+    if stats_df.empty:
+        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
+    else:
+        html_table = create_html_table(stats_df)
+        display(HTML(html_table))
+
+
 def display_buffer_analysis(df: pd.DataFrame):
     """
     Display SL buffer analysis - what if extra pips were added to the stop loss.
