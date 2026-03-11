@@ -709,6 +709,157 @@ def display_bruteforce(df: pd.DataFrame):
         display(HTML(html_table))
 
 
+def _calculate_limit_order_stats(trades: pd.DataFrame, strategy_name: str, rrr_ratio: int = 1) -> Dict:
+    """
+    Calculate statistics for limit order at half SL price.
+
+    Limit order is placed SL/2 pips from original entry (halfway to SL).
+    - Trade triggers only if Pullback >= SL/2
+    - New SL from limit entry = SL/2
+    - New TP from limit entry = TP + SL/2
+    - Trade survives if Pullback < SL (original)
+    - Win at 1:N RRR: TP + SL/2 >= N * (SL/2), i.e., TP >= (N-1) * SL/2
+    - Minimum broker SL applies: SL/2 >= 1.1, so only trades with SL >= 2.2
+
+    Args:
+        trades: DataFrame containing filtered trades
+        strategy_name: Name of the strategy
+        rrr_ratio: Risk-reward ratio (1 for 1:1, 2 for 1:2)
+
+    Returns:
+        Dictionary with calculated statistics
+    """
+    breakeven = _breakeven_rate(rrr_ratio)
+    rrr_label = f"1:{rrr_ratio}"
+
+    # Only trades where SL/2 >= 1.1 (minimum broker SL)
+    eligible = trades[trades["SL"] >= 2.2].copy()
+
+    # Only triggered trades: Pullback >= SL/2
+    half_sl = eligible["SL"] / 2
+    triggered = eligible[eligible["Pullback"] >= half_sl]
+    total_trades = len(triggered)
+
+    if total_trades == 0:
+        return {
+            "Strategy": strategy_name,
+            "RRR": rrr_label,
+            "Trades": 0,
+            "Notation": "0W – 0L",
+            "Win Rate": "0.0%",
+            "Outcome": "0R",
+            "Edge": f"{-breakeven:.1f}%",
+            "Days": 0,
+            "Days %": "0%",
+            "Trades Required": "N/A",
+            "edge_value": -breakeven,
+        }
+
+    triggered_half_sl = triggered["SL"] / 2
+
+    # Win: survives (Pullback < SL) AND TP reaches target
+    winning_trades = triggered[
+        (triggered["Pullback"] < triggered["SL"]) &
+        (triggered["TP"] >= (rrr_ratio - 1) * triggered_half_sl)
+    ]
+
+    # Exclude trades with TP == 0 (no TP means loss)
+    winning_trades = winning_trades[winning_trades["TP"] > 0]
+
+    wins = len(winning_trades)
+    losses = total_trades - wins
+    win_rate = (wins / total_trades) * 100
+    edge = win_rate - breakeven
+    outcome = (wins * rrr_ratio) - losses
+
+    days_with_wins = winning_trades["Date"].nunique() if "Date" in winning_trades.columns and len(winning_trades) > 0 else 0
+    total_days = triggered["Date"].nunique() if "Date" in triggered.columns else 0
+    days_pct = (days_with_wins / total_days * 100) if total_days > 0 else 0.0
+    trades_required = (total_trades / outcome) if outcome > 0 else float("inf")
+
+    return {
+        "Strategy": strategy_name,
+        "RRR": rrr_label,
+        "Trades": total_trades,
+        "Notation": f"{wins}W – {losses}L",
+        "Win Rate": f"{win_rate:.1f}%",
+        "Outcome": f"{outcome}R",
+        "Edge": f"{edge:.1f}%",
+        "Days": days_with_wins,
+        "Days %": f"{days_pct:.0f}%",
+        "Trades Required": f"{trades_required:.1f}" if outcome > 0 else "N/A",
+        "edge_value": edge,
+    }
+
+
+def calculate_limit_order_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate statistics for limit order at half SL price across all strategies.
+
+    Places a limit order at SL/2 pullback. Only trades where price pulls back
+    deep enough (>= SL/2) are triggered. The new SL is SL/2 and new TP is TP + SL/2.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with limit order statistics, sorted by edge descending
+    """
+    strategies = get_buffer_strategies()
+    results = []
+
+    for strategy_name, filter_func in strategies:
+        filtered_df = filter_func(df)
+        for rrr in RRR_RATIOS:
+            stats = _calculate_limit_order_stats(filtered_df, strategy_name, rrr)
+            results.append(stats)
+
+    result_df = pd.DataFrame(results)
+
+    # Sort by edge descending
+    result_df = result_df.sort_values("edge_value", ascending=False)
+
+    # Drop sorting column
+    result_df = result_df.drop("edge_value", axis=1)
+
+    # Rename columns to include totals
+    total_trades = len(df)
+    total_days = df["Date"].nunique() if "Date" in df.columns else 0
+    result_df = result_df.rename(columns={
+        "Trades": f"Trades ({total_trades})",
+        "Days": f"Days ({total_days})",
+    })
+
+    result_df = result_df.reset_index(drop=True)
+
+    return result_df
+
+
+def display_limit_order(df: pd.DataFrame):
+    """
+    Display limit order at half SL price analysis.
+
+    Strategy: place limit order at SL/2 pullback. If price pulls back deep enough,
+    the entry is at a better price with SL/2 risk and TP + SL/2 reward.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Limit Order at Half SL Price</h2>"
+    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Entry at SL/2 pullback. New SL = SL/2, New TP = TP + SL/2. Only trades with SL &ge; 2.2 (broker min 1.1 pip).</p>"
+    display(HTML(title_html + subtitle_html))
+
+    stats_df = calculate_limit_order_statistics(df)
+
+    if stats_df.empty:
+        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
+    else:
+        html_table = create_html_table(stats_df)
+        display(HTML(html_table))
+
+
 def display_buffer_analysis(df: pd.DataFrame):
     """
     Display SL buffer analysis - what if extra pips were added to the stop loss.

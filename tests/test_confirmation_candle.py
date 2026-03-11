@@ -13,11 +13,13 @@ from utils.confirmation_candle import (
     calculate_statistics,
     calculate_buffer_statistics,
     calculate_bruteforce,
+    calculate_limit_order_statistics,
     create_html_table,
     get_strategies,
     get_buffer_strategies,
     _calculate_stats,
     _calculate_stats_with_buffer,
+    _calculate_limit_order_stats,
     _breakeven_rate,
     RRR_RATIOS,
     BUFFER_PIPS,
@@ -792,6 +794,163 @@ def test_bruteforce_empty_data():
     assert all(result['Outcome'] == '0R')
 
 
+def test_limit_order_no_trigger():
+    """Test limit order: trade doesn't trigger when Pullback < SL/2.
+
+    SL=3, Pullback=1, TP=10. Half SL = 1.5. Pullback(1) < 1.5 => not triggered.
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [3.0],
+        'Pullback': [1.0],
+        'TP': [10.0],
+    })
+
+    stats = _calculate_limit_order_stats(trades, 'Test')
+    assert stats['Trades'] == 0
+
+
+def test_limit_order_win():
+    """Test limit order: trade triggers and wins.
+
+    SL=4, Pullback=2.4, TP=10. Half SL = 2. Pullback(2.4) >= 2 => triggers.
+    Pullback(2.4) < SL(4) => survives. TP(10) > 0 => wins.
+    At 1:1: TP(10) >= (1-1)*2 = 0 => WIN.
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [4.0],
+        'Pullback': [2.4],
+        'TP': [10.0],
+    })
+
+    stats = _calculate_limit_order_stats(trades, 'Test')
+    assert stats['Trades'] == 1
+    assert stats['Notation'] == '1W – 0L'
+
+
+def test_limit_order_loss_pullback_exceeds_sl():
+    """Test limit order: trade triggers but Pullback exceeds SL => loss.
+
+    SL=4, Pullback=5, TP=10. Half SL = 2. Pullback(5) >= 2 => triggers.
+    Pullback(5) >= SL(4) => doesn't survive => LOSS.
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [4.0],
+        'Pullback': [5.0],
+        'TP': [10.0],
+    })
+
+    stats = _calculate_limit_order_stats(trades, 'Test')
+    assert stats['Trades'] == 1
+    assert stats['Notation'] == '0W – 1L'
+
+
+def test_limit_order_min_broker_sl():
+    """Test that trades with SL < 2.2 are excluded (SL/2 < 1.1 min broker SL)."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02'],
+        'SL': [2.0, 4.0],  # First: SL/2=1.0 < 1.1, excluded. Second: SL/2=2.0 >= 1.1, eligible.
+        'Pullback': [1.5, 2.5],
+        'TP': [10.0, 10.0],
+    })
+
+    stats = _calculate_limit_order_stats(trades, 'Test')
+    # Only second trade is eligible, and it triggers (2.5 >= 2.0)
+    assert stats['Trades'] == 1
+    assert stats['Notation'] == '1W – 0L'
+
+
+def test_limit_order_1_2_rrr():
+    """Test limit order at 1:2 RRR.
+
+    SL=4, Pullback=2.5, TP=10. Half SL = 2.
+    Win condition: TP >= (2-1) * 2 = 2. TP(10) >= 2 => WIN.
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [4.0],
+        'Pullback': [2.5],
+        'TP': [10.0],
+    })
+
+    stats = _calculate_limit_order_stats(trades, 'Test', rrr_ratio=2)
+    assert stats['RRR'] == '1:2'
+    assert stats['Notation'] == '1W – 0L'
+
+
+def test_limit_order_1_2_rrr_tp_too_low():
+    """Test limit order at 1:2 RRR where TP doesn't reach target.
+
+    SL=6, Pullback=3.5, TP=2. Half SL = 3.
+    Win condition: TP >= (2-1) * 3 = 3. TP(2) < 3 => LOSS.
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [6.0],
+        'Pullback': [3.5],
+        'TP': [2.0],
+    })
+
+    stats = _calculate_limit_order_stats(trades, 'Test', rrr_ratio=2)
+    assert stats['Notation'] == '0W – 1L'
+
+
+def test_limit_order_empty():
+    """Test limit order with empty dataset."""
+    empty = get_empty_data()
+    stats = _calculate_limit_order_stats(empty, 'Empty')
+    assert stats['Trades'] == 0
+    assert stats['Notation'] == '0W – 0L'
+
+
+def test_limit_order_mixed_trades():
+    """Test limit order with mix of triggers, wins, and losses.
+
+    Uses user's 4 examples:
+    - SL=3, PB=1, TP=10: no trigger (PB < 1.5)
+    - SL=4, PB=2.4, TP=10: trigger + win
+    - SL=4, PB=3, TP=10: trigger + win
+    - SL=4, PB=5, TP=10: trigger + loss (PB >= SL)
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04'],
+        'SL': [3.0, 4.0, 4.0, 4.0],
+        'Pullback': [1.0, 2.4, 3.0, 5.0],
+        'TP': [10.0, 10.0, 10.0, 10.0],
+    })
+
+    stats = _calculate_limit_order_stats(trades, 'Test')
+    # Trade 1: SL=3 >= 2.2, eligible. PB(1) < SL/2(1.5) => not triggered
+    # Trade 2: triggered + win
+    # Trade 3: triggered + win
+    # Trade 4: triggered + loss
+    assert stats['Trades'] == 3
+    assert stats['Notation'] == '2W – 1L'
+
+
+def test_limit_order_tp_zero_is_loss():
+    """Test that TP=0 is always a loss even if trade triggers and survives."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [4.0],
+        'Pullback': [2.5],
+        'TP': [0.0],
+    })
+
+    stats = _calculate_limit_order_stats(trades, 'Test')
+    assert stats['Trades'] == 1
+    assert stats['Notation'] == '0W – 1L'
+
+
+def test_calculate_limit_order_statistics():
+    """Test that calculate_limit_order_statistics returns a DataFrame."""
+    sample = get_sample_data()
+    result = calculate_limit_order_statistics(sample)
+    assert isinstance(result, pd.DataFrame)
+
+
 def test_bruteforce_columns():
     """Test that bruteforce result has expected columns."""
     sample = get_sample_data()
@@ -868,6 +1027,16 @@ def run_all_tests():
         test_bruteforce_higher_rrr_harder_to_win,
         test_bruteforce_empty_data,
         test_bruteforce_columns,
+        test_limit_order_no_trigger,
+        test_limit_order_win,
+        test_limit_order_loss_pullback_exceeds_sl,
+        test_limit_order_min_broker_sl,
+        test_limit_order_1_2_rrr,
+        test_limit_order_1_2_rrr_tp_too_low,
+        test_limit_order_empty,
+        test_limit_order_mixed_trades,
+        test_limit_order_tp_zero_is_loss,
+        test_calculate_limit_order_statistics,
     ]
 
     passed = 0
