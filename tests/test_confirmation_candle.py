@@ -14,15 +14,21 @@ from utils.confirmation_candle import (
     calculate_buffer_statistics,
     calculate_bruteforce,
     calculate_limit_order_statistics,
+    calculate_fixed_sl_statistics,
+    calculate_fixed_sl_ema_statistics,
     create_html_table,
     get_strategies,
     get_buffer_strategies,
     _calculate_stats,
     _calculate_stats_with_buffer,
     _calculate_limit_order_stats,
+    _calculate_fixed_sl_stats,
+    _calculate_fixed_sl_stats_with_strategy,
+    _get_ema_strategies,
     _breakeven_rate,
     RRR_RATIOS,
     BUFFER_PIPS,
+    FIXED_SL_SIZES,
 )
 
 
@@ -965,6 +971,314 @@ def test_bruteforce_columns():
     assert columns[6] == 'Edge'
 
 
+def test_fixed_sl_sizes_constant():
+    """Test that FIXED_SL_SIZES has expected values."""
+    assert FIXED_SL_SIZES == [1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
+
+
+def test_fixed_sl_trade_survives():
+    """Test fixed SL: trade survives when Pullback < fixed SL.
+
+    SL=3, Pullback=1, TP=10. With fixed SL=1.5: Pullback(1) < 1.5 AND TP(10) >= 1.5 => WIN.
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [3.0],
+        'Pullback': [1.0],
+        'TP': [10.0],
+    })
+
+    stats = _calculate_fixed_sl_stats(trades, 1.5)
+    assert stats['Notation'] == '1W – 0L'
+
+
+def test_fixed_sl_trade_loses_deep_pullback():
+    """Test fixed SL: trade loses when Pullback >= fixed SL.
+
+    SL=3, Pullback=2.5, TP=10. With fixed SL=2.0: Pullback(2.5) >= 2.0 => LOSS.
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [3.0],
+        'Pullback': [2.5],
+        'TP': [10.0],
+    })
+
+    stats = _calculate_fixed_sl_stats(trades, 2.0)
+    assert stats['Notation'] == '0W – 1L'
+
+
+def test_fixed_sl_ignores_original_sl():
+    """Test that fixed SL ignores the original SL value entirely.
+
+    Original SL=10 (large), but fixed SL=2.0 is used.
+    Pullback=1.5 < 2.0 => survives. TP=5 >= 2.0 => WIN.
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [10.0],
+        'Pullback': [1.5],
+        'TP': [5.0],
+    })
+
+    stats = _calculate_fixed_sl_stats(trades, 2.0)
+    assert stats['Notation'] == '1W – 0L'
+
+
+def test_fixed_sl_tp_must_reach_target():
+    """Test that TP must reach RRR * fixed_sl to win.
+
+    Pullback=1.0 < fixed_sl=3.0 => survives. TP=2.5 < 3.0 => LOSS.
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [5.0],
+        'Pullback': [1.0],
+        'TP': [2.5],
+    })
+
+    stats = _calculate_fixed_sl_stats(trades, 3.0)
+    assert stats['Notation'] == '0W – 1L'
+
+
+def test_fixed_sl_1_2_rrr():
+    """Test fixed SL at 1:2 RRR: TP must reach 2 * fixed_sl.
+
+    Fixed SL=2.0, Pullback=1.0, TP=4.0.
+    At 1:2: TP(4.0) >= 2*2.0=4.0 => WIN.
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [5.0],
+        'Pullback': [1.0],
+        'TP': [4.0],
+    })
+
+    stats = _calculate_fixed_sl_stats(trades, 2.0, rrr_ratio=2)
+    assert stats['RRR'] == '1:2'
+    assert stats['Notation'] == '1W – 0L'
+
+    # TP=3.9 < 4.0 => LOSS
+    trades2 = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [5.0],
+        'Pullback': [1.0],
+        'TP': [3.9],
+    })
+
+    stats2 = _calculate_fixed_sl_stats(trades2, 2.0, rrr_ratio=2)
+    assert stats2['Notation'] == '0W – 1L'
+
+
+def test_fixed_sl_empty():
+    """Test fixed SL with empty dataset."""
+    empty = get_empty_data()
+    stats = _calculate_fixed_sl_stats(empty, 2.0)
+    assert stats['Trades'] == 0
+    assert stats['Notation'] == '0W – 0L'
+    assert stats['Fixed SL'] == '2.0'
+
+
+def test_fixed_sl_has_fixed_sl_column():
+    """Test that fixed SL stats include the Fixed SL column."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [5.0],
+        'Pullback': [2.0],
+        'TP': [10.0],
+    })
+
+    stats = _calculate_fixed_sl_stats(trades, 3.5)
+    assert stats['Fixed SL'] == '3.5'
+
+
+def test_fixed_sl_mixed_trades():
+    """Test fixed SL with mix of wins and losses.
+
+    Fixed SL=2.0:
+    - Trade 1: PB=1.0 < 2.0, TP=10 >= 2.0 => WIN
+    - Trade 2: PB=2.5 >= 2.0 => LOSS
+    - Trade 3: PB=0.5 < 2.0, TP=5 >= 2.0 => WIN
+    - Trade 4: PB=1.8 < 2.0, TP=1.5 < 2.0 => LOSS (TP too low)
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04'],
+        'SL': [3.0, 3.0, 4.0, 5.0],
+        'Pullback': [1.0, 2.5, 0.5, 1.8],
+        'TP': [10.0, 10.0, 5.0, 1.5],
+    })
+
+    stats = _calculate_fixed_sl_stats(trades, 2.0)
+    assert stats['Notation'] == '2W – 2L'
+
+
+def test_calculate_fixed_sl_statistics():
+    """Test that calculate_fixed_sl_statistics returns a DataFrame."""
+    sample = get_sample_data()
+    result = calculate_fixed_sl_statistics(sample)
+    assert isinstance(result, pd.DataFrame)
+    assert len(result) > 0
+
+
+def test_calculate_fixed_sl_statistics_has_both_rrr():
+    """Test that fixed SL statistics includes both 1:1 and 1:2 RRR rows."""
+    sample = get_sample_data()
+    result = calculate_fixed_sl_statistics(sample)
+    rrr_values = result['RRR'].unique()
+    assert '1:1' in rrr_values
+    assert '1:2' in rrr_values
+
+
+def test_calculate_fixed_sl_statistics_total_rows():
+    """Test that fixed SL statistics has correct number of rows: 8 SL sizes x 2 RRR = 16."""
+    sample = get_sample_data()
+    result = calculate_fixed_sl_statistics(sample)
+    assert len(result) == 8 * 2
+
+
+def test_calculate_fixed_sl_statistics_columns():
+    """Test that fixed SL result has expected columns."""
+    sample = get_sample_data()
+    result = calculate_fixed_sl_statistics(sample)
+    columns = list(result.columns)
+    assert columns[0] == 'Fixed SL'
+    assert columns[1] == 'RRR'
+    assert columns[2].startswith('Trades (')
+
+
+def test_fixed_sl_with_strategy_has_strategy_column():
+    """Test that fixed SL with strategy includes the Strategy column."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [5.0],
+        'Pullback': [2.0],
+        'TP': [10.0],
+    })
+
+    stats = _calculate_fixed_sl_stats_with_strategy(trades, 'Test Strategy', 3.0)
+    assert stats['Strategy'] == 'Test Strategy'
+    assert stats['Fixed SL'] == '3.0'
+
+
+def test_fixed_sl_with_strategy_empty():
+    """Test fixed SL with strategy on empty data."""
+    empty = get_empty_data()
+    stats = _calculate_fixed_sl_stats_with_strategy(empty, 'Empty', 2.0)
+    assert stats['Trades'] == 0
+    assert stats['Strategy'] == 'Empty'
+
+
+def test_get_ema_strategies_ema50():
+    """Test EMA strategy list for EMA(50)."""
+    strategies = _get_ema_strategies("EMA(50)")
+    names = [name for name, _ in strategies]
+    assert 'All Trades' in names
+    assert 'EMA(50) Aligned' in names
+    assert 'EMA(50) Against' in names
+    assert len(strategies) == 3
+
+
+def test_get_ema_strategies_ema200():
+    """Test EMA strategy list for EMA(200)."""
+    strategies = _get_ema_strategies("EMA(200)")
+    names = [name for name, _ in strategies]
+    assert 'All Trades' in names
+    assert 'EMA(200) Aligned' in names
+    assert 'EMA(200) Against' in names
+    assert len(strategies) == 3
+
+
+def test_ema_strategy_filters_correctly():
+    """Test that EMA strategy filters produce correct subsets."""
+    sample = get_sample_data()
+    strategies = _get_ema_strategies("EMA(50)")
+
+    aligned_func = [func for name, func in strategies if name == 'EMA(50) Aligned'][0]
+    against_func = [func for name, func in strategies if name == 'EMA(50) Against'][0]
+
+    aligned = aligned_func(sample)
+    against = against_func(sample)
+
+    for _, row in aligned.iterrows():
+        assert row['Direction'] == row['EMA(50)']
+
+    for _, row in against.iterrows():
+        assert row['Direction'] != row['EMA(50)']
+
+    assert len(aligned) + len(against) == len(sample)
+
+
+def test_calculate_fixed_sl_ema50_statistics():
+    """Test that EMA(50) fixed SL statistics returns a DataFrame."""
+    sample = get_sample_data()
+    result = calculate_fixed_sl_ema_statistics(sample, "EMA(50)")
+    assert isinstance(result, pd.DataFrame)
+    assert len(result) > 0
+
+
+def test_calculate_fixed_sl_ema200_statistics():
+    """Test that EMA(200) fixed SL statistics returns a DataFrame."""
+    sample = get_sample_data()
+    result = calculate_fixed_sl_ema_statistics(sample, "EMA(200)")
+    assert isinstance(result, pd.DataFrame)
+    assert len(result) > 0
+
+
+def test_fixed_sl_ema_total_rows():
+    """Test row count: 3 strategies × 8 SL sizes × 2 RRR = 48."""
+    sample = get_sample_data()
+    result = calculate_fixed_sl_ema_statistics(sample, "EMA(50)")
+    assert len(result) == 3 * 8 * 2
+
+
+def test_fixed_sl_ema_has_strategy_column():
+    """Test that EMA fixed SL result has Strategy column."""
+    sample = get_sample_data()
+    result = calculate_fixed_sl_ema_statistics(sample, "EMA(50)")
+    columns = list(result.columns)
+    assert columns[0] == 'Strategy'
+    assert columns[1] == 'Fixed SL'
+    assert columns[2] == 'RRR'
+
+
+def test_fixed_sl_ema_strategies_present():
+    """Test that all three strategy names appear in results."""
+    sample = get_sample_data()
+    result = calculate_fixed_sl_ema_statistics(sample, "EMA(50)")
+    strategies = result['Strategy'].unique()
+    assert 'All Trades' in strategies
+    assert 'EMA(50) Aligned' in strategies
+    assert 'EMA(50) Against' in strategies
+
+
+def test_fixed_sl_ema_aligned_wins_more():
+    """Test fixed SL with EMA alignment on controlled data.
+
+    All trades are Buy with EMA(50)=Buy, so Aligned = all trades, Against = 0 trades.
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02'],
+        'Direction': ['Buy', 'Buy'],
+        'EMA(50)': ['Buy', 'Buy'],
+        'EMA(200)': ['Sell', 'Sell'],
+        'SL': [5.0, 5.0],
+        'Pullback': [1.0, 1.0],
+        'TP': [10.0, 10.0],
+    })
+
+    result = calculate_fixed_sl_ema_statistics(trades, "EMA(50)")
+
+    # EMA(50) Aligned at fixed SL=2.0, 1:1 should have 2 trades
+    aligned_rows = result[(result['Strategy'] == 'EMA(50) Aligned') & (result['Fixed SL'] == '2.0') & (result['RRR'] == '1:1')]
+    assert len(aligned_rows) == 1
+    assert aligned_rows.iloc[0]['Notation'] == '2W – 0L'
+
+    # EMA(50) Against should have 0 trades
+    against_rows = result[(result['Strategy'] == 'EMA(50) Against') & (result['Fixed SL'] == '2.0') & (result['RRR'] == '1:1')]
+    assert len(against_rows) == 1
+    assert against_rows.iloc[0]['Notation'] == '0W – 0L'
+
+
 def run_all_tests():
     """Run all tests and report results."""
     tests = [
@@ -1037,6 +1351,30 @@ def run_all_tests():
         test_limit_order_mixed_trades,
         test_limit_order_tp_zero_is_loss,
         test_calculate_limit_order_statistics,
+        test_fixed_sl_sizes_constant,
+        test_fixed_sl_trade_survives,
+        test_fixed_sl_trade_loses_deep_pullback,
+        test_fixed_sl_ignores_original_sl,
+        test_fixed_sl_tp_must_reach_target,
+        test_fixed_sl_1_2_rrr,
+        test_fixed_sl_empty,
+        test_fixed_sl_has_fixed_sl_column,
+        test_fixed_sl_mixed_trades,
+        test_calculate_fixed_sl_statistics,
+        test_calculate_fixed_sl_statistics_has_both_rrr,
+        test_calculate_fixed_sl_statistics_total_rows,
+        test_calculate_fixed_sl_statistics_columns,
+        test_fixed_sl_with_strategy_has_strategy_column,
+        test_fixed_sl_with_strategy_empty,
+        test_get_ema_strategies_ema50,
+        test_get_ema_strategies_ema200,
+        test_ema_strategy_filters_correctly,
+        test_calculate_fixed_sl_ema50_statistics,
+        test_calculate_fixed_sl_ema200_statistics,
+        test_fixed_sl_ema_total_rows,
+        test_fixed_sl_ema_has_strategy_column,
+        test_fixed_sl_ema_strategies_present,
+        test_fixed_sl_ema_aligned_wins_more,
     ]
 
     passed = 0

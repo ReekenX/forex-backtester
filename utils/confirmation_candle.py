@@ -860,6 +860,315 @@ def display_limit_order(df: pd.DataFrame):
         display(HTML(html_table))
 
 
+FIXED_SL_SIZES = [1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
+
+
+def _calculate_fixed_sl_stats(trades: pd.DataFrame, fixed_sl: float, rrr_ratio: int = 1) -> Dict:
+    """
+    Calculate trading statistics using a fixed SL size instead of the original SL.
+
+    The original SL from the CSV is ignored. Instead, a fixed SL is used:
+    - Trade survives if Pullback < fixed_sl
+    - Trade wins if Pullback < fixed_sl AND TP >= rrr_ratio * fixed_sl
+
+    Args:
+        trades: DataFrame containing filtered trades
+        fixed_sl: Fixed stop loss in pips (replaces original SL)
+        rrr_ratio: Risk-reward ratio (1 for 1:1, 2 for 1:2)
+
+    Returns:
+        Dictionary with calculated statistics
+    """
+    breakeven = _breakeven_rate(rrr_ratio)
+    rrr_label = f"1:{rrr_ratio}"
+    total_trades = len(trades)
+
+    if total_trades == 0:
+        return {
+            "Fixed SL": f"{fixed_sl}",
+            "RRR": rrr_label,
+            "Trades": 0,
+            "Notation": "0W – 0L",
+            "Win Rate": "0.0%",
+            "Outcome": "0R",
+            "Edge": f"{-breakeven:.1f}%",
+            "Days": 0,
+            "Days %": "0%",
+            "Trades Required": "N/A",
+            "edge_value": -breakeven,
+        }
+
+    winning_trades = trades[
+        (trades["Pullback"] < fixed_sl) &
+        (trades["TP"] >= rrr_ratio * fixed_sl)
+    ]
+
+    wins = len(winning_trades)
+    losses = total_trades - wins
+    win_rate = (wins / total_trades) * 100
+    edge = win_rate - breakeven
+    outcome = (wins * rrr_ratio) - losses
+
+    days_with_wins = winning_trades["Date"].nunique() if "Date" in winning_trades.columns and len(winning_trades) > 0 else 0
+    total_days = trades["Date"].nunique() if "Date" in trades.columns else 0
+    days_pct = (days_with_wins / total_days * 100) if total_days > 0 else 0.0
+    trades_required = (total_trades / outcome) if outcome > 0 else float("inf")
+
+    return {
+        "Fixed SL": f"{fixed_sl}",
+        "RRR": rrr_label,
+        "Trades": total_trades,
+        "Notation": f"{wins}W – {losses}L",
+        "Win Rate": f"{win_rate:.1f}%",
+        "Outcome": f"{outcome}R",
+        "Edge": f"{edge:.1f}%",
+        "Days": days_with_wins,
+        "Days %": f"{days_pct:.0f}%",
+        "Trades Required": f"{trades_required:.1f}" if outcome > 0 else "N/A",
+        "edge_value": edge,
+    }
+
+
+def calculate_fixed_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate statistics for fixed SL sizes from 1.5 to 5.0 pips.
+
+    Instead of using the original SL from the CSV, each trade is evaluated
+    with a fixed SL. A trade survives if Pullback < fixed_SL, and wins if
+    TP >= RRR * fixed_SL.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with fixed SL statistics, sorted by outcome descending
+    """
+    results = []
+    total_trades = len(df)
+
+    for fixed_sl in FIXED_SL_SIZES:
+        for rrr in RRR_RATIOS:
+            stats = _calculate_fixed_sl_stats(df, fixed_sl, rrr)
+            results.append(stats)
+
+    result_df = pd.DataFrame(results)
+
+    # Sort by outcome descending, then edge descending
+    result_df = result_df.sort_values("edge_value", ascending=False)
+
+    # Drop sorting column
+    result_df = result_df.drop("edge_value", axis=1)
+
+    # Rename columns to include totals
+    total_days = df["Date"].nunique() if "Date" in df.columns else 0
+    result_df = result_df.rename(columns={
+        "Trades": f"Trades ({total_trades})",
+        "Days": f"Days ({total_days})",
+    })
+
+    result_df = result_df.reset_index(drop=True)
+
+    return result_df
+
+
+def display_fixed_sl(df: pd.DataFrame):
+    """
+    Display fixed SL size analysis.
+
+    Tests what happens when using a fixed SL (1.5 to 5.0 pips) instead of the
+    original safe stop. Trade survives if Pullback < fixed SL, wins if TP reaches target.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Fixed SL Size Analysis</h2>"
+    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Uses a fixed SL (1.5–5.0 pips) instead of the original safe stop. Trade survives if Pullback &lt; fixed SL.</p>"
+    display(HTML(title_html + subtitle_html))
+
+    stats_df = calculate_fixed_sl_statistics(df)
+
+    if stats_df.empty:
+        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
+    else:
+        html_table = create_html_table(stats_df)
+        display(HTML(html_table))
+
+
+def _calculate_fixed_sl_stats_with_strategy(trades: pd.DataFrame, strategy_name: str, fixed_sl: float, rrr_ratio: int = 1) -> Dict:
+    """
+    Calculate fixed SL statistics for a named strategy filter.
+
+    Same logic as _calculate_fixed_sl_stats but includes a Strategy column.
+
+    Args:
+        trades: DataFrame containing filtered trades
+        strategy_name: Name of the strategy filter applied
+        fixed_sl: Fixed stop loss in pips
+        rrr_ratio: Risk-reward ratio (1 for 1:1, 2 for 1:2)
+
+    Returns:
+        Dictionary with calculated statistics including Strategy column
+    """
+    breakeven = _breakeven_rate(rrr_ratio)
+    rrr_label = f"1:{rrr_ratio}"
+    total_trades = len(trades)
+
+    if total_trades == 0:
+        return {
+            "Strategy": strategy_name,
+            "Fixed SL": f"{fixed_sl}",
+            "RRR": rrr_label,
+            "Trades": 0,
+            "Notation": "0W – 0L",
+            "Win Rate": "0.0%",
+            "Outcome": "0R",
+            "Edge": f"{-breakeven:.1f}%",
+            "Days": 0,
+            "Days %": "0%",
+            "Trades Required": "N/A",
+            "edge_value": -breakeven,
+        }
+
+    winning_trades = trades[
+        (trades["Pullback"] < fixed_sl) &
+        (trades["TP"] >= rrr_ratio * fixed_sl)
+    ]
+
+    wins = len(winning_trades)
+    losses = total_trades - wins
+    win_rate = (wins / total_trades) * 100
+    edge = win_rate - breakeven
+    outcome = (wins * rrr_ratio) - losses
+
+    days_with_wins = winning_trades["Date"].nunique() if "Date" in winning_trades.columns and len(winning_trades) > 0 else 0
+    total_days = trades["Date"].nunique() if "Date" in trades.columns else 0
+    days_pct = (days_with_wins / total_days * 100) if total_days > 0 else 0.0
+    trades_required = (total_trades / outcome) if outcome > 0 else float("inf")
+
+    return {
+        "Strategy": strategy_name,
+        "Fixed SL": f"{fixed_sl}",
+        "RRR": rrr_label,
+        "Trades": total_trades,
+        "Notation": f"{wins}W – {losses}L",
+        "Win Rate": f"{win_rate:.1f}%",
+        "Outcome": f"{outcome}R",
+        "Edge": f"{edge:.1f}%",
+        "Days": days_with_wins,
+        "Days %": f"{days_pct:.0f}%",
+        "Trades Required": f"{trades_required:.1f}" if outcome > 0 else "N/A",
+        "edge_value": edge,
+    }
+
+
+def _get_ema_strategies(ema_col: str) -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]:
+    """
+    Get EMA-based strategy filters for a given EMA column.
+
+    Args:
+        ema_col: Column name, either "EMA(50)" or "EMA(200)"
+
+    Returns:
+        List of tuples (strategy_name, filter_function)
+    """
+    return [
+        ("All Trades", lambda df: df),
+        (f"{ema_col} Aligned", lambda df, col=ema_col: df[df["Direction"] == df[col]]),
+        (f"{ema_col} Against", lambda df, col=ema_col: df[df["Direction"] != df[col]]),
+    ]
+
+
+def calculate_fixed_sl_ema_statistics(df: pd.DataFrame, ema_col: str) -> pd.DataFrame:
+    """
+    Calculate fixed SL statistics filtered by EMA alignment.
+
+    For each EMA strategy (All, Aligned, Against), tests all fixed SL sizes
+    at each RRR ratio.
+
+    Args:
+        df: DataFrame with trading data
+        ema_col: Column name, either "EMA(50)" or "EMA(200)"
+
+    Returns:
+        DataFrame with fixed SL + EMA statistics, sorted by edge descending
+    """
+    strategies = _get_ema_strategies(ema_col)
+    results = []
+    total_trades = len(df)
+
+    for strategy_name, filter_func in strategies:
+        filtered_df = filter_func(df)
+        for fixed_sl in FIXED_SL_SIZES:
+            for rrr in RRR_RATIOS:
+                stats = _calculate_fixed_sl_stats_with_strategy(filtered_df, strategy_name, fixed_sl, rrr)
+                results.append(stats)
+
+    result_df = pd.DataFrame(results)
+
+    # Sort by edge descending
+    result_df = result_df.sort_values("edge_value", ascending=False)
+
+    # Drop sorting column
+    result_df = result_df.drop("edge_value", axis=1)
+
+    # Rename columns to include totals
+    total_days = df["Date"].nunique() if "Date" in df.columns else 0
+    result_df = result_df.rename(columns={
+        "Trades": f"Trades ({total_trades})",
+        "Days": f"Days ({total_days})",
+    })
+
+    result_df = result_df.reset_index(drop=True)
+
+    return result_df
+
+
+def display_fixed_sl_ema50(df: pd.DataFrame):
+    """
+    Display fixed SL analysis filtered by EMA(50) alignment.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Fixed SL + EMA(50) Analysis</h2>"
+    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Fixed SL (1.5–5.0 pips) combined with EMA(50) direction filter.</p>"
+    display(HTML(title_html + subtitle_html))
+
+    stats_df = calculate_fixed_sl_ema_statistics(df, "EMA(50)")
+
+    if stats_df.empty:
+        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
+    else:
+        html_table = create_html_table(stats_df)
+        display(HTML(html_table))
+
+
+def display_fixed_sl_ema200(df: pd.DataFrame):
+    """
+    Display fixed SL analysis filtered by EMA(200) alignment.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Fixed SL + EMA(200) Analysis</h2>"
+    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Fixed SL (1.5–5.0 pips) combined with EMA(200) direction filter.</p>"
+    display(HTML(title_html + subtitle_html))
+
+    stats_df = calculate_fixed_sl_ema_statistics(df, "EMA(200)")
+
+    if stats_df.empty:
+        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
+    else:
+        html_table = create_html_table(stats_df)
+        display(HTML(html_table))
+
+
 def display_buffer_analysis(df: pd.DataFrame):
     """
     Display SL buffer analysis - what if extra pips were added to the stop loss.

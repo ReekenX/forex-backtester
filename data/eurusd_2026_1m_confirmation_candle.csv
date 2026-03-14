@@ -213,3 +213,14 @@ Date,Weekday,Trade,Direction,EMA(50),EMA(200),Engulfing,SL,Pullback,TP,R
 2026-03-09,Monday,#4,Sell,Buy,Buy,No,0.8,0.8,,
 2026-03-09,Monday,#5,Sell,Buy,Buy,No,0.9,0.2,20.0,10.0
 2026-03-10,Tuesday,#1,Buy,Buy,Buy,No,2.6,1.5,44.0,10.0
+2026-03-11,Wednesday,#1,Buy,Sell,Sell,No,2.6,2.8,18.0,-6.0
+2026-03-11,Wednesday,#2,Sell,Sell,Sell,No,1.5,1.5,,
+2026-03-11,Wednesday,#3,Buy,Sell,Sell,Yes,5.4,5.4,,
+2026-03-11,Wednesday,#4,Sell,Sell,Sell,Yes,15.2,6.9,36.0,2.0
+2026-03-11,Wednesday,#5,Buy,Sell,Sell,No,0.7,0.7,,
+2026-03-12,Thursday,#1,Sell,Sell,Sell,No,1.3,1.6,11.0,-8.0
+2026-03-12,Thursday,#2,Sell,Sell,Sell,No,0.7,0.7,,
+2026-03-12,Thursday,#3,Sell,Buy,Sell,No,3.0,0.9,52.0,10.0
+2026-03-12,Thursday,#4,Buy,Sell,Sell,No,1.3,1.3,,
+2026-03-12,Thursday,#5,Buy,Sell,Sell,No,1.9,1.9,,
+2026-03-12,Thursday,#6,Buy,Sell,Sell,No,0.8,0.8,,
