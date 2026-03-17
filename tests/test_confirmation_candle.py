@@ -691,33 +691,31 @@ def test_bruteforce_returns_dataframe():
 
 
 def test_bruteforce_has_all_rrr_values():
-    """Test that bruteforce includes RRR 1:1 through 1:5."""
+    """Test that bruteforce only includes RRR values with positive edge."""
     sample = get_sample_data()
     result = calculate_bruteforce(sample)
     rrr_values = result['RRR'].unique()
-    for rrr in ['1:1', '1:2', '1:3']:
-        assert rrr in rrr_values, f"Missing {rrr}"
-    assert '1:4' not in rrr_values
-    assert '1:5' not in rrr_values
+    # Only RRR values with positive edge should appear
+    for rrr in rrr_values:
+        assert rrr in ['1:1', '1:2', '1:3'], f"Unexpected {rrr}"
 
 
 def test_bruteforce_has_buffer_range():
-    """Test that bruteforce includes buffer values from +0.0 to +10.0 in 0.5 steps."""
+    """Test that bruteforce only includes buffer values with positive edge."""
     sample = get_sample_data()
     result = calculate_bruteforce(sample)
-    buffers = result['Buffer'].unique()
-    assert '+0.0' in buffers
-    assert '+5.0' in buffers
-    assert '+10.0' in buffers
-    # 0.0 to 10.0 in 0.5 steps = 21 values
-    assert len(buffers) == 21
+    # Only positive-edge rows should remain
+    assert len(result) <= 21 * 3
 
 
 def test_bruteforce_total_rows():
-    """Test that bruteforce has correct number of rows: 21 buffers × 3 RRR = 63."""
+    """Test that bruteforce filters to only positive edge rows."""
     sample = get_sample_data()
     result = calculate_bruteforce(sample)
-    assert len(result) == 21 * 3
+    # All remaining rows must have positive edge
+    for _, row in result.iterrows():
+        edge_val = float(str(row['Edge']).replace('%', ''))
+        assert edge_val > 0, f"Non-positive edge found: {row['Edge']}"
 
 
 def test_bruteforce_sorted_by_outcome():
@@ -732,8 +730,8 @@ def test_bruteforce_buffer_improves_trade():
     """Test that buffer can turn a losing trade into a winner in bruteforce.
 
     SL 3.0, Pullback 4.0, TP 10.0.
-    At buffer +0.0, RRR 1:1: Pullback(4) >= SL(3) => LOSS
-    At buffer +1.5, RRR 1:1: effective SL = 4.5, Pullback(4) < 4.5, TP(10) >= 4.5 => WIN
+    At buffer +0.0, RRR 1:1: Pullback(4) >= SL(3) => LOSS (negative edge, filtered out)
+    At buffer +1.5, RRR 1:1: effective SL = 4.5, Pullback(4) < 4.5, TP(10) >= 4.5 => WIN (positive edge)
     """
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
@@ -749,12 +747,13 @@ def test_bruteforce_buffer_improves_trade():
 
     result = calculate_bruteforce(trades)
 
-    # At buffer +0.0, 1:1 => loss
+    # At buffer +0.0, 1:1 => loss (negative edge, filtered out)
     row_0_1 = result[(result['Buffer'] == '+0.0') & (result['RRR'] == '1:1')]
-    assert row_0_1.iloc[0]['Notation'] == '0W – 1L'
+    assert len(row_0_1) == 0, "Negative edge row should be filtered out"
 
-    # At buffer +1.5, 1:1 => win (effective SL = 4.5)
+    # At buffer +1.5, 1:1 => win (positive edge, should be present)
     row_15_1 = result[(result['Buffer'] == '+1.5') & (result['RRR'] == '1:1')]
+    assert len(row_15_1) == 1
     assert row_15_1.iloc[0]['Notation'] == '1W – 0L'
 
 
@@ -762,9 +761,8 @@ def test_bruteforce_higher_rrr_harder_to_win():
     """Test that higher RRR requires TP to reach further, making wins harder.
 
     SL 2.0, Pullback 1.0, TP 6.0.
-    At 1:1: TP(6) >= 1*SL(2) => WIN
-    At 1:3: TP(6) >= 3*SL(2)=6 => WIN
-    At 1:4: TP(6) >= 4*SL(2)=8 => LOSS
+    At 1:1: TP(6) >= 1*SL(2) => WIN (positive edge)
+    At 1:3: TP(6) >= 3*SL(2)=6 => WIN (positive edge)
     """
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
@@ -780,24 +778,26 @@ def test_bruteforce_higher_rrr_harder_to_win():
 
     result = calculate_bruteforce(trades)
 
+    # Positive edge rows should be present
     row_1_1 = result[(result['Buffer'] == '+0.0') & (result['RRR'] == '1:1')]
+    assert len(row_1_1) == 1
     assert row_1_1.iloc[0]['Notation'] == '1W – 0L'
 
     row_1_3 = result[(result['Buffer'] == '+0.0') & (result['RRR'] == '1:3')]
+    assert len(row_1_3) == 1
     assert row_1_3.iloc[0]['Notation'] == '1W – 0L'
 
-    # At 1:3 with buffer +1.0: effective SL = 3.0, TP(6) >= 3*3=9 => LOSS
+    # At 1:3 with buffer +1.0: effective SL = 3.0, TP(6) >= 3*3=9 => LOSS (filtered out)
     row_1_3_buf = result[(result['Buffer'] == '+1.0') & (result['RRR'] == '1:3')]
-    assert row_1_3_buf.iloc[0]['Notation'] == '0W – 1L'
+    assert len(row_1_3_buf) == 0, "Negative edge row should be filtered out"
 
 
 def test_bruteforce_empty_data():
-    """Test bruteforce with empty dataset."""
+    """Test bruteforce with empty dataset returns empty (no positive edge)."""
     empty = get_empty_data()
     result = calculate_bruteforce(empty)
     assert isinstance(result, pd.DataFrame)
-    assert len(result) == 21 * 3
-    assert all(result['Outcome'] == '0R')
+    assert len(result) == 0
 
 
 def test_limit_order_no_trigger():
@@ -1121,19 +1121,22 @@ def test_calculate_fixed_sl_statistics():
 
 
 def test_calculate_fixed_sl_statistics_has_both_rrr():
-    """Test that fixed SL statistics includes both 1:1 and 1:2 RRR rows."""
+    """Test that fixed SL statistics only includes RRR values with positive edge."""
     sample = get_sample_data()
     result = calculate_fixed_sl_statistics(sample)
     rrr_values = result['RRR'].unique()
-    assert '1:1' in rrr_values
-    assert '1:2' in rrr_values
+    for rrr in rrr_values:
+        assert rrr in ['1:1', '1:2'], f"Unexpected RRR: {rrr}"
 
 
 def test_calculate_fixed_sl_statistics_total_rows():
-    """Test that fixed SL statistics has correct number of rows: 8 SL sizes x 2 RRR = 16."""
+    """Test that fixed SL statistics only contains positive edge rows."""
     sample = get_sample_data()
     result = calculate_fixed_sl_statistics(sample)
-    assert len(result) == 8 * 2
+    # All rows must have positive edge
+    for _, row in result.iterrows():
+        edge_val = float(str(row['Edge']).replace('%', ''))
+        assert edge_val > 0, f"Non-positive edge found: {row['Edge']}"
 
 
 def test_calculate_fixed_sl_statistics_columns():
@@ -1225,10 +1228,12 @@ def test_calculate_fixed_sl_ema200_statistics():
 
 
 def test_fixed_sl_ema_total_rows():
-    """Test row count: 3 strategies × 8 SL sizes × 2 RRR = 48."""
+    """Test that only positive edge rows are returned."""
     sample = get_sample_data()
     result = calculate_fixed_sl_ema_statistics(sample, "EMA(50)")
-    assert len(result) == 3 * 8 * 2
+    for _, row in result.iterrows():
+        edge_val = float(str(row['Edge']).replace('%', ''))
+        assert edge_val > 0, f"Non-positive edge found: {row['Edge']}"
 
 
 def test_fixed_sl_ema_has_strategy_column():
@@ -1242,13 +1247,13 @@ def test_fixed_sl_ema_has_strategy_column():
 
 
 def test_fixed_sl_ema_strategies_present():
-    """Test that all three strategy names appear in results."""
+    """Test that only strategies with positive edge appear in results."""
     sample = get_sample_data()
     result = calculate_fixed_sl_ema_statistics(sample, "EMA(50)")
     strategies = result['Strategy'].unique()
-    assert 'All Trades' in strategies
-    assert 'EMA(50) Aligned' in strategies
-    assert 'EMA(50) Against' in strategies
+    # Only strategies with positive edge should be present
+    for s in strategies:
+        assert s in ['All Trades', 'EMA(50) Aligned', 'EMA(50) Against'], f"Unexpected strategy: {s}"
 
 
 def test_fixed_sl_ema_aligned_wins_more():
@@ -1268,15 +1273,14 @@ def test_fixed_sl_ema_aligned_wins_more():
 
     result = calculate_fixed_sl_ema_statistics(trades, "EMA(50)")
 
-    # EMA(50) Aligned at fixed SL=2.0, 1:1 should have 2 trades
+    # EMA(50) Aligned at fixed SL=2.0, 1:1 should have 2 trades (positive edge)
     aligned_rows = result[(result['Strategy'] == 'EMA(50) Aligned') & (result['Fixed SL'] == '2.0') & (result['RRR'] == '1:1')]
     assert len(aligned_rows) == 1
     assert aligned_rows.iloc[0]['Notation'] == '2W – 0L'
 
-    # EMA(50) Against should have 0 trades
+    # EMA(50) Against with 0 trades has negative edge, so it's filtered out
     against_rows = result[(result['Strategy'] == 'EMA(50) Against') & (result['Fixed SL'] == '2.0') & (result['RRR'] == '1:1')]
-    assert len(against_rows) == 1
-    assert against_rows.iloc[0]['Notation'] == '0W – 0L'
+    assert len(against_rows) == 0
 
 
 def run_all_tests():

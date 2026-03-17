@@ -556,7 +556,7 @@ def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     result_df = pd.DataFrame(results)
 
     # Filter to only show strategies with positive edge
-    # result_df = result_df[result_df["edge_value"] > 0].copy()
+    result_df = result_df[result_df["edge_value"] > 0].copy()
 
     # Sort by edge descending
     result_df = result_df.sort_values("edge_value", ascending=False)
@@ -666,6 +666,9 @@ def calculate_bruteforce(df: pd.DataFrame) -> pd.DataFrame:
             })
 
     result_df = pd.DataFrame(results)
+
+    # Filter to only show strategies with positive edge
+    result_df = result_df[result_df["edge_value"] > 0].copy()
 
     # Sort by outcome descending, then edge descending
     result_df = result_df.sort_values(["outcome_value", "edge_value"], ascending=[False, False])
@@ -816,6 +819,9 @@ def calculate_limit_order_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
     result_df = pd.DataFrame(results)
 
+    # Filter to only show strategies with positive edge
+    result_df = result_df[result_df["edge_value"] > 0].copy()
+
     # Sort by edge descending
     result_df = result_df.sort_values("edge_value", ascending=False)
 
@@ -952,6 +958,9 @@ def calculate_fixed_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
             results.append(stats)
 
     result_df = pd.DataFrame(results)
+
+    # Filter to only show strategies with positive edge
+    result_df = result_df[result_df["edge_value"] > 0].copy()
 
     # Sort by outcome descending, then edge descending
     result_df = result_df.sort_values("edge_value", ascending=False)
@@ -1106,6 +1115,9 @@ def calculate_fixed_sl_ema_statistics(df: pd.DataFrame, ema_col: str) -> pd.Data
                 results.append(stats)
 
     result_df = pd.DataFrame(results)
+
+    # Filter to only show strategies with positive edge
+    result_df = result_df[result_df["edge_value"] > 0].copy()
 
     # Sort by edge descending
     result_df = result_df.sort_values("edge_value", ascending=False)
