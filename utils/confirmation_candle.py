@@ -1,10 +1,14 @@
 """
 1M Confirmation Candle Analysis Module
 
-Analyzes trading strategies based on EMA(50), EMA(200) alignment, and engulfing candle patterns.
+Analyzes trading strategies based on 1H (higher timeframe) alignment.
 All strategies are evaluated at 1:1 and 1:2 RRR.
 
-CSV columns: Date, Weekday, Trade, Direction, EMA(50), EMA(200), Engulfing, SL, Pullback, TP, R
+CSV columns: Date, Weekday, Trade, Direction, 1H, SL, Pullback, TP, R
+
+1H column represents higher timeframe alignment:
+- Buy: trade idea is above High or bounced from Low
+- Sell: trade idea is below Low or bounced from High
 """
 
 import pandas as pd
@@ -51,68 +55,11 @@ def get_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]
         ("All Trades", lambda df: df),
     ])
 
-    # === EMA alignment strategies ===
+    # === 1H alignment strategies ===
     strategies.extend([
-        ("EMA(50) Aligned", lambda df: df[df["Direction"] == df["EMA(50)"]]),
-        ("EMA(50) Against", lambda df: df[df["Direction"] != df["EMA(50)"]]),
-        ("EMA(200) Aligned", lambda df: df[df["Direction"] == df["EMA(200)"]]),
-        ("EMA(200) Against", lambda df: df[df["Direction"] != df["EMA(200)"]]),
-        ("Both EMAs Aligned", lambda df: df[
-            (df["Direction"] == df["EMA(50)"]) & (df["Direction"] == df["EMA(200)"])
-        ]),
-        ("Both EMAs Against", lambda df: df[
-            (df["Direction"] != df["EMA(50)"]) & (df["Direction"] != df["EMA(200)"])
-        ]),
-        ("EMA(50) Aligned + EMA(200) Against", lambda df: df[
-            (df["Direction"] == df["EMA(50)"]) & (df["Direction"] != df["EMA(200)"])
-        ]),
-        ("EMA(50) Against + EMA(200) Aligned", lambda df: df[
-            (df["Direction"] != df["EMA(50)"]) & (df["Direction"] == df["EMA(200)"])
-        ]),
+        ("1H Aligned", lambda df: df[df["Direction"] == df["1H"]]),
+        ("1H Against", lambda df: df[df["Direction"] != df["1H"]]),
     ])
-
-    # === EMA market state ===
-    strategies.extend([
-        ("EMAs Agree (trending)", lambda df: df[df["EMA(50)"] == df["EMA(200)"]]),
-        ("EMAs Disagree (transition)", lambda df: df[df["EMA(50)"] != df["EMA(200)"]]),
-        ("EMAs Agree + Direction Aligned", lambda df: df[
-            (df["EMA(50)"] == df["EMA(200)"]) & (df["Direction"] == df["EMA(50)"])
-        ]),
-        ("EMAs Agree + Direction Against", lambda df: df[
-            (df["EMA(50)"] == df["EMA(200)"]) & (df["Direction"] != df["EMA(50)"])
-        ]),
-    ])
-
-    # === Engulfing strategies ===
-    strategies.extend([
-        ("Engulfing: Yes", lambda df: df[df["Engulfing"] == "Yes"]),
-        ("Engulfing: No", lambda df: df[df["Engulfing"] == "No"]),
-        ("Engulfing: Similar", lambda df: df[df["Engulfing"] == "Similar"]),
-        ("Engulfing: Yes or Similar", lambda df: df[df["Engulfing"].isin(["Yes", "Similar"])]),
-        ("Has Engulfing Data", lambda df: df[df["Engulfing"].notna()]),
-    ])
-
-    # === Engulfing + EMA combinations ===
-    engulfing_filters = [
-        ("Engulfing: Yes", lambda df: df[df["Engulfing"] == "Yes"]),
-        ("Engulfing: No", lambda df: df[df["Engulfing"] == "No"]),
-        ("Engulfing: Yes or Similar", lambda df: df[df["Engulfing"].isin(["Yes", "Similar"])]),
-    ]
-
-    ema_filters = [
-        ("EMA(50) Aligned", lambda df: df[df["Direction"] == df["EMA(50)"]]),
-        ("EMA(200) Aligned", lambda df: df[df["Direction"] == df["EMA(200)"]]),
-        ("Both EMAs Aligned", lambda df: df[
-            (df["Direction"] == df["EMA(50)"]) & (df["Direction"] == df["EMA(200)"])
-        ]),
-    ]
-
-    for eng_name, eng_func in engulfing_filters:
-        for ema_name, ema_func in ema_filters:
-            strategies.append((
-                f"{eng_name} + {ema_name}",
-                lambda df, ef=eng_func, emf=ema_func: emf(ef(df))
-            ))
 
     # === SL filter strategies ===
     sl_filters = [
@@ -130,71 +77,18 @@ def get_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]
             lambda df, f=sl_func: f(df)
         ))
 
-    # === EMA(50) Aligned + SL filters ===
+    # === 1H Aligned + SL filters ===
     for sl_name, sl_func in sl_filters:
         strategies.append((
-            f"EMA(50) Aligned + {sl_name}",
-            lambda df, f=sl_func: f(df[df["Direction"] == df["EMA(50)"]])
+            f"1H Aligned + {sl_name}",
+            lambda df, f=sl_func: f(df[df["Direction"] == df["1H"]])
         ))
 
-    # === EMA(200) Aligned + SL filters ===
+    # === 1H Against + SL filters ===
     for sl_name, sl_func in sl_filters:
         strategies.append((
-            f"EMA(200) Aligned + {sl_name}",
-            lambda df, f=sl_func: f(df[df["Direction"] == df["EMA(200)"]])
-        ))
-
-    # === Both EMAs Aligned + SL filters ===
-    for sl_name, sl_func in sl_filters:
-        strategies.append((
-            f"Both EMAs Aligned + {sl_name}",
-            lambda df, f=sl_func: f(df[
-                (df["Direction"] == df["EMA(50)"]) & (df["Direction"] == df["EMA(200)"])
-            ])
-        ))
-
-    # === EMA(50) Against + SL filters ===
-    for sl_name, sl_func in sl_filters:
-        strategies.append((
-            f"EMA(50) Against + {sl_name}",
-            lambda df, f=sl_func: f(df[df["Direction"] != df["EMA(50)"]])
-        ))
-
-    # === EMA(200) Against + SL filters ===
-    for sl_name, sl_func in sl_filters:
-        strategies.append((
-            f"EMA(200) Against + {sl_name}",
-            lambda df, f=sl_func: f(df[df["Direction"] != df["EMA(200)"]])
-        ))
-
-    # === Both EMAs Against + SL filters ===
-    for sl_name, sl_func in sl_filters:
-        strategies.append((
-            f"Both EMAs Against + {sl_name}",
-            lambda df, f=sl_func: f(df[
-                (df["Direction"] != df["EMA(50)"]) & (df["Direction"] != df["EMA(200)"])
-            ])
-        ))
-
-    # === Engulfing: Yes + SL filters ===
-    for sl_name, sl_func in sl_filters:
-        strategies.append((
-            f"Engulfing: Yes + {sl_name}",
-            lambda df, f=sl_func: f(df[df["Engulfing"] == "Yes"])
-        ))
-
-    # === Engulfing: No + SL filters ===
-    for sl_name, sl_func in sl_filters:
-        strategies.append((
-            f"Engulfing: No + {sl_name}",
-            lambda df, f=sl_func: f(df[df["Engulfing"] == "No"])
-        ))
-
-    # === Engulfing: Yes or Similar + SL filters ===
-    for sl_name, sl_func in sl_filters:
-        strategies.append((
-            f"Engulfing: Yes or Similar + {sl_name}",
-            lambda df, f=sl_func: f(df[df["Engulfing"].isin(["Yes", "Similar"])])
+            f"1H Against + {sl_name}",
+            lambda df, f=sl_func: f(df[df["Direction"] != df["1H"]])
         ))
 
     return strategies
@@ -495,26 +389,8 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
     """
     base_strategies = [
         ("All Trades", lambda df: df),
-        ("EMA(50) Aligned", lambda df: df[df["Direction"] == df["EMA(50)"]]),
-        ("EMA(50) Against", lambda df: df[df["Direction"] != df["EMA(50)"]]),
-        ("EMA(200) Aligned", lambda df: df[df["Direction"] == df["EMA(200)"]]),
-        ("EMA(200) Against", lambda df: df[df["Direction"] != df["EMA(200)"]]),
-        ("Both EMAs Aligned", lambda df: df[
-            (df["Direction"] == df["EMA(50)"]) & (df["Direction"] == df["EMA(200)"])
-        ]),
-        ("Both EMAs Against", lambda df: df[
-            (df["Direction"] != df["EMA(50)"]) & (df["Direction"] != df["EMA(200)"])
-        ]),
-        ("EMAs Agree + Direction Aligned", lambda df: df[
-            (df["EMA(50)"] == df["EMA(200)"]) & (df["Direction"] == df["EMA(50)"])
-        ]),
-        ("EMAs Agree + Direction Against", lambda df: df[
-            (df["EMA(50)"] == df["EMA(200)"]) & (df["Direction"] != df["EMA(50)"])
-        ]),
-        ("Engulfing: Yes", lambda df: df[df["Engulfing"] == "Yes"]),
-        ("Engulfing: No", lambda df: df[df["Engulfing"] == "No"]),
-        ("Engulfing: Yes or Similar", lambda df: df[df["Engulfing"].isin(["Yes", "Similar"])]),
-        ("Has Engulfing Data", lambda df: df[df["Engulfing"].notna()]),
+        ("1H Aligned", lambda df: df[df["Direction"] == df["1H"]]),
+        ("1H Against", lambda df: df[df["Direction"] != df["1H"]]),
     ]
 
     sl_caps = [3, 4, 5]
@@ -614,13 +490,13 @@ def calculate_bruteforce(df: pd.DataFrame) -> pd.DataFrame:
     Bruteforce scan of all buffer (extra SL pips) and RRR combinations.
 
     Tests buffer values from 0.0 to 10.0 in 0.5 pip steps, combined with
-    RRR from 1:1 to 1:5, to find which combination gives the best outcome.
+    RRR from 1:1 to 1:3, to find which combination gives the best outcome.
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with results for every buffer × RRR combination, sorted by outcome descending
+        DataFrame with results for every buffer x RRR combination, sorted by outcome descending
     """
     buffers = [round(x * 0.5, 1) for x in range(21)]  # 0.0 to 10.0 in 0.5 steps
     rrr_range = [1, 2, 3]
@@ -690,9 +566,9 @@ def calculate_bruteforce(df: pd.DataFrame) -> pd.DataFrame:
 
 def display_bruteforce(df: pd.DataFrame):
     """
-    Display bruteforce analysis scanning all buffer × RRR combinations.
+    Display bruteforce analysis scanning all buffer x RRR combinations.
 
-    Tests extra SL pips from 0.0 to 10.0 (0.5 steps) with RRR 1:1 to 1:5
+    Tests extra SL pips from 0.0 to 10.0 (0.5 steps) with RRR 1:1 to 1:3
     to find which combination gives the best outcome for all trades.
 
     Args:
@@ -700,7 +576,7 @@ def display_bruteforce(df: pd.DataFrame):
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Bruteforce: Buffer × RRR Scan (All Trades)</h2>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Bruteforce: Buffer x RRR Scan (All Trades)</h2>"
     display(HTML(title_html))
 
     stats_df = calculate_bruteforce(df)
@@ -993,7 +869,7 @@ def display_fixed_sl(df: pd.DataFrame):
     from IPython.display import display, HTML
 
     title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Fixed SL Size Analysis</h2>"
-    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Uses a fixed SL (1.5–5.0 pips) instead of the original safe stop. Trade survives if Pullback &lt; fixed SL.</p>"
+    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Uses a fixed SL (1.5-5.0 pips) instead of the original safe stop. Trade survives if Pullback &lt; fixed SL.</p>"
     display(HTML(title_html + subtitle_html))
 
     stats_df = calculate_fixed_sl_statistics(df)
@@ -1072,38 +948,34 @@ def _calculate_fixed_sl_stats_with_strategy(trades: pd.DataFrame, strategy_name:
     }
 
 
-def _get_ema_strategies(ema_col: str) -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]:
+def _get_1h_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]:
     """
-    Get EMA-based strategy filters for a given EMA column.
-
-    Args:
-        ema_col: Column name, either "EMA(50)" or "EMA(200)"
+    Get 1H-based strategy filters.
 
     Returns:
         List of tuples (strategy_name, filter_function)
     """
     return [
         ("All Trades", lambda df: df),
-        (f"{ema_col} Aligned", lambda df, col=ema_col: df[df["Direction"] == df[col]]),
-        (f"{ema_col} Against", lambda df, col=ema_col: df[df["Direction"] != df[col]]),
+        ("1H Aligned", lambda df: df[df["Direction"] == df["1H"]]),
+        ("1H Against", lambda df: df[df["Direction"] != df["1H"]]),
     ]
 
 
-def calculate_fixed_sl_ema_statistics(df: pd.DataFrame, ema_col: str) -> pd.DataFrame:
+def calculate_fixed_sl_1h_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate fixed SL statistics filtered by EMA alignment.
+    Calculate fixed SL statistics filtered by 1H alignment.
 
-    For each EMA strategy (All, Aligned, Against), tests all fixed SL sizes
+    For each 1H strategy (All, Aligned, Against), tests all fixed SL sizes
     at each RRR ratio.
 
     Args:
         df: DataFrame with trading data
-        ema_col: Column name, either "EMA(50)" or "EMA(200)"
 
     Returns:
-        DataFrame with fixed SL + EMA statistics, sorted by edge descending
+        DataFrame with fixed SL + 1H statistics, sorted by edge descending
     """
-    strategies = _get_ema_strategies(ema_col)
+    strategies = _get_1h_strategies()
     results = []
     total_trades = len(df)
 
@@ -1137,20 +1009,20 @@ def calculate_fixed_sl_ema_statistics(df: pd.DataFrame, ema_col: str) -> pd.Data
     return result_df
 
 
-def display_fixed_sl_ema50(df: pd.DataFrame):
+def display_fixed_sl_1h(df: pd.DataFrame):
     """
-    Display fixed SL analysis filtered by EMA(50) alignment.
+    Display fixed SL analysis filtered by 1H alignment.
 
     Args:
         df: DataFrame with trading data
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Fixed SL + EMA(50) Analysis</h2>"
-    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Fixed SL (1.5–5.0 pips) combined with EMA(50) direction filter.</p>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Fixed SL + 1H Alignment Analysis</h2>"
+    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Fixed SL (1.5-5.0 pips) combined with 1H higher timeframe direction filter.</p>"
     display(HTML(title_html + subtitle_html))
 
-    stats_df = calculate_fixed_sl_ema_statistics(df, "EMA(50)")
+    stats_df = calculate_fixed_sl_1h_statistics(df)
 
     if stats_df.empty:
         display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
@@ -1159,26 +1031,57 @@ def display_fixed_sl_ema50(df: pd.DataFrame):
         display(HTML(html_table))
 
 
-def display_fixed_sl_ema200(df: pd.DataFrame):
+def create_r_histogram(df: pd.DataFrame) -> str:
     """
-    Display fixed SL analysis filtered by EMA(200) alignment.
+    Create an HTML bar chart showing how many times each R value (1R-10R) occurred.
+
+    Takes the absolute value of the R column, floors it to integers,
+    and counts occurrences for 1R through 10R.
+
+    Args:
+        df: DataFrame with trading data (must have 'R' column)
+
+    Returns:
+        HTML string with a styled horizontal bar chart
+    """
+    r_values = df["R"].dropna().abs().apply(lambda x: int(x))
+    r_values = r_values[(r_values >= 1) & (r_values <= 10)]
+    counts = r_values.value_counts().reindex(range(1, 11), fill_value=0)
+    max_count = counts.max() if counts.max() > 0 else 1
+
+    html = """
+    <div style="background-color: #1e1e1e; padding: 20px; font-family: 'Courier New', monospace;">
+        <h2 style="color: #e0e0e0; margin-top: 0;">R Distribution (1R - 10R)</h2>
+    """
+
+    for r_val in range(1, 11):
+        count = counts[r_val]
+        bar_width = (count / max_count) * 100
+        html += f"""
+        <div style="display: flex; align-items: center; margin: 4px 0;">
+            <span style="color: #e0e0e0; width: 40px; text-align: right; margin-right: 10px;">{r_val}R</span>
+            <div style="background-color: #4ade80; height: 24px; width: {bar_width}%; min-width: {'2px' if count > 0 else '0'}; border-radius: 3px;"></div>
+            <span style="color: #a0a0a0; margin-left: 8px;">{count}</span>
+        </div>
+        """
+
+    html += "</div>"
+    return html
+
+
+def display_r_histogram(df: pd.DataFrame):
+    """
+    Display a histogram of R value distribution (1R-10R).
+
+    Treats negative R values as positive (absolute value).
+    Floors R to integers and counts occurrences.
 
     Args:
         df: DataFrame with trading data
     """
     from IPython.display import display, HTML
-
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Fixed SL + EMA(200) Analysis</h2>"
-    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Fixed SL (1.5–5.0 pips) combined with EMA(200) direction filter.</p>"
-    display(HTML(title_html + subtitle_html))
-
-    stats_df = calculate_fixed_sl_ema_statistics(df, "EMA(200)")
-
-    if stats_df.empty:
-        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
-    else:
-        html_table = create_html_table(stats_df)
-        display(HTML(html_table))
+    html = create_r_histogram(df)
+    display(HTML(html))
 
 
 def display_buffer_analysis(df: pd.DataFrame):
@@ -1190,7 +1093,7 @@ def display_buffer_analysis(df: pd.DataFrame):
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>SL Buffer Analysis (1:1 RRR) — What if extra pips were added to SL?</h2>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>SL Buffer Analysis (1:1 RRR) - What if extra pips were added to SL?</h2>"
     display(HTML(title_html))
 
     stats_df = calculate_buffer_statistics(df)

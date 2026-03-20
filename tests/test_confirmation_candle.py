@@ -15,7 +15,7 @@ from utils.confirmation_candle import (
     calculate_bruteforce,
     calculate_limit_order_statistics,
     calculate_fixed_sl_statistics,
-    calculate_fixed_sl_ema_statistics,
+    calculate_fixed_sl_1h_statistics,
     create_html_table,
     get_strategies,
     get_buffer_strategies,
@@ -24,7 +24,7 @@ from utils.confirmation_candle import (
     _calculate_limit_order_stats,
     _calculate_fixed_sl_stats,
     _calculate_fixed_sl_stats_with_strategy,
-    _get_ema_strategies,
+    _get_1h_strategies,
     _breakeven_rate,
     RRR_RATIOS,
     BUFFER_PIPS,
@@ -33,7 +33,7 @@ from utils.confirmation_candle import (
 
 
 def get_sample_data():
-    """Create a sample dataset with 10 trades matching the new CSV structure."""
+    """Create a sample dataset with 10 trades matching the CSV structure."""
     return pd.DataFrame({
         'Date': ['2026-01-12', '2026-01-12', '2026-01-12', '2026-01-13', '2026-01-13',
                  '2026-01-14', '2026-01-14', '2026-01-15', '2026-01-15', '2026-01-16'],
@@ -43,12 +43,8 @@ def get_sample_data():
                   '#1', '#2', '#1', '#2', '#1'],
         'Direction': ['Buy', 'Buy', 'Sell', 'Buy', 'Sell',
                       'Sell', 'Buy', 'Buy', 'Sell', 'Sell'],
-        'EMA(50)': ['Buy', 'Buy', 'Buy', 'Sell', 'Sell',
-                    'Sell', 'Sell', 'Buy', 'Buy', 'Sell'],
-        'EMA(200)': ['Buy', 'Buy', 'Sell', 'Buy', 'Sell',
-                     'Sell', 'Buy', 'Buy', 'Sell', 'Sell'],
-        'Engulfing': ['Yes', 'No', None, 'Yes', 'Similar',
-                      'No', None, 'Yes', None, 'No'],
+        '1H': ['Buy', 'Buy', 'Buy', 'Sell', 'Sell',
+               'Sell', 'Sell', 'Buy', 'Buy', 'Sell'],
         'SL': [3.5, 1.1, 2.0, 4.0, 3.0,
                5.0, 2.5, 6.0, 8.0, 1.5],
         'Pullback': [3.5, 0.8, 2.1, 1.5, 3.0,
@@ -64,7 +60,7 @@ def get_empty_data():
     """Create an empty dataset."""
     return pd.DataFrame({
         'Date': [], 'Weekday': [], 'Trade': [], 'Direction': [],
-        'EMA(50)': [], 'EMA(200)': [], 'Engulfing': [], 'SL': [], 'Pullback': [], 'TP': [], 'R': [],
+        '1H': [], 'SL': [], 'Pullback': [], 'TP': [], 'R': [],
     })
 
 
@@ -82,20 +78,17 @@ def test_strategy_names_include_base():
     strategies = get_strategies()
     names = [name for name, _ in strategies]
     assert 'All Trades' in names
-    assert 'EMA(50) Aligned' in names
-    assert 'EMA(200) Aligned' in names
-    assert 'Both EMAs Aligned' in names
-    assert 'Buy Only' not in names
-    assert 'Sell Only' not in names
+    assert '1H Aligned' in names
+    assert '1H Against' in names
 
 
 def test_strategy_names_include_sl_combos():
     """Test that SL combination strategies are present."""
     strategies = get_strategies()
     names = [name for name, _ in strategies]
-    assert 'EMA(50) Aligned + SL < 5' in names
-    assert 'Both EMAs Aligned + SL 5-10' in names
-    assert 'EMA(200) Against + SL > 3' in names
+    assert '1H Aligned + SL < 5' in names
+    assert '1H Against + SL > 3' in names
+    assert 'All Trades + SL < 3' in names
 
 
 def test_calculate_stats_all_trades():
@@ -225,49 +218,50 @@ def test_trades_required_negative_outcome():
     assert stats['Trades Required'] == 'N/A'
 
 
-def test_ema50_aligned_filter():
-    """Test EMA(50) Aligned filter."""
+def test_1h_aligned_filter():
+    """Test 1H Aligned filter."""
     sample = get_sample_data()
     strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == 'EMA(50) Aligned'][0]
+    strategy = [func for name, func in strategies if name == '1H Aligned'][0]
     filtered = strategy(sample)
 
     for _, row in filtered.iterrows():
-        assert row['Direction'] == row['EMA(50)']
+        assert row['Direction'] == row['1H']
 
 
-def test_ema200_against_filter():
-    """Test EMA(200) Against filter."""
+def test_1h_against_filter():
+    """Test 1H Against filter."""
     sample = get_sample_data()
     strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == 'EMA(200) Against'][0]
+    strategy = [func for name, func in strategies if name == '1H Against'][0]
     filtered = strategy(sample)
 
     for _, row in filtered.iterrows():
-        assert row['Direction'] != row['EMA(200)']
+        assert row['Direction'] != row['1H']
 
 
-def test_both_emas_aligned_filter():
-    """Test Both EMAs Aligned filter."""
+def test_1h_aligned_plus_against_equals_all():
+    """Test that 1H Aligned + 1H Against = All Trades."""
     sample = get_sample_data()
     strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == 'Both EMAs Aligned'][0]
-    filtered = strategy(sample)
+    aligned_func = [func for name, func in strategies if name == '1H Aligned'][0]
+    against_func = [func for name, func in strategies if name == '1H Against'][0]
 
-    for _, row in filtered.iterrows():
-        assert row['Direction'] == row['EMA(50)']
-        assert row['Direction'] == row['EMA(200)']
+    aligned = aligned_func(sample)
+    against = against_func(sample)
+
+    assert len(aligned) + len(against) == len(sample)
 
 
 def test_sl_filter_combination():
     """Test SL filter in combination strategy."""
     sample = get_sample_data()
     strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == 'EMA(50) Aligned + SL > 3'][0]
+    strategy = [func for name, func in strategies if name == '1H Aligned + SL > 3'][0]
     filtered = strategy(sample)
 
     for _, row in filtered.iterrows():
-        assert row['Direction'] == row['EMA(50)']
+        assert row['Direction'] == row['1H']
         assert row['SL'] > 3
 
 
@@ -325,28 +319,6 @@ def test_create_html_table_empty():
     """Test HTML table with empty data."""
     html = create_html_table(pd.DataFrame())
     assert 'No profitable strategies found' in html
-
-
-def test_emas_agree_filter():
-    """Test EMAs Agree (trending) filter."""
-    sample = get_sample_data()
-    strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == 'EMAs Agree (trending)'][0]
-    filtered = strategy(sample)
-
-    for _, row in filtered.iterrows():
-        assert row['EMA(50)'] == row['EMA(200)']
-
-
-def test_emas_disagree_filter():
-    """Test EMAs Disagree (transition) filter."""
-    sample = get_sample_data()
-    strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == 'EMAs Disagree (transition)'][0]
-    filtered = strategy(sample)
-
-    for _, row in filtered.iterrows():
-        assert row['EMA(50)'] != row['EMA(200)']
 
 
 def test_buffer_saves_losing_trade():
@@ -423,8 +395,8 @@ def test_get_buffer_strategies():
     names = [name for name, _ in strategies]
 
     assert 'All Trades' in names
-    assert 'EMA(50) Aligned' in names
-    assert 'Both EMAs Aligned' in names
+    assert '1H Aligned' in names
+    assert '1H Against' in names
 
 
 def test_get_buffer_strategies_includes_sl_caps():
@@ -435,8 +407,8 @@ def test_get_buffer_strategies_includes_sl_caps():
     assert 'All Trades + SL < 3' in names
     assert 'All Trades + SL < 4' in names
     assert 'All Trades + SL < 5' in names
-    assert 'EMA(50) Aligned + SL < 3' in names
-    assert 'Both EMAs Aligned + SL < 5' in names
+    assert '1H Aligned + SL < 3' in names
+    assert '1H Against + SL < 5' in names
 
 
 def test_buffer_sl_cap_filter():
@@ -450,16 +422,16 @@ def test_buffer_sl_cap_filter():
         assert row['SL'] < 3
 
 
-def test_buffer_sl_cap_with_ema_filter():
-    """Test SL cap combined with EMA filter."""
+def test_buffer_sl_cap_with_1h_filter():
+    """Test SL cap combined with 1H filter."""
     sample = get_sample_data()
     strategies = get_buffer_strategies()
-    strategy = [func for name, func in strategies if name == 'EMA(50) Aligned + SL < 4'][0]
+    strategy = [func for name, func in strategies if name == '1H Aligned + SL < 4'][0]
     filtered = strategy(sample)
 
     for _, row in filtered.iterrows():
         assert row['SL'] < 4
-        assert row['Direction'] == row['EMA(50)']
+        assert row['Direction'] == row['1H']
 
 
 def test_calculate_buffer_statistics():
@@ -576,112 +548,6 @@ def test_1_2_rrr_empty():
     assert stats['Edge'] == '-33.3%'
 
 
-def test_engulfing_yes_filter():
-    """Test Engulfing: Yes filter."""
-    sample = get_sample_data()
-    strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == 'Engulfing: Yes'][0]
-    filtered = strategy(sample)
-
-    assert len(filtered) == 3  # rows 0, 3, 7 have 'Yes'
-    for _, row in filtered.iterrows():
-        assert row['Engulfing'] == 'Yes'
-
-
-def test_engulfing_no_filter():
-    """Test Engulfing: No filter."""
-    sample = get_sample_data()
-    strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == 'Engulfing: No'][0]
-    filtered = strategy(sample)
-
-    assert len(filtered) == 3  # rows 1, 5, 9 have 'No'
-    for _, row in filtered.iterrows():
-        assert row['Engulfing'] == 'No'
-
-
-def test_engulfing_similar_filter():
-    """Test Engulfing: Similar filter."""
-    sample = get_sample_data()
-    strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == 'Engulfing: Similar'][0]
-    filtered = strategy(sample)
-
-    assert len(filtered) == 1  # row 4 has 'Similar'
-    for _, row in filtered.iterrows():
-        assert row['Engulfing'] == 'Similar'
-
-
-def test_engulfing_yes_or_similar_filter():
-    """Test Engulfing: Yes or Similar filter."""
-    sample = get_sample_data()
-    strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == 'Engulfing: Yes or Similar'][0]
-    filtered = strategy(sample)
-
-    assert len(filtered) == 4  # 3 Yes + 1 Similar
-    for _, row in filtered.iterrows():
-        assert row['Engulfing'] in ['Yes', 'Similar']
-
-
-def test_has_engulfing_data_filter():
-    """Test Has Engulfing Data filter (non-empty values)."""
-    sample = get_sample_data()
-    strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == 'Has Engulfing Data'][0]
-    filtered = strategy(sample)
-
-    assert len(filtered) == 7  # 3 Yes + 3 No + 1 Similar
-    for _, row in filtered.iterrows():
-        assert pd.notna(row['Engulfing'])
-
-
-def test_engulfing_yes_ema50_aligned_filter():
-    """Test Engulfing: Yes + EMA(50) Aligned filter."""
-    sample = get_sample_data()
-    strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == 'Engulfing: Yes + EMA(50) Aligned'][0]
-    filtered = strategy(sample)
-
-    for _, row in filtered.iterrows():
-        assert row['Engulfing'] == 'Yes'
-        assert row['Direction'] == row['EMA(50)']
-
-
-def test_engulfing_yes_sl_filter():
-    """Test Engulfing: Yes + SL filter combination."""
-    sample = get_sample_data()
-    strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == 'Engulfing: Yes + SL < 5'][0]
-    filtered = strategy(sample)
-
-    for _, row in filtered.iterrows():
-        assert row['Engulfing'] == 'Yes'
-        assert row['SL'] < 5
-
-
-def test_strategy_names_include_engulfing():
-    """Test that engulfing strategies are present."""
-    strategies = get_strategies()
-    names = [name for name, _ in strategies]
-    assert 'Engulfing: Yes' in names
-    assert 'Engulfing: No' in names
-    assert 'Engulfing: Similar' in names
-    assert 'Engulfing: Yes or Similar' in names
-    assert 'Has Engulfing Data' in names
-
-
-def test_buffer_strategies_include_engulfing():
-    """Test that buffer strategies include engulfing variants."""
-    strategies = get_buffer_strategies()
-    names = [name for name, _ in strategies]
-    assert 'Engulfing: Yes' in names
-    assert 'Engulfing: No' in names
-    assert 'Engulfing: Yes or Similar' in names
-    assert 'Has Engulfing Data' in names
-    assert 'Engulfing: Yes + SL < 3' in names
-
-
 def test_bruteforce_returns_dataframe():
     """Test that calculate_bruteforce returns a DataFrame."""
     sample = get_sample_data()
@@ -736,9 +602,7 @@ def test_bruteforce_buffer_improves_trade():
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
         'Direction': ['Buy'],
-        'EMA(50)': ['Buy'],
-        'EMA(200)': ['Buy'],
-        'Engulfing': ['Yes'],
+        '1H': ['Buy'],
         'SL': [3.0],
         'Pullback': [4.0],
         'TP': [10.0],
@@ -767,9 +631,7 @@ def test_bruteforce_higher_rrr_harder_to_win():
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
         'Direction': ['Buy'],
-        'EMA(50)': ['Buy'],
-        'EMA(200)': ['Buy'],
-        'Engulfing': ['Yes'],
+        '1H': ['Buy'],
         'SL': [2.0],
         'Pullback': [1.0],
         'TP': [6.0],
@@ -1171,115 +1033,95 @@ def test_fixed_sl_with_strategy_empty():
     assert stats['Strategy'] == 'Empty'
 
 
-def test_get_ema_strategies_ema50():
-    """Test EMA strategy list for EMA(50)."""
-    strategies = _get_ema_strategies("EMA(50)")
+def test_get_1h_strategies():
+    """Test 1H strategy list."""
+    strategies = _get_1h_strategies()
     names = [name for name, _ in strategies]
     assert 'All Trades' in names
-    assert 'EMA(50) Aligned' in names
-    assert 'EMA(50) Against' in names
+    assert '1H Aligned' in names
+    assert '1H Against' in names
     assert len(strategies) == 3
 
 
-def test_get_ema_strategies_ema200():
-    """Test EMA strategy list for EMA(200)."""
-    strategies = _get_ema_strategies("EMA(200)")
-    names = [name for name, _ in strategies]
-    assert 'All Trades' in names
-    assert 'EMA(200) Aligned' in names
-    assert 'EMA(200) Against' in names
-    assert len(strategies) == 3
-
-
-def test_ema_strategy_filters_correctly():
-    """Test that EMA strategy filters produce correct subsets."""
+def test_1h_strategy_filters_correctly():
+    """Test that 1H strategy filters produce correct subsets."""
     sample = get_sample_data()
-    strategies = _get_ema_strategies("EMA(50)")
+    strategies = _get_1h_strategies()
 
-    aligned_func = [func for name, func in strategies if name == 'EMA(50) Aligned'][0]
-    against_func = [func for name, func in strategies if name == 'EMA(50) Against'][0]
+    aligned_func = [func for name, func in strategies if name == '1H Aligned'][0]
+    against_func = [func for name, func in strategies if name == '1H Against'][0]
 
     aligned = aligned_func(sample)
     against = against_func(sample)
 
     for _, row in aligned.iterrows():
-        assert row['Direction'] == row['EMA(50)']
+        assert row['Direction'] == row['1H']
 
     for _, row in against.iterrows():
-        assert row['Direction'] != row['EMA(50)']
+        assert row['Direction'] != row['1H']
 
     assert len(aligned) + len(against) == len(sample)
 
 
-def test_calculate_fixed_sl_ema50_statistics():
-    """Test that EMA(50) fixed SL statistics returns a DataFrame."""
+def test_calculate_fixed_sl_1h_statistics():
+    """Test that 1H fixed SL statistics returns a DataFrame."""
     sample = get_sample_data()
-    result = calculate_fixed_sl_ema_statistics(sample, "EMA(50)")
+    result = calculate_fixed_sl_1h_statistics(sample)
     assert isinstance(result, pd.DataFrame)
     assert len(result) > 0
 
 
-def test_calculate_fixed_sl_ema200_statistics():
-    """Test that EMA(200) fixed SL statistics returns a DataFrame."""
-    sample = get_sample_data()
-    result = calculate_fixed_sl_ema_statistics(sample, "EMA(200)")
-    assert isinstance(result, pd.DataFrame)
-    assert len(result) > 0
-
-
-def test_fixed_sl_ema_total_rows():
+def test_fixed_sl_1h_total_rows():
     """Test that only positive edge rows are returned."""
     sample = get_sample_data()
-    result = calculate_fixed_sl_ema_statistics(sample, "EMA(50)")
+    result = calculate_fixed_sl_1h_statistics(sample)
     for _, row in result.iterrows():
         edge_val = float(str(row['Edge']).replace('%', ''))
         assert edge_val > 0, f"Non-positive edge found: {row['Edge']}"
 
 
-def test_fixed_sl_ema_has_strategy_column():
-    """Test that EMA fixed SL result has Strategy column."""
+def test_fixed_sl_1h_has_strategy_column():
+    """Test that 1H fixed SL result has Strategy column."""
     sample = get_sample_data()
-    result = calculate_fixed_sl_ema_statistics(sample, "EMA(50)")
+    result = calculate_fixed_sl_1h_statistics(sample)
     columns = list(result.columns)
     assert columns[0] == 'Strategy'
     assert columns[1] == 'Fixed SL'
     assert columns[2] == 'RRR'
 
 
-def test_fixed_sl_ema_strategies_present():
+def test_fixed_sl_1h_strategies_present():
     """Test that only strategies with positive edge appear in results."""
     sample = get_sample_data()
-    result = calculate_fixed_sl_ema_statistics(sample, "EMA(50)")
+    result = calculate_fixed_sl_1h_statistics(sample)
     strategies = result['Strategy'].unique()
-    # Only strategies with positive edge should be present
     for s in strategies:
-        assert s in ['All Trades', 'EMA(50) Aligned', 'EMA(50) Against'], f"Unexpected strategy: {s}"
+        assert s in ['All Trades', '1H Aligned', '1H Against'], f"Unexpected strategy: {s}"
 
 
-def test_fixed_sl_ema_aligned_wins_more():
-    """Test fixed SL with EMA alignment on controlled data.
+def test_fixed_sl_1h_aligned_wins_more():
+    """Test fixed SL with 1H alignment on controlled data.
 
-    All trades are Buy with EMA(50)=Buy, so Aligned = all trades, Against = 0 trades.
+    All trades are Buy with 1H=Buy, so Aligned = all trades, Against = 0 trades.
     """
     trades = pd.DataFrame({
         'Date': ['2026-01-01', '2026-01-02'],
         'Direction': ['Buy', 'Buy'],
-        'EMA(50)': ['Buy', 'Buy'],
-        'EMA(200)': ['Sell', 'Sell'],
+        '1H': ['Buy', 'Buy'],
         'SL': [5.0, 5.0],
         'Pullback': [1.0, 1.0],
         'TP': [10.0, 10.0],
     })
 
-    result = calculate_fixed_sl_ema_statistics(trades, "EMA(50)")
+    result = calculate_fixed_sl_1h_statistics(trades)
 
-    # EMA(50) Aligned at fixed SL=2.0, 1:1 should have 2 trades (positive edge)
-    aligned_rows = result[(result['Strategy'] == 'EMA(50) Aligned') & (result['Fixed SL'] == '2.0') & (result['RRR'] == '1:1')]
+    # 1H Aligned at fixed SL=2.0, 1:1 should have 2 trades (positive edge)
+    aligned_rows = result[(result['Strategy'] == '1H Aligned') & (result['Fixed SL'] == '2.0') & (result['RRR'] == '1:1')]
     assert len(aligned_rows) == 1
     assert aligned_rows.iloc[0]['Notation'] == '2W – 0L'
 
-    # EMA(50) Against with 0 trades has negative edge, so it's filtered out
-    against_rows = result[(result['Strategy'] == 'EMA(50) Against') & (result['Fixed SL'] == '2.0') & (result['RRR'] == '1:1')]
+    # 1H Against with 0 trades has negative edge, so it's filtered out
+    against_rows = result[(result['Strategy'] == '1H Against') & (result['Fixed SL'] == '2.0') & (result['RRR'] == '1:1')]
     assert len(against_rows) == 0
 
 
@@ -1298,17 +1140,15 @@ def run_all_tests():
         test_days_calculation,
         test_trades_required,
         test_trades_required_negative_outcome,
-        test_ema50_aligned_filter,
-        test_ema200_against_filter,
-        test_both_emas_aligned_filter,
+        test_1h_aligned_filter,
+        test_1h_against_filter,
+        test_1h_aligned_plus_against_equals_all,
         test_sl_filter_combination,
         test_calculate_statistics_returns_positive_edge_only,
         test_calculate_statistics_sorted_by_edge,
         test_calculate_statistics_columns,
         test_create_html_table_basic,
         test_create_html_table_empty,
-        test_emas_agree_filter,
-        test_emas_disagree_filter,
         test_buffer_saves_losing_trade,
         test_buffer_tp_must_reach_effective_sl,
         test_buffer_stats_has_buffer_column,
@@ -1316,7 +1156,7 @@ def run_all_tests():
         test_get_buffer_strategies,
         test_get_buffer_strategies_includes_sl_caps,
         test_buffer_sl_cap_filter,
-        test_buffer_sl_cap_with_ema_filter,
+        test_buffer_sl_cap_with_1h_filter,
         test_calculate_buffer_statistics,
         test_calculate_buffer_statistics_has_both_rrr,
         test_buffer_pips_constant,
@@ -1327,15 +1167,6 @@ def run_all_tests():
         test_1_2_rrr_outcome,
         test_1_2_rrr_buffer,
         test_1_2_rrr_empty,
-        test_engulfing_yes_filter,
-        test_engulfing_no_filter,
-        test_engulfing_similar_filter,
-        test_engulfing_yes_or_similar_filter,
-        test_has_engulfing_data_filter,
-        test_engulfing_yes_ema50_aligned_filter,
-        test_engulfing_yes_sl_filter,
-        test_strategy_names_include_engulfing,
-        test_buffer_strategies_include_engulfing,
         test_bruteforce_returns_dataframe,
         test_bruteforce_has_all_rrr_values,
         test_bruteforce_has_buffer_range,
@@ -1370,15 +1201,13 @@ def run_all_tests():
         test_calculate_fixed_sl_statistics_columns,
         test_fixed_sl_with_strategy_has_strategy_column,
         test_fixed_sl_with_strategy_empty,
-        test_get_ema_strategies_ema50,
-        test_get_ema_strategies_ema200,
-        test_ema_strategy_filters_correctly,
-        test_calculate_fixed_sl_ema50_statistics,
-        test_calculate_fixed_sl_ema200_statistics,
-        test_fixed_sl_ema_total_rows,
-        test_fixed_sl_ema_has_strategy_column,
-        test_fixed_sl_ema_strategies_present,
-        test_fixed_sl_ema_aligned_wins_more,
+        test_get_1h_strategies,
+        test_1h_strategy_filters_correctly,
+        test_calculate_fixed_sl_1h_statistics,
+        test_fixed_sl_1h_total_rows,
+        test_fixed_sl_1h_has_strategy_column,
+        test_fixed_sl_1h_strategies_present,
+        test_fixed_sl_1h_aligned_wins_more,
     ]
 
     passed = 0
