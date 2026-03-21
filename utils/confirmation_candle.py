@@ -1051,7 +1051,7 @@ def create_r_histogram(df: pd.DataFrame) -> str:
 
     html = """
     <div style="background-color: #1e1e1e; padding: 20px; font-family: 'Courier New', monospace;">
-        <h2 style="color: #e0e0e0; margin-top: 0;">R Distribution (1R - 10R)</h2>
+        <h2 style="color: #e0e0e0; margin-top: 0;">R Occurrences</h2>
     """
 
     for r_val in range(1, 11):
@@ -1081,6 +1081,68 @@ def display_r_histogram(df: pd.DataFrame):
     """
     from IPython.display import display, HTML
     html = create_r_histogram(df)
+    display(HTML(html))
+
+
+def create_r_histogram_combined(df: pd.DataFrame) -> str:
+    """
+    Create an HTML bar chart showing cumulative R value distribution (1R-10R).
+
+    A trade that reached 3R also passed through 1R and 2R, so higher R trades
+    are counted in all lower R buckets. For example:
+    - 1R count = trades that reached 1R + 2R + 3R + ... + 10R
+    - 2R count = trades that reached 2R + 3R + ... + 10R
+    - 10R count = only trades that reached exactly 10R
+
+    Args:
+        df: DataFrame with trading data (must have 'R' column)
+
+    Returns:
+        HTML string with a styled horizontal bar chart
+    """
+    r_values = df["R"].dropna().abs().apply(lambda x: int(x))
+    r_values = r_values[(r_values >= 1) & (r_values <= 10)]
+    raw_counts = r_values.value_counts().reindex(range(1, 11), fill_value=0)
+
+    # Cumulative: each R level includes all trades that reached that R or higher
+    cumulative_counts = pd.Series(
+        {r: raw_counts.loc[r:].sum() for r in range(1, 11)}
+    )
+
+    max_count = cumulative_counts.max() if cumulative_counts.max() > 0 else 1
+
+    html = """
+    <div style="background-color: #1e1e1e; padding: 20px; font-family: 'Courier New', monospace;">
+        <h2 style="color: #e0e0e0; margin-top: 0;">R Distribution</h2>
+    """
+
+    for r_val in range(1, 11):
+        count = cumulative_counts[r_val]
+        bar_width = (count / max_count) * 100
+        html += f"""
+        <div style="display: flex; align-items: center; margin: 4px 0;">
+            <span style="color: #e0e0e0; width: 40px; text-align: right; margin-right: 10px;">{r_val}R</span>
+            <div style="background-color: #4ade80; height: 24px; width: {bar_width}%; min-width: {'2px' if count > 0 else '0'}; border-radius: 3px;"></div>
+            <span style="color: #a0a0a0; margin-left: 8px;">{count}</span>
+        </div>
+        """
+
+    html += "</div>"
+    return html
+
+
+def display_r_histogram_combined(df: pd.DataFrame):
+    """
+    Display a cumulative histogram of R value distribution (1R-10R).
+
+    Each R level includes all trades that reached that R or higher,
+    since a trade reaching e.g. 3R must have passed through 1R and 2R.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+    html = create_r_histogram_combined(df)
     display(HTML(html))
 
 
