@@ -22,7 +22,7 @@ RRR_RATIOS = [1, 2]
 BUFFER_PIPS = [0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
 
 
-def load_data(filepath: str = "../data/eurusd_2026_1m_confirmation_candle.csv") -> pd.DataFrame:
+def load_data(filepath: str = "../strategies/15LS1CC/data.csv") -> pd.DataFrame:
     """
     Load 1M confirmation candle data from CSV and clean NaN values.
 
