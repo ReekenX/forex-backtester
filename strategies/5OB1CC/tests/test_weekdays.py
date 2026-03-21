@@ -13,7 +13,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 from utils.weekdays import (
     calculate_weekday_statistics,
     create_html_table,
-    RRR_RATIOS,
     WEEKDAY_NAMES,
     _calculate_stats_for_weekday_and_rrr,
     _create_empty_stats

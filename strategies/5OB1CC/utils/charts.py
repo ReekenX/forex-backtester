@@ -8,7 +8,6 @@ charts for trading strategies.
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Tuple
 
 # Import from other utils modules
 from utils import RRR_CONFIGS, _win_condition_normal

@@ -14,7 +14,6 @@ Main components:
 
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from typing import Dict, List, Tuple, Callable, Optional
 
 # ============================================================================
@@ -1648,7 +1647,7 @@ def display_triple_setup_strategy_analysis(df: pd.DataFrame):
         combined_df = combined_df[cols]
 
         # Display the combined table with sortable columns
-        display(HTML(f"<h2>Triple Setup Strategies</h2>"))
+        display(HTML("<h2>Triple Setup Strategies</h2>"))
         html_table = create_sortable_table(combined_df, first_column_width='300px', highlight_column='Edge', highlight_color='green')
         display(HTML(html_table))
         print()
@@ -1710,7 +1709,6 @@ def create_sortable_table(
         HTML string with interactive sortable table
     """
     import uuid
-    from IPython.display import HTML
 
     # Generate unique table ID if not provided
     if table_id is None:

@@ -18,7 +18,7 @@ pytest = "^9.0.1"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-testpaths = ["tests"]
+testpaths = ["strategies"]
 
 [build-system]
 requires = ["poetry-core"]

@@ -9,10 +9,11 @@ clean:
 	@find . -type d -name ".ipynb_checkpoints" -exec rm -rf {} + 2>/dev/null || true
 
 format:
-	@black utils/ 
+	@black strategies/
 
 lint:
-	@ruff check utils/ --fix
+	@ruff check strategies/ --fix
 
 test:
-	@poetry run python -m pytest tests/ -v
+	@poetry run python -m pytest strategies/15LS1CC/tests/ -v
+	@poetry run python -m pytest strategies/5OB1CC/tests/ -v

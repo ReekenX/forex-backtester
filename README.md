@@ -4,41 +4,49 @@ A Jupyter-based project for analyzing and backtesting forex trading data.
 
 ## Strategy Background
 
-Trading data is taken from 5 minute timeframe and only EURUSD currency.
+Trading data is taken from EURUSD currency during London session.
 
-Trades are taken during London session but hours tracked in Lithuanian timezone.
-
-## Trader Background
-
-Trader risking 0.5% per trade.
-
-Not taking trades right before red (high importance) news.
+Two strategies are being tested:
+- **5OB1CC** - 5-minute Order Block, 1-minute Confirmation Candle
+- **15LS1CC** - 15-minute Leg Structure, 1-minute Confirmation Candle
 
 ## Project Structure
 
 ```
 forex-backtester/
-├── data/
-│   └── eurusd.csv           # EUR/USD real trading data
-├── labs/                    # Jupyter notebooks for analysis
-│   ├── tables.ipynb         # Deep strategy analysis and customizations
-│   ├── charts.ipynb         # Visualization of profitable strategies
-│   ├── export.ipynb         # CSV data export functionality
-│   ├── correlations.ipynb   # Correlation analysis (SL vs Win Rate, etc.)
-│   ├── optimizer.ipynb      # Meta Trader-style strategy optimizer
-│   └── hours.ipynb          # Hour-by-hour trading performance analysis
-├── utils/                   # Python package with analysis modules
-│   ├── __init__.py          # Package initialization and shared utilities
-│   ├── tables.py            # Strategy analysis functions
-│   ├── charts.py            # Charting and visualization functions
-│   ├── export.py            # Data export utilities
-│   ├── correlations.py      # Correlation analysis functions
-│   ├── optimizer.py         # Combinatorial strategy optimizer
-│   └── hours.py             # Hour analysis functions
-├── tests/                   # Test modules
-│   └── hours.py             # Tests for hours analysis (run: poetry run python tests/hours.py)
-├── pyproject.toml           # Poetry configuration and dependencies
-└── Makefile                 # Build automation commands
+├── strategies/
+│   ├── 5OB1CC/                  # 5min Order Block 1min Confirmation Candle
+│   │   ├── data.csv             # Trading data for this strategy
+│   │   ├── utils/               # Analysis modules
+│   │   │   ├── __init__.py      # Data loading and shared utilities
+│   │   │   ├── tables.py        # Strategy analysis functions
+│   │   │   ├── charts.py        # Charting and visualization
+│   │   │   ├── correlations.py  # Correlation analysis
+│   │   │   ├── export.py        # Data export utilities
+│   │   │   ├── hours.py         # Hour analysis functions
+│   │   │   ├── weekdays.py      # Weekday analysis functions
+│   │   │   ├── singles.py       # Single setup analysis
+│   │   │   ├── doubles.py       # Double setup analysis
+│   │   │   ├── ema.py           # EMA analysis
+│   │   │   └── optimizer.py     # Strategy optimizer
+│   │   └── tests/               # Test modules
+│   │       ├── test_hours.py
+│   │       ├── test_weekdays.py
+│   │       ├── test_singles.py
+│   │       ├── test_doubles.py
+│   │       └── test_ema.py
+│   └── 15LS1CC/                 # 15min Leg Structure 1min Confirmation Candle
+│       ├── data.csv             # Trading data for this strategy
+│       ├── utils/               # Analysis modules
+│       │   ├── __init__.py
+│       │   └── confirmation_candle.py
+│       └── tests/
+│           └── test_confirmation_candle.py
+├── labs/                        # Jupyter notebooks (one per strategy)
+│   ├── 5OB1CC.ipynb             # Combined analysis for 5OB1CC strategy
+│   └── 15LS1CC.ipynb            # Analysis for 15LS1CC strategy
+├── pyproject.toml               # Poetry configuration and dependencies
+└── Makefile                     # Build automation commands
 ```
 
 ## Requirements
@@ -68,18 +76,14 @@ poetry run jupyter notebook
 ```
 
 This will open Jupyter in the current directory, allowing you to navigate to the `labs/` folder and open any notebook:
-- **tables.ipynb** - For deep strategy analysis and testing optimal parameters
-- **charts.ipynb** - For visualizing profitable strategies
-- **correlations.ipynb** - For analyzing correlations between trading variables
-- **export.ipynb** - For exporting filtered data to CSV
-- **optimizer.ipynb** - For Meta Trader-style exhaustive strategy optimization
-- **hours.ipynb** - For hour-by-hour trading performance analysis
+- **5OB1CC.ipynb** - Combined analysis for the 5-minute Order Block strategy
+- **15LS1CC.ipynb** - Analysis for the 15-minute Leg Structure strategy
 
 ### Data Format
 
-The project uses enhanced trading data format in `data/eurusd.csv`:
+Each strategy has its own `data.csv` inside its `strategies/<name>/` directory.
 
-#### Data Format (data/eurusd.csv)
+#### 5OB1CC Data Format (strategies/5OB1CC/data.csv)
 - **Date**: Trading date (YYYY-MM-DD format)
 - **Trade**: Trade identifier (e.g., #1, #2)
 - **Range**: Size in pips of the market structure leg that was broken
@@ -91,80 +95,50 @@ The project uses enhanced trading data format in `data/eurusd.csv`:
 - **SL**: Stop Loss value (distance to safe stop when trade signal was received)
 - **Pullback**: Pullback value (if equal to `SL` column - this trade was a loss)
 - **TP**: Take Profit value (any value above 0 or empty means that this trade was profitable)
-- **Extra**: Extra pips that were needed to make this trade profitable. Example: 3.0 pips SL, 3 pips Pullback and TP of 10 pips still means lost trade. But if Extra column has value like 0.1, it means that SL of 3.1 (3.0 + 0.1) would had been profitable and would had reached 2R (10 / 3.1)
+- **Extra**: Extra pips needed to make this trade profitable
 - **BOS/CH**: Market structure type (BOS - Break of Structure; CH - Change of Character)
-- **30M Leg**: 30-minute timeframe leg analysis ("Above H" and "Above L" – buy trend, "Below H" and "Below L" – sell trend)
+- **30M Leg**: 30-minute timeframe leg analysis
 - **Hours Until News**: Time until news event in hours
-- **News Event**: Associated news event title (eg. PMI)
+- **News Event**: Associated news event title
 
-#### Rules For Backtesting (from data/eurusd.csv)
-
-- **Trade**: Do not use this field for backtesting
-- **Pullback**: Pullback value can't be filtered because it is unknown until trade has been executed. Pullback value means that once trade signal is received, SL value is recorded, but how big the pullback will be - is unknown. If Pullback matches SL value - it means that trade was instant loss. If Pullback value is less than SL value, it means that at some point in time, before reaching TP - this entry got "discount".
-- **TP**: Take Profit value is unknown, do not filter strategy on that
-- **News Event**: Associated news event titles list could be long, so just filter for blank value (means that there are no event near by) and any value (means that there is a news incoming) 
+#### 15LS1CC Data Format (strategies/15LS1CC/data.csv)
+- **Date**: Trading date (YYYY-MM-DD format)
+- **Weekday**: Day of the week
+- **Trade**: Trade identifier
+- **Direction**: Trade direction (Buy or Sell)
+- **1H**: Higher timeframe (1-hour) alignment (Buy or Sell)
+- **SL**: Stop Loss in pips
+- **Pullback**: Pullback in pips
+- **TP**: Take Profit in pips (empty = not profitable)
+- **R**: Risk-reward achieved (e.g., 10.0)
 
 ## Dependencies
 
 - **jupyter**: Interactive computing environment
 - **pandas**: Data manipulation and analysis
 - **numpy**: Numerical computing
-
-## Development Guidelines
-
-### Three-File Pattern for New Features
-
-When creating new analysis features, follow this standardized pattern:
-
-1. **Notebook** (`labs/*.ipynb`) - Clean interface with minimal code
-   - Only imports and function calls
-   - Example: `labs/hours.ipynb`
-
-2. **Python Module** (`utils/*.py`) - All business logic
-   - Analysis functions, calculations, HTML generation
-   - Built from scratch, simple and clear
-   - Example: `utils/hours.py`
-
-3. **Test Module** (`tests/*.py`) - Comprehensive tests
-   - Unit tests with 10-row sample datasets
-   - Test all functions and edge cases
-   - Example: `tests/hours.py`
-
-**Reference**: See the "hours" implementation (labs/hours.ipynb, utils/hours.py, tests/hours.py) as the standard example.
-
-### Standard Table Structure
-
-All analysis tables use this consistent column format:
-
-| Column | Description | Example |
-|--------|-------------|---------|
-| Strategy | Strategy name/identifier | "10h" |
-| RRR | Risk-reward ratio | "1:2" |
-| Trades | Total trade count | 45 |
-| Notation | Wins and losses | "12W – 33L" |
-| Win Rate | Winning percentage | "65.5%" |
-| Outcome | Net result in R | "15R" |
-| Edge | Above breakeven | "15.5%" |
-| Days | Days with ≥1 win | 23 |
-| Days % | Win days percentage | "67%" |
-| Trades Required | Trades to earn 1R | "2.5" or "N/A" |
-| Drawdown | Drawdown metric | "N/A" |
-
-**Styling**: Dark mode optimized with green positive/red negative edge highlighting.
+- **matplotlib**: Charting and visualization
+- **pytest**: Testing framework
 
 ## Makefile Commands
 
 - `make install`: Install all Poetry dependencies
 - `make clean`: Remove Python cache files and Jupyter checkpoints
-- `make format`: Format code in utils/ package using Black
-- `make lint`: Lint and auto-fix code in utils/ package using Ruff
+- `make format`: Format code using Black
+- `make lint`: Lint and auto-fix code using Ruff
+- `make test`: Run all tests
 
 ## Running Tests
 
-Tests are located in the `tests/` directory and can be run directly:
+Tests are located inside each strategy's `tests/` directory:
 
 ```bash
-poetry run python tests/hours.py
+# Run all tests
+make test
+
+# Run tests for a specific strategy
+poetry run python -m pytest strategies/15LS1CC/tests/ -v
+poetry run python -m pytest strategies/5OB1CC/tests/ -v
 ```
 
 ## Commit Convention
@@ -184,10 +158,3 @@ There is a hook to check for that automatically:
 ```bash
 ln -s $(realpath .git-hooks-commit-msg) .git/hooks/commit-msg
 ```
-
-Examples of good commit messages:
-
-- fix: commit msg hook not called
-- feat: add trading data with 100 trades
-- refactor: cleanup codebase and add code comments
-- fix: nan values in the CSV causes some formulas to crash

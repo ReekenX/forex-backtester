@@ -13,7 +13,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 from utils.hours import (
     calculate_hour_statistics,
     create_html_table,
-    RRR_RATIOS,
     _calculate_stats_for_hour_and_rrr,
     _create_empty_stats
 )

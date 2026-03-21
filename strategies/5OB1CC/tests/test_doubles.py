@@ -14,7 +14,6 @@ from utils.doubles import (
     calculate_strategy_statistics,
     create_html_table,
     get_double_setup_strategies,
-    RRR_RATIOS,
     _calculate_stats_for_strategy_and_rrr,
     _create_empty_stats
 )

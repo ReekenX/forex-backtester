@@ -15,7 +15,6 @@ from utils.ema import (
     calculate_ema_statistics,
     create_html_table,
     create_ema_strategies,
-    RRR_RATIOS,
     _calculate_stats_for_strategy_and_rrr,
     _create_empty_stats
 )
