@@ -576,7 +576,7 @@ def display_bruteforce(df: pd.DataFrame):
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Bruteforce: Buffer x RRR Scan (All Trades)</h2>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Buffer Analysis</h2>"
     display(HTML(title_html))
 
     stats_df = calculate_bruteforce(df)
