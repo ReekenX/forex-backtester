@@ -79,39 +79,6 @@ This will open Jupyter in the current directory, allowing you to navigate to the
 - **5OB1CC.ipynb** - Combined analysis for the 5-minute Order Block strategy
 - **15LS1CC.ipynb** - Analysis for the 15-minute Leg Structure strategy
 
-### Data Format
-
-Each strategy has its own `data.csv` inside its `strategies/<name>/` directory.
-
-#### 5OB1CC Data Format (strategies/5OB1CC/data.csv)
-- **Date**: Trading date (YYYY-MM-DD format)
-- **Trade**: Trade identifier (e.g., #1, #2)
-- **Range**: Size in pips of the market structure leg that was broken
-- **Strength**: Size in pips that price went after making new High or Low
-- **Weekday**: Day of the week (from Monday till Friday)
-- **Hour**: Trading hour in Lithuanian timezone (values from 10 to 18)
-- **Direction**: Trade direction (Buy or Sell)
-- **EMA**: EMA signal (Buy or Sell)
-- **SL**: Stop Loss value (distance to safe stop when trade signal was received)
-- **Pullback**: Pullback value (if equal to `SL` column - this trade was a loss)
-- **TP**: Take Profit value (any value above 0 or empty means that this trade was profitable)
-- **Extra**: Extra pips needed to make this trade profitable
-- **BOS/CH**: Market structure type (BOS - Break of Structure; CH - Change of Character)
-- **30M Leg**: 30-minute timeframe leg analysis
-- **Hours Until News**: Time until news event in hours
-- **News Event**: Associated news event title
-
-#### 15LS1CC Data Format (strategies/15LS1CC/data.csv)
-- **Date**: Trading date (YYYY-MM-DD format)
-- **Weekday**: Day of the week
-- **Trade**: Trade identifier
-- **Direction**: Trade direction (Buy or Sell)
-- **1H**: Higher timeframe (1-hour) alignment (Buy or Sell)
-- **SL**: Stop Loss in pips
-- **Pullback**: Pullback in pips
-- **TP**: Take Profit in pips (empty = not profitable)
-- **R**: Risk-reward achieved (e.g., 10.0)
-
 ## Dependencies
 
 - **jupyter**: Interactive computing environment
