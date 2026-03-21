@@ -1217,6 +1217,20 @@ def create_strategy_library() -> List[Strategy]:
     return [Strategy(name, func, desc) for name, func, desc in all_strategies]
 
 
+# Aliases used by charts.py, export.py, and display_strategy_trade_details
+create_single_setup_strategy_library = create_strategy_library
+
+
+def create_double_setup_strategy_library() -> List[Strategy]:
+    """
+    Create a library of double setup trading strategies (2 factors).
+
+    Returns:
+        List of double setup Strategy objects ready for backtesting
+    """
+    return create_strategy_library()
+
+
 def create_triple_setup_strategy_library() -> List[Strategy]:
     """
     Create a library of triple+ setup trading strategies (3+ factors).

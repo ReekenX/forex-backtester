@@ -33,7 +33,7 @@ def _win_condition_normal(df: pd.DataFrame, ratio: int, sl_column: str) -> pd.Da
 # ============================================================================
 
 
-def load_and_clean_data(filepath: str = "../data/eurusd.csv") -> pd.DataFrame:
+def load_and_clean_data(filepath: str = "../strategies/5OB1CC/data.csv") -> pd.DataFrame:
     """
     Load EUR/USD data from CSV and clean NaN values.
 

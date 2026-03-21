@@ -5,9 +5,10 @@ These tests use a small dataset of 10 rows to verify the hour analysis functiona
 Run with: python tests/hours.py
 """
 
+import os
 import pandas as pd
 import sys
-sys.path.insert(0, '.')
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from utils.hours import (
     calculate_hour_statistics,

@@ -5,9 +5,10 @@ These tests use a small dataset of 10 rows to verify the analysis functionality.
 Run with: poetry run python tests/test_confirmation_candle.py
 """
 
+import os
 import pandas as pd
 import sys
-sys.path.insert(0, '.')
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from utils.confirmation_candle import (
     calculate_statistics,

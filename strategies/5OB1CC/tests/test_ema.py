@@ -5,8 +5,11 @@ These tests use a small dataset of 10 rows to verify the EMA strategy analysis f
 Run with: poetry run pytest tests/ema.py
 """
 
+import os
 import pandas as pd
 import pytest
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from utils.ema import (
     calculate_ema_statistics,
