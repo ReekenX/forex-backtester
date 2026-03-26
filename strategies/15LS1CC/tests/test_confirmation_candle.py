@@ -20,6 +20,7 @@ from utils.confirmation_candle import (
     create_html_table,
     get_strategies,
     get_buffer_strategies,
+    simulate_challenge,
     _calculate_stats,
     _calculate_stats_with_buffer,
     _calculate_limit_order_stats,
@@ -385,9 +386,10 @@ def test_buffer_stats_empty():
     empty = get_empty_data()
     stats = _calculate_stats_with_buffer(empty, 'Empty', 1.0)
 
-    assert stats['Trades'] == 0
     assert stats['Buffer'] == '+1.0'
     assert stats['Notation'] == '0W – 0L'
+    assert stats['Pass'] == 0
+    assert stats['Fail'] == 0
 
 
 def test_get_buffer_strategies():
@@ -443,14 +445,27 @@ def test_calculate_buffer_statistics():
     assert isinstance(result, pd.DataFrame)
 
 
-def test_calculate_buffer_statistics_has_both_rrr():
-    """Test that buffer statistics includes both 1:1 and 1:2 RRR rows."""
-    sample = get_sample_data()
-    result = calculate_buffer_statistics(sample)
+def test_calculate_buffer_statistics_has_pass_column():
+    """Test that buffer statistics includes Pass and Drawdown columns."""
+    # Need enough trades to produce passes
+    trades = pd.DataFrame({
+        'Date': [f'2026-01-{i+1:02d}' for i in range(20)],
+        'Weekday': ['Monday'] * 20,
+        'Trade': [f'#{i+1}' for i in range(20)],
+        'Direction': ['Buy'] * 20,
+        '1H': ['Buy'] * 20,
+        'SL': [2.0] * 20,
+        'Pullback': [1.0] * 20,
+        'TP': [10.0] * 20,
+        'R': [5.0] * 20,
+    })
+    result = calculate_buffer_statistics(trades)
 
-    rrr_values = result['RRR'].unique()
-    assert '1:1' in rrr_values
-    assert '1:2' in rrr_values
+    assert 'Pass' in result.columns
+    assert 'Fail' in result.columns
+    # All rows should have Pass > 0 (filtered)
+    for _, row in result.iterrows():
+        assert row['Pass'] > 0
 
 
 def test_buffer_pips_constant():
@@ -1126,6 +1141,116 @@ def test_fixed_sl_1h_aligned_wins_more():
     assert len(against_rows) == 0
 
 
+def test_simulate_challenge_all_wins_1_1():
+    """Test simulate_challenge: 10 consecutive wins at 1:1 = 1 pass."""
+    mask = [True] * 10
+    passes, drawdowns = simulate_challenge(mask, rrr_ratio=1)
+    assert passes == 1
+    assert drawdowns == 0
+
+
+def test_simulate_challenge_all_losses():
+    """Test simulate_challenge: 10 consecutive losses = 1 drawdown."""
+    mask = [False] * 10
+    passes, drawdowns = simulate_challenge(mask, rrr_ratio=1)
+    assert passes == 0
+    assert drawdowns == 1
+
+
+def test_simulate_challenge_20_wins():
+    """Test simulate_challenge: 20 wins at 1:1 = 2 passes."""
+    mask = [True] * 20
+    passes, drawdowns = simulate_challenge(mask, rrr_ratio=1)
+    assert passes == 2
+    assert drawdowns == 0
+
+
+def test_simulate_challenge_20_losses():
+    """Test simulate_challenge: 20 losses = 2 drawdowns."""
+    mask = [False] * 20
+    passes, drawdowns = simulate_challenge(mask, rrr_ratio=1)
+    assert passes == 0
+    assert drawdowns == 2
+
+
+def test_simulate_challenge_reset_after_pass():
+    """Test that sum resets to 0 after a pass, then losses start fresh."""
+    # 10 wins = pass (reset to 0), then 10 losses = drawdown
+    mask = [True] * 10 + [False] * 10
+    passes, drawdowns = simulate_challenge(mask, rrr_ratio=1)
+    assert passes == 1
+    assert drawdowns == 1
+
+
+def test_simulate_challenge_reset_after_drawdown():
+    """Test that sum resets to 0 after a drawdown, then wins start fresh."""
+    # 10 losses = drawdown (reset to 0), then 10 wins = pass
+    mask = [False] * 10 + [True] * 10
+    passes, drawdowns = simulate_challenge(mask, rrr_ratio=1)
+    assert passes == 1
+    assert drawdowns == 1
+
+
+def test_simulate_challenge_1_2_rrr():
+    """Test simulate_challenge at 1:2 RRR: each win = +2R, so 5 wins = pass."""
+    mask = [True] * 5
+    passes, drawdowns = simulate_challenge(mask, rrr_ratio=2)
+    assert passes == 1
+    assert drawdowns == 0
+
+
+def test_simulate_challenge_1_2_rrr_10_wins():
+    """Test simulate_challenge at 1:2 RRR: 10 wins = +20R = 2 passes."""
+    mask = [True] * 10
+    passes, drawdowns = simulate_challenge(mask, rrr_ratio=2)
+    assert passes == 2
+    assert drawdowns == 0
+
+
+def test_simulate_challenge_empty():
+    """Test simulate_challenge with no trades."""
+    passes, drawdowns = simulate_challenge([], rrr_ratio=1)
+    assert passes == 0
+    assert drawdowns == 0
+
+
+def test_simulate_challenge_mixed_no_threshold():
+    """Test simulate_challenge: alternating wins/losses never reaches threshold."""
+    # Win, Loss, Win, Loss... at 1:1 → sum oscillates between 0 and 1
+    mask = [True, False] * 5
+    passes, drawdowns = simulate_challenge(mask, rrr_ratio=1)
+    assert passes == 0
+    assert drawdowns == 0
+
+
+def test_simulate_challenge_near_threshold():
+    """Test that reaching exactly the threshold triggers pass/drawdown."""
+    # 9 wins at 1:1 = 9R (not enough), 10th win = 10R = pass
+    mask = [True] * 9
+    passes, _ = simulate_challenge(mask, rrr_ratio=1)
+    assert passes == 0
+
+    mask = [True] * 10
+    passes, _ = simulate_challenge(mask, rrr_ratio=1)
+    assert passes == 1
+
+
+def test_buffer_stats_has_challenge_columns():
+    """Test that _calculate_stats_with_buffer returns Pass and Drawdown."""
+    trades = pd.DataFrame({
+        'Date': [f'2026-01-{i+1:02d}' for i in range(10)],
+        'SL': [2.0] * 10,
+        'Pullback': [1.0] * 10,
+        'TP': [10.0] * 10,
+    })
+
+    stats = _calculate_stats_with_buffer(trades, 'Test', 0.0)
+    assert 'Pass' in stats
+    assert 'Fail' in stats
+    assert stats['Pass'] == 1  # 10 wins at 1:1 = 1 pass
+    assert stats['Fail'] == 0
+
+
 def run_all_tests():
     """Run all tests and report results."""
     tests = [
@@ -1159,7 +1284,7 @@ def run_all_tests():
         test_buffer_sl_cap_filter,
         test_buffer_sl_cap_with_1h_filter,
         test_calculate_buffer_statistics,
-        test_calculate_buffer_statistics_has_both_rrr,
+        test_calculate_buffer_statistics_has_pass_column,
         test_buffer_pips_constant,
         test_rrr_ratios_constant,
         test_breakeven_rate,
@@ -1209,6 +1334,18 @@ def run_all_tests():
         test_fixed_sl_1h_has_strategy_column,
         test_fixed_sl_1h_strategies_present,
         test_fixed_sl_1h_aligned_wins_more,
+        test_simulate_challenge_all_wins_1_1,
+        test_simulate_challenge_all_losses,
+        test_simulate_challenge_20_wins,
+        test_simulate_challenge_20_losses,
+        test_simulate_challenge_reset_after_pass,
+        test_simulate_challenge_reset_after_drawdown,
+        test_simulate_challenge_1_2_rrr,
+        test_simulate_challenge_1_2_rrr_10_wins,
+        test_simulate_challenge_empty,
+        test_simulate_challenge_mixed_no_threshold,
+        test_simulate_challenge_near_threshold,
+        test_buffer_stats_has_challenge_columns,
     ]
 
     passed = 0

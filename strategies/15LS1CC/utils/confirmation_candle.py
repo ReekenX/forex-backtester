@@ -296,6 +296,16 @@ def create_html_table(df: pd.DataFrame) -> str:
                     css_class = "positive-edge" if edge_val > 0 else "negative-edge"
                 except (ValueError, TypeError):
                     pass
+            elif col == "Pass":
+                try:
+                    css_class = "positive-edge" if int(value) > 0 else ""
+                except (ValueError, TypeError):
+                    pass
+            elif col == "Fail":
+                try:
+                    css_class = "negative-edge" if int(value) > 0 else ""
+                except (ValueError, TypeError):
+                    pass
 
             cls_attr = f' class="{css_class}"' if css_class else ""
             html += f"                <td{cls_attr}>{value}</td>\n"
@@ -308,12 +318,51 @@ def create_html_table(df: pd.DataFrame) -> str:
     return html
 
 
+def simulate_challenge(winning_mask, rrr_ratio: int, pass_threshold: float = 10, drawdown_threshold: float = 10) -> Tuple[int, int]:
+    """
+    Simulate prop firm challenge attempts by walking through trades sequentially.
+
+    Tracks cumulative R. On reaching +pass_threshold, counts a pass and resets.
+    On reaching -drawdown_threshold, counts a drawdown and resets.
+
+    Args:
+        winning_mask: Boolean series/list where True = win, False = loss
+        rrr_ratio: R gained per win (e.g., 1 for 1:1, 2 for 1:2)
+        pass_threshold: R needed to pass challenge
+        drawdown_threshold: R loss that fails challenge
+
+    Returns:
+        Tuple of (pass_count, drawdown_count)
+    """
+    running_sum = 0.0
+    pass_count = 0
+    drawdown_count = 0
+
+    for is_win in winning_mask:
+        if is_win:
+            running_sum += rrr_ratio
+        else:
+            running_sum -= 1
+
+        if running_sum >= pass_threshold:
+            pass_count += 1
+            running_sum = 0.0
+        elif running_sum <= -drawdown_threshold:
+            drawdown_count += 1
+            running_sum = 0.0
+
+    return pass_count, drawdown_count
+
+
 def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffer: float, rrr_ratio: int = 1) -> Dict:
     """
     Calculate trading statistics with extra pips added to SL.
 
     With buffer, effective SL = SL + buffer. Trade survives if Pullback < effective SL.
     Trade wins if TP >= rrr_ratio * effective SL.
+
+    Includes prop firm challenge simulation: walks through trades tracking cumulative R,
+    counting passes (+10R) and drawdowns (-10R).
 
     Args:
         trades: DataFrame containing filtered trades
@@ -324,7 +373,6 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
     Returns:
         Dictionary with calculated statistics
     """
-    breakeven = _breakeven_rate(rrr_ratio)
     rrr_label = f"1:{rrr_ratio}"
     total_trades = len(trades)
 
@@ -333,50 +381,31 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
             "Strategy": strategy_name,
             "Buffer": f"+{buffer}",
             "RRR": rrr_label,
-            "Trades": 0,
             "Notation": "0W – 0L",
             "Win Rate": "0.0%",
-            "Outcome": "0R",
-            "Edge": f"{-breakeven:.1f}%",
-            "Days": 0,
-            "Days %": "0%",
-            "Trades Required": "N/A",
-            "edge_value": -breakeven,
+            "Fail": 0,
+            "Pass": 0,
         }
 
     effective_sl = trades["SL"] + buffer
 
     # Win condition with buffer: Pullback < effective_sl AND TP >= rrr_ratio * effective_sl
-    winning_trades = trades[
-        (trades["Pullback"] < effective_sl) &
-        (trades["TP"] >= rrr_ratio * effective_sl)
-    ]
+    winning_mask = (trades["Pullback"] < effective_sl) & (trades["TP"] >= rrr_ratio * effective_sl)
 
-    wins = len(winning_trades)
+    wins = winning_mask.sum()
     losses = total_trades - wins
     win_rate = (wins / total_trades) * 100
-    edge = win_rate - breakeven
-    outcome = (wins * rrr_ratio) - losses
 
-    days_with_wins = winning_trades["Date"].nunique() if "Date" in winning_trades.columns and len(winning_trades) > 0 else 0
-    total_days = trades["Date"].nunique() if "Date" in trades.columns else 0
-    days_pct = (days_with_wins / total_days * 100) if total_days > 0 else 0.0
-
-    trades_required = (total_trades / outcome) if outcome > 0 else float("inf")
+    pass_count, drawdown_count = simulate_challenge(winning_mask, rrr_ratio)
 
     return {
         "Strategy": strategy_name,
         "Buffer": f"+{buffer}",
         "RRR": rrr_label,
-        "Trades": total_trades,
         "Notation": f"{wins}W – {losses}L",
         "Win Rate": f"{win_rate:.1f}%",
-        "Outcome": f"{outcome}R",
-        "Edge": f"{edge:.1f}%",
-        "Days": days_with_wins,
-        "Days %": f"{days_pct:.0f}%",
-        "Trades Required": f"{trades_required:.1f}" if outcome > 0 else "N/A",
-        "edge_value": edge,
+        "Fail": drawdown_count,
+        "Pass": pass_count,
     }
 
 
@@ -413,11 +442,14 @@ def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     For each strategy, tests what happens if extra pips (0, 0.5, 1, 1.5, 2, 3, 4, 5)
     are added to the SL. A wider SL means more trades survive but the target is also higher.
 
+    Includes prop firm challenge simulation: walks through trades tracking cumulative R,
+    counting passes (+10R) and drawdowns (-10R).
+
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with buffer statistics, sorted by edge descending
+        DataFrame with buffer statistics, filtered to strategies with at least one pass
     """
     strategies = get_buffer_strategies()
     results = []
@@ -431,22 +463,11 @@ def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
     result_df = pd.DataFrame(results)
 
-    # Filter to only show strategies with positive edge
-    result_df = result_df[result_df["edge_value"] > 0].copy()
+    # Filter to only show strategies with at least one pass
+    result_df = result_df[result_df["Pass"] > 0].copy()
 
-    # Sort by edge descending
-    result_df = result_df.sort_values("edge_value", ascending=False)
-
-    # Drop sorting column
-    result_df = result_df.drop("edge_value", axis=1)
-
-    # Rename columns to include totals
-    total_trades = len(df)
-    total_days = df["Date"].nunique() if "Date" in df.columns else 0
-    result_df = result_df.rename(columns={
-        "Trades": f"Trades ({total_trades})",
-        "Days": f"Days ({total_days})",
-    })
+    # Sort by Pass descending, then Drawdown ascending
+    result_df = result_df.sort_values(["Pass", "Fail"], ascending=[False, True])
 
     # Reset index
     result_df = result_df.reset_index(drop=True)
