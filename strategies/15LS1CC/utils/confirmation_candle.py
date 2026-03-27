@@ -1190,6 +1190,165 @@ def display_buffer_analysis(df: pd.DataFrame):
         display(HTML(html_table))
 
 
+LIMIT_CHAMPION_STRATEGIES = [
+    {
+        "name": "Beat #1: 1H F4 Limit@50% +3.5",
+        "filter": lambda df: df[df["Direction"] == df["1H"]].groupby("Date").head(4),
+        "frac": 0.50,
+        "buffer": 3.5,
+        "rrr": 2.5,
+    },
+    {
+        "name": "Beat #2: 1H Al Limit@50% +3.0",
+        "filter": lambda df: df[df["Direction"] == df["1H"]],
+        "frac": 0.50,
+        "buffer": 3.0,
+        "rrr": 3.0,
+    },
+    {
+        "name": "Beat #3: 1H F4 Limit@60% +3.0",
+        "filter": lambda df: df[df["Direction"] == df["1H"]].groupby("Date").head(4),
+        "frac": 0.60,
+        "buffer": 3.0,
+        "rrr": 3.0,
+    },
+]
+
+
+def _calculate_limit_champion_stats(
+    trades: pd.DataFrame, strategy_name: str,
+    frac: float, buffer: float, rrr_ratio: float,
+) -> Dict:
+    """
+    Calculate statistics for a limit order entry at frac * SL pullback with buffer.
+
+    Entry is placed frac * SL pips from original entry toward the stop.
+    - Triggers only if Pullback >= frac * SL
+    - Effective SL from limit entry = SL * (1 - frac) + buffer
+    - Effective TP from limit entry = TP + frac * SL
+    - Trade survives if Pullback < SL + buffer (from original entry)
+    - Minimum broker SL: SL * (1 - frac) + buffer >= 1.1
+    - Win: survives AND TP > 0 AND effective_TP >= rrr_ratio * effective_SL
+
+    Args:
+        trades: DataFrame containing filtered trades
+        strategy_name: Name of the strategy
+        frac: Fraction of SL for limit placement (0.5 = halfway)
+        buffer: Extra pips added to effective SL
+        rrr_ratio: Risk-reward ratio target
+
+    Returns:
+        Dictionary with calculated statistics
+    """
+    rrr_label = f"1:{rrr_ratio:g}"
+
+    new_sl = trades["SL"] * (1 - frac) + buffer
+    eligible = trades[new_sl >= 1.1].copy()
+
+    trigger_dist = eligible["SL"] * frac
+    triggered = eligible[eligible["Pullback"] >= trigger_dist].copy()
+    total_trades = len(triggered)
+
+    frac_pct = int(frac * 100)
+
+    if total_trades == 0:
+        return {
+            "Strategy": strategy_name,
+            "Entry": f"Limit @{frac_pct}%",
+            "Buffer": f"+{buffer}",
+            "RRR": rrr_label,
+            "Trades": 0,
+            "Notation": "0W – 0L",
+            "Win Rate": "0.0%",
+            "Fail": 0,
+            "Pass": 0,
+        }
+
+    eff_sl = triggered["SL"] * (1 - frac) + buffer
+    new_tp = triggered["TP"] + triggered["SL"] * frac
+
+    winning_mask = (
+        (triggered["Pullback"] < triggered["SL"] + buffer) &
+        (triggered["TP"] > 0) &
+        (new_tp >= rrr_ratio * eff_sl)
+    )
+
+    wins = int(winning_mask.sum())
+    losses = total_trades - wins
+    win_rate = (wins / total_trades) * 100
+
+    pass_count, drawdown_count = simulate_challenge(winning_mask, rrr_ratio)
+
+    return {
+        "Strategy": strategy_name,
+        "Entry": f"Limit @{frac_pct}%",
+        "Buffer": f"+{buffer}",
+        "RRR": rrr_label,
+        "Trades": total_trades,
+        "Notation": f"{wins}W – {losses}L",
+        "Win Rate": f"{win_rate:.1f}%",
+        "Fail": drawdown_count,
+        "Pass": pass_count,
+    }
+
+
+def calculate_limit_champion_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate statistics for the 3 limit order champion strategies.
+
+    Each strategy uses a limit order entry at a specific pullback fraction,
+    combined with a buffer and RRR, optimized for maximum challenge passes
+    while keeping RRR at 1:3 or below.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with limit champion statistics, sorted by passes descending
+    """
+    results = []
+
+    for strat in LIMIT_CHAMPION_STRATEGIES:
+        filtered = strat["filter"](df)
+        stats = _calculate_limit_champion_stats(
+            filtered, strat["name"],
+            strat["frac"], strat["buffer"], strat["rrr"],
+        )
+        results.append(stats)
+
+    result_df = pd.DataFrame(results)
+    result_df = result_df.sort_values(["Pass", "Fail"], ascending=[False, True])
+    result_df = result_df.reset_index(drop=True)
+
+    return result_df
+
+
+def display_limit_champions(df: pd.DataFrame):
+    """
+    Display the 3 limit order champion strategies (max 1:3 RRR).
+
+    Each uses a limit order entry at a pullback fraction of SL, giving a better
+    entry price that naturally improves effective risk-reward without raising
+    the target distance.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Limit Order Champions (max 1:3 RRR)</h2>"
+    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Entry at pullback fraction of SL. Better entry price → smaller risk, larger reward. All 1H Aligned.</p>"
+    display(HTML(title_html + subtitle_html))
+
+    stats_df = calculate_limit_champion_statistics(df)
+
+    if stats_df.empty:
+        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
+    else:
+        html_table = create_html_table(stats_df)
+        display(HTML(html_table))
+
+
 CHAMPION_STRATEGIES = [
     {
         "name": "Beat #1: SL<4 excl Friday",
