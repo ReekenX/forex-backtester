@@ -318,7 +318,7 @@ def create_html_table(df: pd.DataFrame) -> str:
     return html
 
 
-def simulate_challenge(winning_mask, rrr_ratio: int, pass_threshold: float = 10, drawdown_threshold: float = 10) -> Tuple[int, int]:
+def simulate_challenge(winning_mask, rrr_ratio: float, pass_threshold: float = 10, drawdown_threshold: float = 10) -> Tuple[int, int]:
     """
     Simulate prop firm challenge attempts by walking through trades sequentially.
 
@@ -354,7 +354,7 @@ def simulate_challenge(winning_mask, rrr_ratio: int, pass_threshold: float = 10,
     return pass_count, drawdown_count
 
 
-def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffer: float, rrr_ratio: int = 1) -> Dict:
+def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffer: float, rrr_ratio: float = 1) -> Dict:
     """
     Calculate trading statistics with extra pips added to SL.
 
@@ -373,7 +373,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
     Returns:
         Dictionary with calculated statistics
     """
-    rrr_label = f"1:{rrr_ratio}"
+    rrr_label = f"1:{rrr_ratio:g}"
     total_trades = len(trades)
 
     if total_trades == 0:
@@ -381,6 +381,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
             "Strategy": strategy_name,
             "Buffer": f"+{buffer}",
             "RRR": rrr_label,
+            "Trades": 0,
             "Notation": "0W – 0L",
             "Win Rate": "0.0%",
             "Fail": 0,
@@ -402,6 +403,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
         "Strategy": strategy_name,
         "Buffer": f"+{buffer}",
         "RRR": rrr_label,
+        "Trades": total_trades,
         "Notation": f"{wins}W – {losses}L",
         "Win Rate": f"{win_rate:.1f}%",
         "Fail": drawdown_count,
@@ -422,15 +424,15 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
         ("1H Against", lambda df: df[df["Direction"] != df["1H"]]),
     ]
 
-    sl_caps = [3, 4, 5]
     strategies = list(base_strategies)
 
-    for name, base_func in base_strategies:
-        for cap in sl_caps:
-            strategies.append((
-                f"{name} + SL < {cap}",
-                lambda df, f=base_func, c=cap: f(df[df["SL"] < c])
-            ))
+    # sl_caps = [3, 4, 5]
+    # for name, base_func in base_strategies:
+    #     for cap in sl_caps:
+    #         strategies.append((
+    #             f"{name} + SL < {cap}",
+    #             lambda df, f=base_func, c=cap: f(df[df["SL"] < c])
+    #         ))
 
     return strategies
 
@@ -1183,6 +1185,102 @@ def display_buffer_analysis(df: pd.DataFrame):
 
     if stats_df.empty:
         display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable buffer strategies found</p>"))
+    else:
+        html_table = create_html_table(stats_df)
+        display(HTML(html_table))
+
+
+CHAMPION_STRATEGIES = [
+    {
+        "name": "Beat #1: SL<4 excl Friday",
+        "filter": lambda df: df[(df["SL"] < 4) & (df["Weekday"] != "Friday")],
+        "buffer": 0.4,
+        "rrr": 3.5,
+    },
+    {
+        "name": "Beat #2: All SL<4",
+        "filter": lambda df: df[df["SL"] < 4],
+        "buffer": 0.4,
+        "rrr": 3.5,
+    },
+    {
+        "name": "Beat #3: All SL<3.5",
+        "filter": lambda df: df[df["SL"] < 3.5],
+        "buffer": 0.4,
+        "rrr": 3.5,
+    },
+    {
+        "name": "Beat #4: SL 0.5-3.5",
+        "filter": lambda df: df[(df["SL"] >= 0.5) & (df["SL"] < 3.5)],
+        "buffer": 0.3,
+        "rrr": 4.5,
+    },
+    {
+        "name": "Beat #5: SL 0.5-4.0",
+        "filter": lambda df: df[(df["SL"] >= 0.5) & (df["SL"] < 4.0)],
+        "buffer": 0.3,
+        "rrr": 4.5,
+    },
+    {
+        "name": "Beat #6: SL 0.5-3.5 (no buffer)",
+        "filter": lambda df: df[(df["SL"] >= 0.5) & (df["SL"] < 3.5)],
+        "buffer": 0.0,
+        "rrr": 10.0,
+    },
+]
+
+
+def calculate_champion_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate statistics for the 6 champion strategies found via autoresearch.
+
+    Each strategy has a specific filter, buffer, and RRR that were discovered
+    by scanning thousands of combinations and optimizing for challenge passes.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with champion strategy statistics, sorted by passes descending
+    """
+    results = []
+
+    for strat in CHAMPION_STRATEGIES:
+        filtered = strat["filter"](df)
+        stats = _calculate_stats_with_buffer(
+            filtered, strat["name"], strat["buffer"], strat["rrr"]
+        )
+        results.append(stats)
+
+    result_df = pd.DataFrame(results)
+
+    # Sort by Pass descending, then Fail ascending
+    result_df = result_df.sort_values(["Pass", "Fail"], ascending=[False, True])
+    result_df = result_df.reset_index(drop=True)
+
+    return result_df
+
+
+def display_champions(df: pd.DataFrame):
+    """
+    Display the 6 champion strategies found via autoresearch.
+
+    Each strategy was optimized for maximum prop firm challenge passes
+    by scanning SL filters, buffer sizes, RRR ratios, and weekday filters.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Champion Strategies</h2>"
+    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Optimized for maximum challenge passes. Each uses a specific SL filter + buffer + RRR combination.</p>"
+    display(HTML(title_html + subtitle_html))
+
+    stats_df = calculate_champion_statistics(df)
+
+    if stats_df.empty:
+        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
     else:
         html_table = create_html_table(stats_df)
         display(HTML(html_table))

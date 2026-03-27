@@ -17,6 +17,7 @@ from utils.confirmation_candle import (
     calculate_limit_order_statistics,
     calculate_fixed_sl_statistics,
     calculate_fixed_sl_1h_statistics,
+    calculate_champion_statistics,
     create_html_table,
     get_strategies,
     get_buffer_strategies,
@@ -31,6 +32,7 @@ from utils.confirmation_candle import (
     RRR_RATIOS,
     BUFFER_PIPS,
     FIXED_SL_SIZES,
+    CHAMPION_STRATEGIES,
 )
 
 
@@ -402,39 +404,39 @@ def test_get_buffer_strategies():
     assert '1H Against' in names
 
 
-def test_get_buffer_strategies_includes_sl_caps():
-    """Test that buffer strategies include SL cap variations."""
-    strategies = get_buffer_strategies()
-    names = [name for name, _ in strategies]
-
-    assert 'All Trades + SL < 3' in names
-    assert 'All Trades + SL < 4' in names
-    assert 'All Trades + SL < 5' in names
-    assert '1H Aligned + SL < 3' in names
-    assert '1H Against + SL < 5' in names
-
-
-def test_buffer_sl_cap_filter():
-    """Test that SL cap filter correctly excludes trades with SL >= cap."""
-    sample = get_sample_data()
-    strategies = get_buffer_strategies()
-    strategy = [func for name, func in strategies if name == 'All Trades + SL < 3'][0]
-    filtered = strategy(sample)
-
-    for _, row in filtered.iterrows():
-        assert row['SL'] < 3
-
-
-def test_buffer_sl_cap_with_1h_filter():
-    """Test SL cap combined with 1H filter."""
-    sample = get_sample_data()
-    strategies = get_buffer_strategies()
-    strategy = [func for name, func in strategies if name == '1H Aligned + SL < 4'][0]
-    filtered = strategy(sample)
-
-    for _, row in filtered.iterrows():
-        assert row['SL'] < 4
-        assert row['Direction'] == row['1H']
+# def test_get_buffer_strategies_includes_sl_caps():
+#     """Test that buffer strategies include SL cap variations."""
+#     strategies = get_buffer_strategies()
+#     names = [name for name, _ in strategies]
+#
+#     assert 'All Trades + SL < 3' in names
+#     assert 'All Trades + SL < 4' in names
+#     assert 'All Trades + SL < 5' in names
+#     assert '1H Aligned + SL < 3' in names
+#     assert '1H Against + SL < 5' in names
+#
+#
+# def test_buffer_sl_cap_filter():
+#     """Test that SL cap filter correctly excludes trades with SL >= cap."""
+#     sample = get_sample_data()
+#     strategies = get_buffer_strategies()
+#     strategy = [func for name, func in strategies if name == 'All Trades + SL < 3'][0]
+#     filtered = strategy(sample)
+#
+#     for _, row in filtered.iterrows():
+#         assert row['SL'] < 3
+#
+#
+# def test_buffer_sl_cap_with_1h_filter():
+#     """Test SL cap combined with 1H filter."""
+#     sample = get_sample_data()
+#     strategies = get_buffer_strategies()
+#     strategy = [func for name, func in strategies if name == '1H Aligned + SL < 4'][0]
+#     filtered = strategy(sample)
+#
+#     for _, row in filtered.iterrows():
+#         assert row['SL'] < 4
+#         assert row['Direction'] == row['1H']
 
 
 def test_calculate_buffer_statistics():
@@ -1251,6 +1253,120 @@ def test_buffer_stats_has_challenge_columns():
     assert stats['Fail'] == 0
 
 
+def test_buffer_stats_has_trades_column():
+    """Test that _calculate_stats_with_buffer returns Trades count."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02', '2026-01-03'],
+        'SL': [2.0, 2.0, 2.0],
+        'Pullback': [1.0, 1.0, 3.0],
+        'TP': [10.0, 10.0, 10.0],
+    })
+
+    stats = _calculate_stats_with_buffer(trades, 'Test', 0.0)
+    assert stats['Trades'] == 3
+
+
+def test_buffer_stats_empty_has_trades_zero():
+    """Test that empty _calculate_stats_with_buffer returns Trades 0."""
+    empty = get_empty_data()
+    stats = _calculate_stats_with_buffer(empty, 'Empty', 1.0)
+    assert stats['Trades'] == 0
+
+
+def test_simulate_challenge_float_rrr():
+    """Test simulate_challenge with float RRR (e.g., 3.5)."""
+    # 3 wins at 1:3.5 = +10.5R => 1 pass
+    mask = [True] * 3
+    passes, drawdowns = simulate_challenge(mask, rrr_ratio=3.5)
+    assert passes == 1
+    assert drawdowns == 0
+
+
+def test_simulate_challenge_float_rrr_not_enough():
+    """Test simulate_challenge with float RRR: 2 wins at 1:4.5 = +9R, not enough."""
+    mask = [True] * 2
+    passes, drawdowns = simulate_challenge(mask, rrr_ratio=4.5)
+    assert passes == 0
+    assert drawdowns == 0
+
+
+def test_simulate_challenge_float_rrr_10():
+    """Test simulate_challenge at 1:10 RRR: 1 win = +10R = 1 pass."""
+    mask = [True]
+    passes, drawdowns = simulate_challenge(mask, rrr_ratio=10.0)
+    assert passes == 1
+    assert drawdowns == 0
+
+
+def test_buffer_stats_with_float_rrr():
+    """Test _calculate_stats_with_buffer with float RRR (3.5)."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [2.0],
+        'Pullback': [1.0],
+        'TP': [10.0],
+    })
+
+    stats = _calculate_stats_with_buffer(trades, 'Test', 0.0, rrr_ratio=3.5)
+    assert stats['RRR'] == '1:3.5'
+    assert stats['Notation'] == '1W – 0L'
+
+
+def test_buffer_stats_with_float_rrr_loss():
+    """Test float RRR where TP doesn't reach target: SL=2, TP=6, RRR=3.5 => need 7."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'SL': [2.0],
+        'Pullback': [1.0],
+        'TP': [6.0],
+    })
+
+    stats = _calculate_stats_with_buffer(trades, 'Test', 0.0, rrr_ratio=3.5)
+    assert stats['Notation'] == '0W – 1L'
+
+
+def test_champion_strategies_count():
+    """Test that CHAMPION_STRATEGIES has exactly 6 entries."""
+    assert len(CHAMPION_STRATEGIES) == 6
+
+
+def test_champion_strategies_have_required_keys():
+    """Test that each champion strategy has name, filter, buffer, and rrr."""
+    for strat in CHAMPION_STRATEGIES:
+        assert 'name' in strat
+        assert 'filter' in strat
+        assert 'buffer' in strat
+        assert 'rrr' in strat
+        assert callable(strat['filter'])
+
+
+def test_calculate_champion_statistics():
+    """Test that calculate_champion_statistics returns a DataFrame with 6 rows."""
+    sample = get_sample_data()
+    result = calculate_champion_statistics(sample)
+    assert isinstance(result, pd.DataFrame)
+    assert len(result) == 6
+
+
+def test_champion_statistics_has_expected_columns():
+    """Test that champion statistics has Pass, Fail, Trades columns."""
+    sample = get_sample_data()
+    result = calculate_champion_statistics(sample)
+    assert 'Pass' in result.columns
+    assert 'Fail' in result.columns
+    assert 'Trades' in result.columns
+    assert 'Strategy' in result.columns
+    assert 'RRR' in result.columns
+
+
+def test_champion_statistics_sorted_by_pass():
+    """Test that champion results are sorted by Pass descending."""
+    sample = get_sample_data()
+    result = calculate_champion_statistics(sample)
+    passes = list(result['Pass'])
+    assert passes == sorted(passes, reverse=True)
+
+
 def run_all_tests():
     """Run all tests and report results."""
     tests = [
@@ -1280,9 +1396,9 @@ def run_all_tests():
         test_buffer_stats_has_buffer_column,
         test_buffer_stats_empty,
         test_get_buffer_strategies,
-        test_get_buffer_strategies_includes_sl_caps,
-        test_buffer_sl_cap_filter,
-        test_buffer_sl_cap_with_1h_filter,
+        # test_get_buffer_strategies_includes_sl_caps,
+        # test_buffer_sl_cap_filter,
+        # test_buffer_sl_cap_with_1h_filter,
         test_calculate_buffer_statistics,
         test_calculate_buffer_statistics_has_pass_column,
         test_buffer_pips_constant,
@@ -1346,6 +1462,18 @@ def run_all_tests():
         test_simulate_challenge_mixed_no_threshold,
         test_simulate_challenge_near_threshold,
         test_buffer_stats_has_challenge_columns,
+        test_buffer_stats_has_trades_column,
+        test_buffer_stats_empty_has_trades_zero,
+        test_simulate_challenge_float_rrr,
+        test_simulate_challenge_float_rrr_not_enough,
+        test_simulate_challenge_float_rrr_10,
+        test_buffer_stats_with_float_rrr,
+        test_buffer_stats_with_float_rrr_loss,
+        test_champion_strategies_count,
+        test_champion_strategies_have_required_keys,
+        test_calculate_champion_statistics,
+        test_champion_statistics_has_expected_columns,
+        test_champion_statistics_sorted_by_pass,
     ]
 
     passed = 0
