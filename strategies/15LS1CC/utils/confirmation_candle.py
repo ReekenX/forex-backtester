@@ -1190,6 +1190,66 @@ def display_buffer_analysis(df: pd.DataFrame):
         display(HTML(html_table))
 
 
+WEEKDAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+
+
+def calculate_weekday_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate win/loss statistics for each weekday (Monday-Friday).
+
+    Win condition: Pullback < SL AND TP > 0.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with columns: Day, Trades, Wins, Losses, Win Rate
+    """
+    results = []
+
+    for day in WEEKDAY_ORDER:
+        day_trades = df[df['Weekday'] == day]
+        total = len(day_trades)
+
+        if total == 0:
+            results.append({'Day': day, 'Trades': 0, 'Wins': 0, 'Losses': 0, 'Win Rate': '0.0%'})
+            continue
+
+        wins = len(day_trades[
+            (day_trades['Pullback'] < day_trades['SL']) &
+            (day_trades['TP'] > 0)
+        ])
+        losses = total - wins
+        win_rate = (wins / total) * 100
+
+        results.append({
+            'Day': day,
+            'Trades': total,
+            'Wins': wins,
+            'Losses': losses,
+            'Win Rate': f'{win_rate:.1f}%',
+        })
+
+    return pd.DataFrame(results)
+
+
+def display_weekday(df: pd.DataFrame):
+    """
+    Display win/loss statistics broken down by weekday.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Weekday Statistics</h2>"
+    display(HTML(title_html))
+
+    stats_df = calculate_weekday_statistics(df)
+    html_table = create_html_table(stats_df)
+    display(HTML(html_table))
+
+
 LIMIT_CHAMPION_STRATEGIES = [
     {
         "name": "Beat #1: 1H F4 Limit@50% +3.5",

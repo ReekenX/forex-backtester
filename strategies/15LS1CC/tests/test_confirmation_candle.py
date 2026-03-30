@@ -19,6 +19,7 @@ from utils.confirmation_candle import (
     calculate_fixed_sl_1h_statistics,
     calculate_champion_statistics,
     calculate_limit_champion_statistics,
+    calculate_weekday_statistics,
     _calculate_limit_champion_stats,
     create_html_table,
     get_strategies,
@@ -36,6 +37,7 @@ from utils.confirmation_candle import (
     FIXED_SL_SIZES,
     CHAMPION_STRATEGIES,
     LIMIT_CHAMPION_STRATEGIES,
+    WEEKDAY_ORDER,
 )
 
 
@@ -1482,6 +1484,113 @@ def test_limit_champion_statistics_has_expected_columns():
     assert 'Strategy' in result.columns
 
 
+def test_weekday_order_constant():
+    """Test that WEEKDAY_ORDER has Monday-Friday."""
+    assert WEEKDAY_ORDER == ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+
+
+def test_weekday_statistics_columns():
+    """Test that weekday statistics has expected columns."""
+    sample = get_sample_data()
+    result = calculate_weekday_statistics(sample)
+    assert list(result.columns) == ['Day', 'Trades', 'Wins', 'Losses', 'Win Rate']
+
+
+def test_weekday_statistics_all_days_present():
+    """Test that all 5 weekdays appear in results."""
+    sample = get_sample_data()
+    result = calculate_weekday_statistics(sample)
+    assert len(result) == 5
+    assert list(result['Day']) == ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+
+
+def test_weekday_statistics_trade_counts():
+    """Test trade counts per weekday from sample data."""
+    sample = get_sample_data()
+    result = calculate_weekday_statistics(sample)
+    # Sample: Monday=3, Tuesday=2, Wednesday=2, Thursday=2, Friday=1
+    counts = dict(zip(result['Day'], result['Trades']))
+    assert counts['Monday'] == 3
+    assert counts['Tuesday'] == 2
+    assert counts['Wednesday'] == 2
+    assert counts['Thursday'] == 2
+    assert counts['Friday'] == 1
+
+
+def test_weekday_statistics_wins_losses():
+    """Test win/loss counts from sample data.
+
+    Win condition: Pullback < SL AND TP > 0.
+    Sample data:
+    Monday: #1 PB=3.5 SL=3.5 TP=0 => L, #2 PB=0.8 SL=1.1 TP=12 => W, #3 PB=2.1 SL=2.0 TP=0 => L
+    Tuesday: #1 PB=1.5 SL=4.0 TP=10 => W, #2 PB=3.0 SL=3.0 TP=0 => L
+    Wednesday: #1 PB=2.0 SL=5.0 TP=8 => W, #2 PB=2.5 SL=2.5 TP=0 => L
+    Thursday: #1 PB=3.0 SL=6.0 TP=15 => W, #2 PB=7.0 SL=8.0 TP=10 => W
+    Friday: #1 PB=0.5 SL=1.5 TP=5 => W
+    """
+    sample = get_sample_data()
+    result = calculate_weekday_statistics(sample)
+    rows = {row['Day']: row for _, row in result.iterrows()}
+
+    assert rows['Monday']['Wins'] == 1
+    assert rows['Monday']['Losses'] == 2
+    assert rows['Tuesday']['Wins'] == 1
+    assert rows['Tuesday']['Losses'] == 1
+    assert rows['Wednesday']['Wins'] == 1
+    assert rows['Wednesday']['Losses'] == 1
+    assert rows['Thursday']['Wins'] == 2
+    assert rows['Thursday']['Losses'] == 0
+    assert rows['Friday']['Wins'] == 1
+    assert rows['Friday']['Losses'] == 0
+
+
+def test_weekday_statistics_win_rate():
+    """Test win rate calculation per weekday."""
+    sample = get_sample_data()
+    result = calculate_weekday_statistics(sample)
+    rows = {row['Day']: row for _, row in result.iterrows()}
+
+    assert rows['Monday']['Win Rate'] == '33.3%'
+    assert rows['Tuesday']['Win Rate'] == '50.0%'
+    assert rows['Thursday']['Win Rate'] == '100.0%'
+    assert rows['Friday']['Win Rate'] == '100.0%'
+
+
+def test_weekday_statistics_empty():
+    """Test weekday statistics with empty dataset."""
+    empty = get_empty_data()
+    result = calculate_weekday_statistics(empty)
+    assert len(result) == 5
+    for _, row in result.iterrows():
+        assert row['Trades'] == 0
+        assert row['Wins'] == 0
+        assert row['Losses'] == 0
+        assert row['Win Rate'] == '0.0%'
+
+
+def test_weekday_statistics_single_day():
+    """Test weekday statistics when only one day has trades."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-12', '2026-01-12'],
+        'Weekday': ['Monday', 'Monday'],
+        'Trade': ['#1', '#2'],
+        'Direction': ['Buy', 'Buy'],
+        '1H': ['Buy', 'Buy'],
+        'SL': [3.0, 3.0],
+        'Pullback': [1.0, 4.0],
+        'TP': [5.0, 5.0],
+        'R': [1.7, 0],
+    })
+
+    result = calculate_weekday_statistics(trades)
+    rows = {row['Day']: row for _, row in result.iterrows()}
+
+    assert rows['Monday']['Trades'] == 2
+    assert rows['Monday']['Wins'] == 1
+    assert rows['Monday']['Losses'] == 1
+    assert rows['Tuesday']['Trades'] == 0
+
+
 def run_all_tests():
     """Run all tests and report results."""
     tests = [
@@ -1599,6 +1708,14 @@ def run_all_tests():
         test_limit_champion_stats_broker_min_sl,
         test_calculate_limit_champion_statistics,
         test_limit_champion_statistics_has_expected_columns,
+        test_weekday_order_constant,
+        test_weekday_statistics_columns,
+        test_weekday_statistics_all_days_present,
+        test_weekday_statistics_trade_counts,
+        test_weekday_statistics_wins_losses,
+        test_weekday_statistics_win_rate,
+        test_weekday_statistics_empty,
+        test_weekday_statistics_single_day,
     ]
 
     passed = 0
