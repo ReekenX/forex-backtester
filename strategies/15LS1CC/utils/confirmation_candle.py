@@ -1033,18 +1033,37 @@ def display_buffer_analysis(df: pd.DataFrame):
 WEEKDAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 
 
+def _format_wl(wins: int, losses: int, total: int) -> str:
+    """
+    Format wins/losses/win rate into a compact string like '13W - 12L (52.0%)'.
+
+    Args:
+        wins: Number of winning trades
+        losses: Number of losing trades
+        total: Total number of trades
+
+    Returns:
+        Formatted string, or '0W - 0L (0.0%)' when total is 0
+    """
+    win_rate = (wins / total * 100) if total > 0 else 0.0
+    return f"{wins}W - {losses}L ({win_rate:.1f}%)"
+
+
 def calculate_weekday_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate win/loss statistics for each weekday (Monday-Friday).
 
-    Win condition: Pullback < SL AND TP > 0.
+    Shows regular win/loss and with +2 pip buffer added to SL.
+    Regular win: Pullback < SL AND TP > 0.
+    Buffer win: Pullback < SL + 2 AND TP > 0.
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: Day, Trades, Wins, Losses, Win Rate
+        DataFrame with columns: Day, Trades, Regular, With 2 pips buffer
     """
+    buffer = 2.0
     results = []
 
     for day in WEEKDAY_ORDER:
@@ -1052,7 +1071,12 @@ def calculate_weekday_statistics(df: pd.DataFrame) -> pd.DataFrame:
         total = len(day_trades)
 
         if total == 0:
-            results.append({'Day': day, 'Trades': 0, 'Wins': 0, 'Losses': 0, 'Win Rate': '0.0%'})
+            results.append({
+                'Day': day,
+                'Trades': 0,
+                'Regular': _format_wl(0, 0, 0),
+                'With 2 pips buffer': _format_wl(0, 0, 0),
+            })
             continue
 
         wins = len(day_trades[
@@ -1060,14 +1084,18 @@ def calculate_weekday_statistics(df: pd.DataFrame) -> pd.DataFrame:
             (day_trades['TP'] > 0)
         ])
         losses = total - wins
-        win_rate = (wins / total) * 100
+
+        buf_wins = len(day_trades[
+            (day_trades['Pullback'] < day_trades['SL'] + buffer) &
+            (day_trades['TP'] > 0)
+        ])
+        buf_losses = total - buf_wins
 
         results.append({
             'Day': day,
             'Trades': total,
-            'Wins': wins,
-            'Losses': losses,
-            'Win Rate': f'{win_rate:.1f}%',
+            'Regular': _format_wl(wins, losses, total),
+            'With 2 pips buffer': _format_wl(buf_wins, buf_losses, total),
         })
 
     return pd.DataFrame(results)
