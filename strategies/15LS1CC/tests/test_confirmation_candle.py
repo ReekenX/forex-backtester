@@ -1326,7 +1326,7 @@ def test_sl_statistics_columns():
     """Test that SL statistics has expected columns."""
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
-    assert list(result.columns) == ['SL Range', 'Trades', 'Wins', 'Losses', 'Win Rate']
+    assert list(result.columns) == ['SL Range', 'Trades', 'Regular', 'With 2 pips buffer']
 
 
 def test_sl_statistics_all_ranges_present():
@@ -1355,8 +1355,8 @@ def test_sl_statistics_trade_counts():
     assert counts['10+'] == 0
 
 
-def test_sl_statistics_wins_losses():
-    """Test win/loss counts per SL range from sample data.
+def test_sl_statistics_regular():
+    """Test Regular column per SL range from sample data.
 
     Win condition: Pullback < SL AND TP > 0.
     0-3: SL=1.1 PB=0.8 TP=12 => W, SL=2.0 PB=2.1 TP=0 => L, SL=2.5 PB=2.5 TP=0 => L, SL=1.5 PB=0.5 TP=5 => W
@@ -1367,24 +1367,28 @@ def test_sl_statistics_wins_losses():
     result = calculate_sl_statistics(sample)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-3']['Wins'] == 2
-    assert rows['0-3']['Losses'] == 2
-    assert rows['3-5']['Wins'] == 1
-    assert rows['3-5']['Losses'] == 2
-    assert rows['5-10']['Wins'] == 3
-    assert rows['5-10']['Losses'] == 0
+    assert rows['0-3']['Regular'] == '2W - 2L (50.0%)'
+    assert rows['3-5']['Regular'] == '1W - 2L (33.3%)'
+    assert rows['5-10']['Regular'] == '3W - 0L (100.0%)'
 
 
-def test_sl_statistics_win_rate():
-    """Test win rate calculation per SL range."""
+def test_sl_statistics_buffer():
+    """Test With 2 pips buffer column per SL range from sample data.
+
+    Buffer win: Pullback < SL + 2 AND TP > 0.
+    0-3: SL=1.1 PB=0.8 TP=12 => W, SL=2.0 PB=2.1 TP=0 => L(TP=0), SL=2.5 PB=2.5 TP=0 => L(TP=0), SL=1.5 PB=0.5 TP=5 => W
+    3-5: SL=3.5 PB=3.5 TP=0 => L(TP=0), SL=4.0 PB=1.5 TP=10 => W, SL=3.0 PB=3.0 TP=0 => L(TP=0)
+    5-10: SL=5.0 PB=2.0 TP=8 => W, SL=6.0 PB=3.0 TP=15 => W, SL=8.0 PB=7.0 TP=10 => W
+    """
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-3']['Win Rate'] == '50.0%'
-    assert rows['3-5']['Win Rate'] == '33.3%'
-    assert rows['5-10']['Win Rate'] == '100.0%'
-    assert rows['10+']['Win Rate'] == '0.0%'
+    # 0-3: same wins since losses are TP=0
+    assert rows['0-3']['With 2 pips buffer'] == '2W - 2L (50.0%)'
+    # 3-5: same since losses are TP=0
+    assert rows['3-5']['With 2 pips buffer'] == '1W - 2L (33.3%)'
+    assert rows['5-10']['With 2 pips buffer'] == '3W - 0L (100.0%)'
 
 
 def test_sl_statistics_empty():
@@ -1394,9 +1398,8 @@ def test_sl_statistics_empty():
     assert len(result) == 4
     for _, row in result.iterrows():
         assert row['Trades'] == 0
-        assert row['Wins'] == 0
-        assert row['Losses'] == 0
-        assert row['Win Rate'] == '0.0%'
+        assert row['Regular'] == '0W - 0L (0.0%)'
+        assert row['With 2 pips buffer'] == '0W - 0L (0.0%)'
 
 
 def test_sl_statistics_large_sl():
@@ -1417,9 +1420,34 @@ def test_sl_statistics_large_sl():
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
     assert rows['10+']['Trades'] == 2
-    assert rows['10+']['Wins'] == 1
-    assert rows['10+']['Losses'] == 1
+    assert rows['10+']['Regular'] == '1W - 1L (50.0%)'
+    # PB=16 < SL+2=17 => buffer saves it, PB=5 < SL+2=14 => still win
+    assert rows['10+']['With 2 pips buffer'] == '2W - 0L (100.0%)'
     assert rows['0-3']['Trades'] == 0
+
+
+def test_sl_statistics_buffer_saves_trade():
+    """Test that buffer can save a trade in SL range analysis.
+
+    SL=2.0, PB=3.0, TP=10. Regular: PB(3) >= SL(2) => L. Buffer: PB(3) < SL+2(4) => W.
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        'Direction': ['Buy'],
+        '1H': ['Buy'],
+        'SL': [2.0],
+        'Pullback': [3.0],
+        'TP': [10.0],
+        'R': [0],
+    })
+
+    result = calculate_sl_statistics(trades)
+    rows = {row['SL Range']: row for _, row in result.iterrows()}
+
+    assert rows['0-3']['Regular'] == '0W - 1L (0.0%)'
+    assert rows['0-3']['With 2 pips buffer'] == '1W - 0L (100.0%)'
 
 
 def test_tp_ranges_constant():
@@ -1437,7 +1465,7 @@ def test_tp_statistics_columns():
     """Test that TP statistics has expected columns."""
     sample = get_sample_data()
     result = calculate_tp_statistics(sample)
-    assert list(result.columns) == ['TP Range', 'Trades', 'Wins', 'Losses', 'Win Rate']
+    assert list(result.columns) == ['TP Range', 'Trades', 'Regular', 'With 2 pips buffer']
 
 
 def test_tp_statistics_all_ranges_present():
@@ -1468,8 +1496,8 @@ def test_tp_statistics_trade_counts():
     assert counts['50+'] == 0
 
 
-def test_tp_statistics_wins_losses():
-    """Test win/loss counts per TP range from sample data.
+def test_tp_statistics_regular():
+    """Test Regular column per TP range from sample data.
 
     Win condition: Pullback < SL AND TP > 0.
     0-10: TP=0 PB=3.5 SL=3.5 => L, TP=0 PB=2.1 SL=2.0 => L, TP=0 PB=3.0 SL=3.0 => L,
@@ -1481,20 +1509,23 @@ def test_tp_statistics_wins_losses():
     result = calculate_tp_statistics(sample)
     rows = {row['TP Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-10']['Wins'] == 2
-    assert rows['0-10']['Losses'] == 4
-    assert rows['10-20']['Wins'] == 4
-    assert rows['10-20']['Losses'] == 0
+    assert rows['0-10']['Regular'] == '2W - 4L (33.3%)'
+    assert rows['10-20']['Regular'] == '4W - 0L (100.0%)'
 
 
-def test_tp_statistics_win_rate():
-    """Test win rate calculation per TP range."""
+def test_tp_statistics_buffer():
+    """Test With 2 pips buffer column per TP range from sample data.
+
+    Buffer win: Pullback < SL + 2 AND TP > 0.
+    0-10: losses are all TP=0, buffer doesn't help => same
+    10-20: all already wins => same
+    """
     sample = get_sample_data()
     result = calculate_tp_statistics(sample)
     rows = {row['TP Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-10']['Win Rate'] == '33.3%'
-    assert rows['10-20']['Win Rate'] == '100.0%'
+    assert rows['0-10']['With 2 pips buffer'] == '2W - 4L (33.3%)'
+    assert rows['10-20']['With 2 pips buffer'] == '4W - 0L (100.0%)'
 
 
 def test_tp_statistics_empty():
@@ -1504,9 +1535,8 @@ def test_tp_statistics_empty():
     assert len(result) == 5
     for _, row in result.iterrows():
         assert row['Trades'] == 0
-        assert row['Wins'] == 0
-        assert row['Losses'] == 0
-        assert row['Win Rate'] == '0.0%'
+        assert row['Regular'] == '0W - 0L (0.0%)'
+        assert row['With 2 pips buffer'] == '0W - 0L (0.0%)'
 
 
 def test_tp_statistics_large_tp():
@@ -1527,8 +1557,9 @@ def test_tp_statistics_large_tp():
     rows = {row['TP Range']: row for _, row in result.iterrows()}
 
     assert rows['50+']['Trades'] == 2
-    assert rows['50+']['Wins'] == 1
-    assert rows['50+']['Losses'] == 1
+    assert rows['50+']['Regular'] == '1W - 1L (50.0%)'
+    # PB=4 < SL+2=5 => buffer saves it
+    assert rows['50+']['With 2 pips buffer'] == '2W - 0L (100.0%)'
 
 
 def test_buffer_statistics_filtered_all_trades():
@@ -1678,16 +1709,17 @@ def run_all_tests():
         test_sl_statistics_columns,
         test_sl_statistics_all_ranges_present,
         test_sl_statistics_trade_counts,
-        test_sl_statistics_wins_losses,
-        test_sl_statistics_win_rate,
+        test_sl_statistics_regular,
+        test_sl_statistics_buffer,
         test_sl_statistics_empty,
         test_sl_statistics_large_sl,
+        test_sl_statistics_buffer_saves_trade,
         test_tp_ranges_constant,
         test_tp_statistics_columns,
         test_tp_statistics_all_ranges_present,
         test_tp_statistics_trade_counts,
-        test_tp_statistics_wins_losses,
-        test_tp_statistics_win_rate,
+        test_tp_statistics_regular,
+        test_tp_statistics_buffer,
         test_tp_statistics_empty,
         test_tp_statistics_large_tp,
         test_buffer_statistics_filtered_all_trades,
