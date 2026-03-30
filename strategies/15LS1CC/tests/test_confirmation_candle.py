@@ -13,7 +13,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 from utils.confirmation_candle import (
     calculate_statistics,
     calculate_buffer_statistics,
-    calculate_bruteforce,
     calculate_fixed_sl_statistics,
     calculate_fixed_sl_1h_statistics,
     calculate_weekday_statistics,
@@ -570,134 +569,6 @@ def test_1_2_rrr_empty():
     assert stats['Trades'] == 0
     assert stats['RRR'] == '1:2'
     assert stats['Edge'] == '-33.3%'
-
-
-def test_bruteforce_returns_dataframe():
-    """Test that calculate_bruteforce returns a DataFrame."""
-    sample = get_sample_data()
-    result = calculate_bruteforce(sample)
-    assert isinstance(result, pd.DataFrame)
-    assert len(result) > 0
-
-
-def test_bruteforce_has_all_rrr_values():
-    """Test that bruteforce only includes RRR values with positive edge."""
-    sample = get_sample_data()
-    result = calculate_bruteforce(sample)
-    rrr_values = result['RRR'].unique()
-    # Only RRR values with positive edge should appear
-    for rrr in rrr_values:
-        assert rrr in ['1:1', '1:2', '1:3'], f"Unexpected {rrr}"
-
-
-def test_bruteforce_has_buffer_range():
-    """Test that bruteforce only includes buffer values with positive edge."""
-    sample = get_sample_data()
-    result = calculate_bruteforce(sample)
-    # Only positive-edge rows should remain
-    assert len(result) <= 21 * 3
-
-
-def test_bruteforce_total_rows():
-    """Test that bruteforce filters to only positive edge rows."""
-    sample = get_sample_data()
-    result = calculate_bruteforce(sample)
-    # All remaining rows must have positive edge
-    for _, row in result.iterrows():
-        edge_val = float(str(row['Edge']).replace('%', ''))
-        assert edge_val > 0, f"Non-positive edge found: {row['Edge']}"
-
-
-def test_bruteforce_sorted_by_outcome():
-    """Test that bruteforce results are sorted by outcome descending."""
-    sample = get_sample_data()
-    result = calculate_bruteforce(sample)
-    outcomes = [int(o.replace('R', '')) for o in result['Outcome']]
-    assert outcomes == sorted(outcomes, reverse=True)
-
-
-def test_bruteforce_buffer_improves_trade():
-    """Test that buffer can turn a losing trade into a winner in bruteforce.
-
-    SL 3.0, Pullback 4.0, TP 10.0.
-    At buffer +0.0, RRR 1:1: Pullback(4) >= SL(3) => LOSS (negative edge, filtered out)
-    At buffer +1.5, RRR 1:1: effective SL = 4.5, Pullback(4) < 4.5, TP(10) >= 4.5 => WIN (positive edge)
-    """
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'Direction': ['Buy'],
-        '1H': ['Buy'],
-        'SL': [3.0],
-        'Pullback': [4.0],
-        'TP': [10.0],
-        'R': [0],
-    })
-
-    result = calculate_bruteforce(trades)
-
-    # At buffer +0.0, 1:1 => loss (negative edge, filtered out)
-    row_0_1 = result[(result['Buffer'] == '+0.0') & (result['RRR'] == '1:1')]
-    assert len(row_0_1) == 0, "Negative edge row should be filtered out"
-
-    # At buffer +1.5, 1:1 => win (positive edge, should be present)
-    row_15_1 = result[(result['Buffer'] == '+1.5') & (result['RRR'] == '1:1')]
-    assert len(row_15_1) == 1
-    assert row_15_1.iloc[0]['Notation'] == '1W – 0L'
-
-
-def test_bruteforce_higher_rrr_harder_to_win():
-    """Test that higher RRR requires TP to reach further, making wins harder.
-
-    SL 2.0, Pullback 1.0, TP 6.0.
-    At 1:1: TP(6) >= 1*SL(2) => WIN (positive edge)
-    At 1:3: TP(6) >= 3*SL(2)=6 => WIN (positive edge)
-    """
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'Direction': ['Buy'],
-        '1H': ['Buy'],
-        'SL': [2.0],
-        'Pullback': [1.0],
-        'TP': [6.0],
-        'R': [0],
-    })
-
-    result = calculate_bruteforce(trades)
-
-    # Positive edge rows should be present
-    row_1_1 = result[(result['Buffer'] == '+0.0') & (result['RRR'] == '1:1')]
-    assert len(row_1_1) == 1
-    assert row_1_1.iloc[0]['Notation'] == '1W – 0L'
-
-    row_1_3 = result[(result['Buffer'] == '+0.0') & (result['RRR'] == '1:3')]
-    assert len(row_1_3) == 1
-    assert row_1_3.iloc[0]['Notation'] == '1W – 0L'
-
-    # At 1:3 with buffer +1.0: effective SL = 3.0, TP(6) >= 3*3=9 => LOSS (filtered out)
-    row_1_3_buf = result[(result['Buffer'] == '+1.0') & (result['RRR'] == '1:3')]
-    assert len(row_1_3_buf) == 0, "Negative edge row should be filtered out"
-
-
-def test_bruteforce_empty_data():
-    """Test bruteforce with empty dataset returns empty (no positive edge)."""
-    empty = get_empty_data()
-    result = calculate_bruteforce(empty)
-    assert isinstance(result, pd.DataFrame)
-    assert len(result) == 0
-
-
-def test_bruteforce_columns():
-    """Test that bruteforce result has expected columns."""
-    sample = get_sample_data()
-    result = calculate_bruteforce(sample)
-    columns = list(result.columns)
-    assert columns[0] == 'Buffer'
-    assert columns[1] == 'RRR'
-    assert columns[2].startswith('Trades (')
-    assert columns[3] == 'Notation'
-    assert columns[4] == 'Win Rate'
-    assert columns[5] == 'Outcome'
-    assert columns[6] == 'Edge'
 
 
 def test_fixed_sl_sizes_constant():
@@ -1788,15 +1659,6 @@ def run_all_tests():
         test_1_2_rrr_outcome,
         test_1_2_rrr_buffer,
         test_1_2_rrr_empty,
-        test_bruteforce_returns_dataframe,
-        test_bruteforce_has_all_rrr_values,
-        test_bruteforce_has_buffer_range,
-        test_bruteforce_total_rows,
-        test_bruteforce_sorted_by_outcome,
-        test_bruteforce_buffer_improves_trade,
-        test_bruteforce_higher_rrr_harder_to_win,
-        test_bruteforce_empty_data,
-        test_bruteforce_columns,
         test_fixed_sl_sizes_constant,
         test_fixed_sl_trade_survives,
         test_fixed_sl_trade_loses_deep_pullback,
