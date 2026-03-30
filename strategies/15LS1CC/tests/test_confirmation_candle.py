@@ -14,20 +14,16 @@ from utils.confirmation_candle import (
     calculate_statistics,
     calculate_buffer_statistics,
     calculate_bruteforce,
-    calculate_limit_order_statistics,
     calculate_fixed_sl_statistics,
     calculate_fixed_sl_1h_statistics,
-    calculate_champion_statistics,
-    calculate_limit_champion_statistics,
     calculate_weekday_statistics,
-    _calculate_limit_champion_stats,
+    _calculate_buffer_statistics_filtered,
     create_html_table,
     get_strategies,
     get_buffer_strategies,
     simulate_challenge,
     _calculate_stats,
     _calculate_stats_with_buffer,
-    _calculate_limit_order_stats,
     _calculate_fixed_sl_stats,
     _calculate_fixed_sl_stats_with_strategy,
     _get_1h_strategies,
@@ -35,8 +31,6 @@ from utils.confirmation_candle import (
     RRR_RATIOS,
     BUFFER_PIPS,
     FIXED_SL_SIZES,
-    CHAMPION_STRATEGIES,
-    LIMIT_CHAMPION_STRATEGIES,
     WEEKDAY_ORDER,
 )
 
@@ -685,163 +679,6 @@ def test_bruteforce_empty_data():
     assert len(result) == 0
 
 
-def test_limit_order_no_trigger():
-    """Test limit order: trade doesn't trigger when Pullback < SL/2.
-
-    SL=3, Pullback=1, TP=10. Half SL = 1.5. Pullback(1) < 1.5 => not triggered.
-    """
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'SL': [3.0],
-        'Pullback': [1.0],
-        'TP': [10.0],
-    })
-
-    stats = _calculate_limit_order_stats(trades, 'Test')
-    assert stats['Trades'] == 0
-
-
-def test_limit_order_win():
-    """Test limit order: trade triggers and wins.
-
-    SL=4, Pullback=2.4, TP=10. Half SL = 2. Pullback(2.4) >= 2 => triggers.
-    Pullback(2.4) < SL(4) => survives. TP(10) > 0 => wins.
-    At 1:1: TP(10) >= (1-1)*2 = 0 => WIN.
-    """
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'SL': [4.0],
-        'Pullback': [2.4],
-        'TP': [10.0],
-    })
-
-    stats = _calculate_limit_order_stats(trades, 'Test')
-    assert stats['Trades'] == 1
-    assert stats['Notation'] == '1W – 0L'
-
-
-def test_limit_order_loss_pullback_exceeds_sl():
-    """Test limit order: trade triggers but Pullback exceeds SL => loss.
-
-    SL=4, Pullback=5, TP=10. Half SL = 2. Pullback(5) >= 2 => triggers.
-    Pullback(5) >= SL(4) => doesn't survive => LOSS.
-    """
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'SL': [4.0],
-        'Pullback': [5.0],
-        'TP': [10.0],
-    })
-
-    stats = _calculate_limit_order_stats(trades, 'Test')
-    assert stats['Trades'] == 1
-    assert stats['Notation'] == '0W – 1L'
-
-
-def test_limit_order_min_broker_sl():
-    """Test that trades with SL < 2.2 are excluded (SL/2 < 1.1 min broker SL)."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01', '2026-01-02'],
-        'SL': [2.0, 4.0],  # First: SL/2=1.0 < 1.1, excluded. Second: SL/2=2.0 >= 1.1, eligible.
-        'Pullback': [1.5, 2.5],
-        'TP': [10.0, 10.0],
-    })
-
-    stats = _calculate_limit_order_stats(trades, 'Test')
-    # Only second trade is eligible, and it triggers (2.5 >= 2.0)
-    assert stats['Trades'] == 1
-    assert stats['Notation'] == '1W – 0L'
-
-
-def test_limit_order_1_2_rrr():
-    """Test limit order at 1:2 RRR.
-
-    SL=4, Pullback=2.5, TP=10. Half SL = 2.
-    Win condition: TP >= (2-1) * 2 = 2. TP(10) >= 2 => WIN.
-    """
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'SL': [4.0],
-        'Pullback': [2.5],
-        'TP': [10.0],
-    })
-
-    stats = _calculate_limit_order_stats(trades, 'Test', rrr_ratio=2)
-    assert stats['RRR'] == '1:2'
-    assert stats['Notation'] == '1W – 0L'
-
-
-def test_limit_order_1_2_rrr_tp_too_low():
-    """Test limit order at 1:2 RRR where TP doesn't reach target.
-
-    SL=6, Pullback=3.5, TP=2. Half SL = 3.
-    Win condition: TP >= (2-1) * 3 = 3. TP(2) < 3 => LOSS.
-    """
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'SL': [6.0],
-        'Pullback': [3.5],
-        'TP': [2.0],
-    })
-
-    stats = _calculate_limit_order_stats(trades, 'Test', rrr_ratio=2)
-    assert stats['Notation'] == '0W – 1L'
-
-
-def test_limit_order_empty():
-    """Test limit order with empty dataset."""
-    empty = get_empty_data()
-    stats = _calculate_limit_order_stats(empty, 'Empty')
-    assert stats['Trades'] == 0
-    assert stats['Notation'] == '0W – 0L'
-
-
-def test_limit_order_mixed_trades():
-    """Test limit order with mix of triggers, wins, and losses.
-
-    Uses user's 4 examples:
-    - SL=3, PB=1, TP=10: no trigger (PB < 1.5)
-    - SL=4, PB=2.4, TP=10: trigger + win
-    - SL=4, PB=3, TP=10: trigger + win
-    - SL=4, PB=5, TP=10: trigger + loss (PB >= SL)
-    """
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04'],
-        'SL': [3.0, 4.0, 4.0, 4.0],
-        'Pullback': [1.0, 2.4, 3.0, 5.0],
-        'TP': [10.0, 10.0, 10.0, 10.0],
-    })
-
-    stats = _calculate_limit_order_stats(trades, 'Test')
-    # Trade 1: SL=3 >= 2.2, eligible. PB(1) < SL/2(1.5) => not triggered
-    # Trade 2: triggered + win
-    # Trade 3: triggered + win
-    # Trade 4: triggered + loss
-    assert stats['Trades'] == 3
-    assert stats['Notation'] == '2W – 1L'
-
-
-def test_limit_order_tp_zero_is_loss():
-    """Test that TP=0 is always a loss even if trade triggers and survives."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'SL': [4.0],
-        'Pullback': [2.5],
-        'TP': [0.0],
-    })
-
-    stats = _calculate_limit_order_stats(trades, 'Test')
-    assert stats['Trades'] == 1
-    assert stats['Notation'] == '0W – 1L'
-
-
-def test_calculate_limit_order_statistics():
-    """Test that calculate_limit_order_statistics returns a DataFrame."""
-    sample = get_sample_data()
-    result = calculate_limit_order_statistics(sample)
-    assert isinstance(result, pd.DataFrame)
-
-
 def test_bruteforce_columns():
     """Test that bruteforce result has expected columns."""
     sample = get_sample_data()
@@ -1330,160 +1167,6 @@ def test_buffer_stats_with_float_rrr_loss():
     assert stats['Notation'] == '0W – 1L'
 
 
-def test_champion_strategies_count():
-    """Test that CHAMPION_STRATEGIES has exactly 6 entries."""
-    assert len(CHAMPION_STRATEGIES) == 6
-
-
-def test_champion_strategies_have_required_keys():
-    """Test that each champion strategy has name, filter, buffer, and rrr."""
-    for strat in CHAMPION_STRATEGIES:
-        assert 'name' in strat
-        assert 'filter' in strat
-        assert 'buffer' in strat
-        assert 'rrr' in strat
-        assert callable(strat['filter'])
-
-
-def test_calculate_champion_statistics():
-    """Test that calculate_champion_statistics returns a DataFrame with 6 rows."""
-    sample = get_sample_data()
-    result = calculate_champion_statistics(sample)
-    assert isinstance(result, pd.DataFrame)
-    assert len(result) == 6
-
-
-def test_champion_statistics_has_expected_columns():
-    """Test that champion statistics has Pass, Fail, Trades columns."""
-    sample = get_sample_data()
-    result = calculate_champion_statistics(sample)
-    assert 'Pass' in result.columns
-    assert 'Fail' in result.columns
-    assert 'Trades' in result.columns
-    assert 'Strategy' in result.columns
-    assert 'RRR' in result.columns
-
-
-def test_champion_statistics_sorted_by_pass():
-    """Test that champion results are sorted by Pass descending."""
-    sample = get_sample_data()
-    result = calculate_champion_statistics(sample)
-    passes = list(result['Pass'])
-    assert passes == sorted(passes, reverse=True)
-
-
-def test_limit_champion_strategies_count():
-    """Test that LIMIT_CHAMPION_STRATEGIES has exactly 3 entries."""
-    assert len(LIMIT_CHAMPION_STRATEGIES) == 3
-
-
-def test_limit_champion_strategies_have_required_keys():
-    """Test that each limit champion strategy has name, filter, frac, buffer, rrr."""
-    for strat in LIMIT_CHAMPION_STRATEGIES:
-        assert 'name' in strat
-        assert 'filter' in strat
-        assert 'frac' in strat
-        assert 'buffer' in strat
-        assert 'rrr' in strat
-        assert callable(strat['filter'])
-        assert 0 < strat['frac'] < 1
-
-
-def test_limit_champion_strategies_max_rrr_3():
-    """Test that all limit champion strategies have RRR <= 3."""
-    for strat in LIMIT_CHAMPION_STRATEGIES:
-        assert strat['rrr'] <= 3.0, f"{strat['name']} has RRR {strat['rrr']} > 3"
-
-
-def test_limit_champion_stats_win():
-    """Test limit champion stats: trade triggers at 50% pullback and wins.
-
-    SL=4, Pullback=2.5, TP=10. frac=0.5, buffer=3.0, rrr=3.
-    Trigger: PB(2.5) >= 0.5*4=2 => triggers.
-    Eff SL = 4*(1-0.5)+3 = 5. New TP = 10+0.5*4 = 12.
-    Survives: PB(2.5) < 4+3=7 => yes.
-    Win: TP>0 and 12 >= 3*5=15 => no (12 < 15) => LOSS.
-    """
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'Direction': ['Buy'], '1H': ['Buy'], 'Weekday': ['Monday'],
-        'SL': [4.0], 'Pullback': [2.5], 'TP': [20.0], 'R': [5.0],
-    })
-
-    stats = _calculate_limit_champion_stats(trades, 'Test', frac=0.5, buffer=3.0, rrr_ratio=3.0)
-    # Eff SL = 4*0.5+3=5, new TP = 20+2=22, 22 >= 3*5=15 => WIN
-    assert stats['Trades'] == 1
-    assert stats['Notation'] == '1W – 0L'
-
-
-def test_limit_champion_stats_no_trigger():
-    """Test limit champion stats: trade doesn't trigger if pullback too small."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'Direction': ['Buy'], '1H': ['Buy'], 'Weekday': ['Monday'],
-        'SL': [4.0], 'Pullback': [1.0], 'TP': [20.0], 'R': [5.0],
-    })
-
-    stats = _calculate_limit_champion_stats(trades, 'Test', frac=0.5, buffer=3.0, rrr_ratio=3.0)
-    # Trigger: PB(1) >= 0.5*4=2 => no
-    assert stats['Trades'] == 0
-
-
-def test_limit_champion_stats_empty():
-    """Test limit champion stats with empty data."""
-    empty = get_empty_data()
-    stats = _calculate_limit_champion_stats(empty, 'Empty', frac=0.5, buffer=3.0, rrr_ratio=3.0)
-    assert stats['Trades'] == 0
-    assert stats['Notation'] == '0W – 0L'
-    assert stats['Pass'] == 0
-    assert stats['Fail'] == 0
-
-
-def test_limit_champion_stats_has_entry_column():
-    """Test that limit champion stats include Entry column."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'Direction': ['Buy'], '1H': ['Buy'], 'Weekday': ['Monday'],
-        'SL': [4.0], 'Pullback': [2.5], 'TP': [20.0], 'R': [5.0],
-    })
-
-    stats = _calculate_limit_champion_stats(trades, 'Test', frac=0.5, buffer=3.0, rrr_ratio=3.0)
-    assert stats['Entry'] == 'Limit @50%'
-
-
-def test_limit_champion_stats_broker_min_sl():
-    """Test that trades with effective SL < 1.1 are excluded."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01', '2026-01-02'],
-        'Direction': ['Buy', 'Buy'], '1H': ['Buy', 'Buy'], 'Weekday': ['Monday', 'Monday'],
-        'SL': [1.0, 4.0], 'Pullback': [0.6, 2.5], 'TP': [10.0, 20.0], 'R': [5.0, 5.0],
-    })
-
-    # frac=0.5, buffer=0: eff SL for trade 1 = 1.0*0.5+0 = 0.5 < 1.1 => excluded
-    # eff SL for trade 2 = 4.0*0.5+0 = 2.0 >= 1.1 => eligible, triggers (PB 2.5 >= 2)
-    stats = _calculate_limit_champion_stats(trades, 'Test', frac=0.5, buffer=0.0, rrr_ratio=1.0)
-    assert stats['Trades'] == 1
-
-
-def test_calculate_limit_champion_statistics():
-    """Test that calculate_limit_champion_statistics returns a DataFrame with 3 rows."""
-    sample = get_sample_data()
-    result = calculate_limit_champion_statistics(sample)
-    assert isinstance(result, pd.DataFrame)
-    assert len(result) == 3
-
-
-def test_limit_champion_statistics_has_expected_columns():
-    """Test that limit champion statistics has Pass, Fail, Entry columns."""
-    sample = get_sample_data()
-    result = calculate_limit_champion_statistics(sample)
-    assert 'Pass' in result.columns
-    assert 'Fail' in result.columns
-    assert 'Trades' in result.columns
-    assert 'Entry' in result.columns
-    assert 'Strategy' in result.columns
-
-
 def test_weekday_order_constant():
     """Test that WEEKDAY_ORDER has Monday-Friday."""
     assert WEEKDAY_ORDER == ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
@@ -1591,6 +1274,47 @@ def test_weekday_statistics_single_day():
     assert rows['Tuesday']['Trades'] == 0
 
 
+def test_buffer_statistics_filtered_all_trades():
+    """Test _calculate_buffer_statistics_filtered with All Trades only."""
+    sample = get_sample_data()
+    result = _calculate_buffer_statistics_filtered(sample, ["All Trades"])
+    assert isinstance(result, pd.DataFrame)
+    if len(result) > 0:
+        strategies = result['Strategy'].unique()
+        for s in strategies:
+            assert s == 'All Trades', f"Unexpected strategy: {s}"
+
+
+def test_buffer_statistics_filtered_1h():
+    """Test _calculate_buffer_statistics_filtered with 1H strategies only."""
+    sample = get_sample_data()
+    result = _calculate_buffer_statistics_filtered(sample, ["1H Aligned", "1H Against"])
+    assert isinstance(result, pd.DataFrame)
+    if len(result) > 0:
+        strategies = result['Strategy'].unique()
+        for s in strategies:
+            assert s in ['1H Aligned', '1H Against'], f"Unexpected strategy: {s}"
+
+
+def test_buffer_statistics_filtered_excludes_others():
+    """Test that filtered results don't include strategies not in the list."""
+    sample = get_sample_data()
+    result_all = _calculate_buffer_statistics_filtered(sample, ["All Trades"])
+    result_1h = _calculate_buffer_statistics_filtered(sample, ["1H Aligned", "1H Against"])
+    if len(result_all) > 0:
+        assert '1H Aligned' not in result_all['Strategy'].values
+    if len(result_1h) > 0:
+        assert 'All Trades' not in result_1h['Strategy'].values
+
+
+def test_buffer_statistics_filtered_empty():
+    """Test _calculate_buffer_statistics_filtered with empty data."""
+    empty = get_empty_data()
+    result = _calculate_buffer_statistics_filtered(empty, ["All Trades"])
+    assert isinstance(result, pd.DataFrame)
+    assert len(result) == 0
+
+
 def run_all_tests():
     """Run all tests and report results."""
     tests = [
@@ -1642,16 +1366,6 @@ def run_all_tests():
         test_bruteforce_higher_rrr_harder_to_win,
         test_bruteforce_empty_data,
         test_bruteforce_columns,
-        test_limit_order_no_trigger,
-        test_limit_order_win,
-        test_limit_order_loss_pullback_exceeds_sl,
-        test_limit_order_min_broker_sl,
-        test_limit_order_1_2_rrr,
-        test_limit_order_1_2_rrr_tp_too_low,
-        test_limit_order_empty,
-        test_limit_order_mixed_trades,
-        test_limit_order_tp_zero_is_loss,
-        test_calculate_limit_order_statistics,
         test_fixed_sl_sizes_constant,
         test_fixed_sl_trade_survives,
         test_fixed_sl_trade_loses_deep_pullback,
@@ -1693,21 +1407,6 @@ def run_all_tests():
         test_simulate_challenge_float_rrr_10,
         test_buffer_stats_with_float_rrr,
         test_buffer_stats_with_float_rrr_loss,
-        test_champion_strategies_count,
-        test_champion_strategies_have_required_keys,
-        test_calculate_champion_statistics,
-        test_champion_statistics_has_expected_columns,
-        test_champion_statistics_sorted_by_pass,
-        test_limit_champion_strategies_count,
-        test_limit_champion_strategies_have_required_keys,
-        test_limit_champion_strategies_max_rrr_3,
-        test_limit_champion_stats_win,
-        test_limit_champion_stats_no_trigger,
-        test_limit_champion_stats_empty,
-        test_limit_champion_stats_has_entry_column,
-        test_limit_champion_stats_broker_min_sl,
-        test_calculate_limit_champion_statistics,
-        test_limit_champion_statistics_has_expected_columns,
         test_weekday_order_constant,
         test_weekday_statistics_columns,
         test_weekday_statistics_all_days_present,
@@ -1716,6 +1415,10 @@ def run_all_tests():
         test_weekday_statistics_win_rate,
         test_weekday_statistics_empty,
         test_weekday_statistics_single_day,
+        test_buffer_statistics_filtered_all_trades,
+        test_buffer_statistics_filtered_1h,
+        test_buffer_statistics_filtered_excludes_others,
+        test_buffer_statistics_filtered_empty,
     ]
 
     passed = 0

@@ -477,35 +477,82 @@ def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return result_df
 
 
-def display_analysis(df: pd.DataFrame):
+def _calculate_buffer_statistics_filtered(df: pd.DataFrame, strategy_names: List[str]) -> pd.DataFrame:
     """
-    Display strategy analysis with SL buffers in a single table.
-
-    Shows each strategy at every buffer level (0, 0.5, 1.0, ..., 5.0 pips).
-    Buffer 0 means no extra pips added to SL (original strategy).
+    Calculate buffer statistics for a subset of strategies.
 
     Args:
         df: DataFrame with trading data
+        strategy_names: List of strategy names to include
+
+    Returns:
+        DataFrame with buffer statistics, filtered to strategies with at least one pass
+    """
+    strategies = [(n, f) for n, f in get_buffer_strategies() if n in strategy_names]
+    results = []
+
+    for strategy_name, filter_func in strategies:
+        filtered_df = filter_func(df)
+        for rrr in RRR_RATIOS:
+            for buffer in BUFFER_PIPS:
+                stats = _calculate_stats_with_buffer(filtered_df, strategy_name, buffer, rrr)
+                results.append(stats)
+
+    result_df = pd.DataFrame(results)
+    result_df = result_df[result_df["Pass"] > 0].copy()
+    result_df = result_df.sort_values(["Pass", "Fail"], ascending=[False, True])
+    result_df = result_df.reset_index(drop=True)
+
+    return result_df
+
+
+def _display_analysis_table(df: pd.DataFrame, title: str, strategy_names: List[str]):
+    """
+    Display a buffer analysis table for given strategies.
+
+    Args:
+        df: DataFrame with trading data
+        title: Table title
+        strategy_names: Strategy names to include
     """
     from IPython.display import display, HTML
 
-    # Disable Jupyter output scrolling so the full table is visible
     display(HTML("""<style>
         .jp-OutputArea-child { max-height: none !important; }
         .jp-OutputArea-output { max-height: none !important; overflow: visible !important; }
         .output_scroll { box-shadow: none !important; border: none !important; }
     </style>"""))
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>1M Confirmation Candle Analysis</h2>"
+    title_html = f"<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>{title}</h2>"
     display(HTML(title_html))
 
-    stats_df = calculate_buffer_statistics(df)
+    stats_df = _calculate_buffer_statistics_filtered(df, strategy_names)
 
     if stats_df.empty:
         display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable strategies found</p>"))
     else:
         html_table = create_html_table(stats_df)
         display(HTML(html_table))
+
+
+def display_analysis_all(df: pd.DataFrame):
+    """
+    Display buffer analysis for All Trades.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    _display_analysis_table(df, "All Trades Analysis", ["All Trades"])
+
+
+def display_analysis_1h(df: pd.DataFrame):
+    """
+    Display buffer analysis for 1H Aligned and 1H Against trades.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    _display_analysis_table(df, "1H Alignment Analysis", ["1H Aligned", "1H Against"])
 
 
 def calculate_bruteforce(df: pd.DataFrame) -> pd.DataFrame:
@@ -587,7 +634,7 @@ def calculate_bruteforce(df: pd.DataFrame) -> pd.DataFrame:
     return result_df
 
 
-def display_bruteforce(df: pd.DataFrame):
+def display_analysis_buffer(df: pd.DataFrame):
     """
     Display bruteforce analysis scanning all buffer x RRR combinations.
 
@@ -603,160 +650,6 @@ def display_bruteforce(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_bruteforce(df)
-
-    if stats_df.empty:
-        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
-    else:
-        html_table = create_html_table(stats_df)
-        display(HTML(html_table))
-
-
-def _calculate_limit_order_stats(trades: pd.DataFrame, strategy_name: str, rrr_ratio: int = 1) -> Dict:
-    """
-    Calculate statistics for limit order at half SL price.
-
-    Limit order is placed SL/2 pips from original entry (halfway to SL).
-    - Trade triggers only if Pullback >= SL/2
-    - New SL from limit entry = SL/2
-    - New TP from limit entry = TP + SL/2
-    - Trade survives if Pullback < SL (original)
-    - Win at 1:N RRR: TP + SL/2 >= N * (SL/2), i.e., TP >= (N-1) * SL/2
-    - Minimum broker SL applies: SL/2 >= 1.1, so only trades with SL >= 2.2
-
-    Args:
-        trades: DataFrame containing filtered trades
-        strategy_name: Name of the strategy
-        rrr_ratio: Risk-reward ratio (1 for 1:1, 2 for 1:2)
-
-    Returns:
-        Dictionary with calculated statistics
-    """
-    breakeven = _breakeven_rate(rrr_ratio)
-    rrr_label = f"1:{rrr_ratio}"
-
-    # Only trades where SL/2 >= 1.1 (minimum broker SL)
-    eligible = trades[trades["SL"] >= 2.2].copy()
-
-    # Only triggered trades: Pullback >= SL/2
-    half_sl = eligible["SL"] / 2
-    triggered = eligible[eligible["Pullback"] >= half_sl]
-    total_trades = len(triggered)
-
-    if total_trades == 0:
-        return {
-            "Strategy": strategy_name,
-            "RRR": rrr_label,
-            "Trades": 0,
-            "Notation": "0W – 0L",
-            "Win Rate": "0.0%",
-            "Outcome": "0R",
-            "Edge": f"{-breakeven:.1f}%",
-            "Days": 0,
-            "Days %": "0%",
-            "Trades Required": "N/A",
-            "edge_value": -breakeven,
-        }
-
-    triggered_half_sl = triggered["SL"] / 2
-
-    # Win: survives (Pullback < SL) AND TP reaches target
-    winning_trades = triggered[
-        (triggered["Pullback"] < triggered["SL"]) &
-        (triggered["TP"] >= (rrr_ratio - 1) * triggered_half_sl)
-    ]
-
-    # Exclude trades with TP == 0 (no TP means loss)
-    winning_trades = winning_trades[winning_trades["TP"] > 0]
-
-    wins = len(winning_trades)
-    losses = total_trades - wins
-    win_rate = (wins / total_trades) * 100
-    edge = win_rate - breakeven
-    outcome = (wins * rrr_ratio) - losses
-
-    days_with_wins = winning_trades["Date"].nunique() if "Date" in winning_trades.columns and len(winning_trades) > 0 else 0
-    total_days = triggered["Date"].nunique() if "Date" in triggered.columns else 0
-    days_pct = (days_with_wins / total_days * 100) if total_days > 0 else 0.0
-    trades_required = (total_trades / outcome) if outcome > 0 else float("inf")
-
-    return {
-        "Strategy": strategy_name,
-        "RRR": rrr_label,
-        "Trades": total_trades,
-        "Notation": f"{wins}W – {losses}L",
-        "Win Rate": f"{win_rate:.1f}%",
-        "Outcome": f"{outcome}R",
-        "Edge": f"{edge:.1f}%",
-        "Days": days_with_wins,
-        "Days %": f"{days_pct:.0f}%",
-        "Trades Required": f"{trades_required:.1f}" if outcome > 0 else "N/A",
-        "edge_value": edge,
-    }
-
-
-def calculate_limit_order_statistics(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculate statistics for limit order at half SL price across all strategies.
-
-    Places a limit order at SL/2 pullback. Only trades where price pulls back
-    deep enough (>= SL/2) are triggered. The new SL is SL/2 and new TP is TP + SL/2.
-
-    Args:
-        df: DataFrame with trading data
-
-    Returns:
-        DataFrame with limit order statistics, sorted by edge descending
-    """
-    strategies = get_buffer_strategies()
-    results = []
-
-    for strategy_name, filter_func in strategies:
-        filtered_df = filter_func(df)
-        for rrr in RRR_RATIOS:
-            stats = _calculate_limit_order_stats(filtered_df, strategy_name, rrr)
-            results.append(stats)
-
-    result_df = pd.DataFrame(results)
-
-    # Filter to only show strategies with positive edge
-    result_df = result_df[result_df["edge_value"] > 0].copy()
-
-    # Sort by edge descending
-    result_df = result_df.sort_values("edge_value", ascending=False)
-
-    # Drop sorting column
-    result_df = result_df.drop("edge_value", axis=1)
-
-    # Rename columns to include totals
-    total_trades = len(df)
-    total_days = df["Date"].nunique() if "Date" in df.columns else 0
-    result_df = result_df.rename(columns={
-        "Trades": f"Trades ({total_trades})",
-        "Days": f"Days ({total_days})",
-    })
-
-    result_df = result_df.reset_index(drop=True)
-
-    return result_df
-
-
-def display_limit_order(df: pd.DataFrame):
-    """
-    Display limit order at half SL price analysis.
-
-    Strategy: place limit order at SL/2 pullback. If price pulls back deep enough,
-    the entry is at a better price with SL/2 risk and TP + SL/2 reward.
-
-    Args:
-        df: DataFrame with trading data
-    """
-    from IPython.display import display, HTML
-
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Limit Order at Half SL Price</h2>"
-    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Entry at SL/2 pullback. New SL = SL/2, New TP = TP + SL/2. Only trades with SL &ge; 2.2 (broker min 1.1 pip).</p>"
-    display(HTML(title_html + subtitle_html))
-
-    stats_df = calculate_limit_order_statistics(df)
 
     if stats_df.empty:
         display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
@@ -1054,59 +947,6 @@ def display_fixed_sl_1h(df: pd.DataFrame):
         display(HTML(html_table))
 
 
-def create_r_histogram(df: pd.DataFrame) -> str:
-    """
-    Create an HTML bar chart showing how many times each R value (1R-10R) occurred.
-
-    Takes the absolute value of the R column, floors it to integers,
-    and counts occurrences for 1R through 10R.
-
-    Args:
-        df: DataFrame with trading data (must have 'R' column)
-
-    Returns:
-        HTML string with a styled horizontal bar chart
-    """
-    r_values = df["R"].dropna().abs().apply(lambda x: int(x))
-    r_values = r_values[(r_values >= 1) & (r_values <= 10)]
-    counts = r_values.value_counts().reindex(range(1, 11), fill_value=0)
-    max_count = counts.max() if counts.max() > 0 else 1
-
-    html = """
-    <div style="background-color: #1e1e1e; padding: 20px; font-family: 'Courier New', monospace;">
-        <h2 style="color: #e0e0e0; margin-top: 0;">R Occurrences</h2>
-    """
-
-    for r_val in range(1, 11):
-        count = counts[r_val]
-        bar_width = (count / max_count) * 100
-        html += f"""
-        <div style="display: flex; align-items: center; margin: 4px 0;">
-            <span style="color: #e0e0e0; width: 40px; text-align: right; margin-right: 10px;">{r_val}R</span>
-            <div style="background-color: #4ade80; height: 24px; width: {bar_width}%; min-width: {'2px' if count > 0 else '0'}; border-radius: 3px;"></div>
-            <span style="color: #a0a0a0; margin-left: 8px;">{count}</span>
-        </div>
-        """
-
-    html += "</div>"
-    return html
-
-
-def display_r_histogram(df: pd.DataFrame):
-    """
-    Display a histogram of R value distribution (1R-10R).
-
-    Treats negative R values as positive (absolute value).
-    Floors R to integers and counts occurrences.
-
-    Args:
-        df: DataFrame with trading data
-    """
-    from IPython.display import display, HTML
-    html = create_r_histogram(df)
-    display(HTML(html))
-
-
 def create_r_histogram_combined(df: pd.DataFrame) -> str:
     """
     Create an HTML bar chart showing cumulative R value distribution (1R-10R).
@@ -1248,258 +1088,3 @@ def display_weekday(df: pd.DataFrame):
     stats_df = calculate_weekday_statistics(df)
     html_table = create_html_table(stats_df)
     display(HTML(html_table))
-
-
-LIMIT_CHAMPION_STRATEGIES = [
-    {
-        "name": "Beat #1: 1H F4 Limit@50% +3.5",
-        "filter": lambda df: df[df["Direction"] == df["1H"]].groupby("Date").head(4),
-        "frac": 0.50,
-        "buffer": 3.5,
-        "rrr": 2.5,
-    },
-    {
-        "name": "Beat #2: 1H Al Limit@50% +3.0",
-        "filter": lambda df: df[df["Direction"] == df["1H"]],
-        "frac": 0.50,
-        "buffer": 3.0,
-        "rrr": 3.0,
-    },
-    {
-        "name": "Beat #3: 1H F4 Limit@60% +3.0",
-        "filter": lambda df: df[df["Direction"] == df["1H"]].groupby("Date").head(4),
-        "frac": 0.60,
-        "buffer": 3.0,
-        "rrr": 3.0,
-    },
-]
-
-
-def _calculate_limit_champion_stats(
-    trades: pd.DataFrame, strategy_name: str,
-    frac: float, buffer: float, rrr_ratio: float,
-) -> Dict:
-    """
-    Calculate statistics for a limit order entry at frac * SL pullback with buffer.
-
-    Entry is placed frac * SL pips from original entry toward the stop.
-    - Triggers only if Pullback >= frac * SL
-    - Effective SL from limit entry = SL * (1 - frac) + buffer
-    - Effective TP from limit entry = TP + frac * SL
-    - Trade survives if Pullback < SL + buffer (from original entry)
-    - Minimum broker SL: SL * (1 - frac) + buffer >= 1.1
-    - Win: survives AND TP > 0 AND effective_TP >= rrr_ratio * effective_SL
-
-    Args:
-        trades: DataFrame containing filtered trades
-        strategy_name: Name of the strategy
-        frac: Fraction of SL for limit placement (0.5 = halfway)
-        buffer: Extra pips added to effective SL
-        rrr_ratio: Risk-reward ratio target
-
-    Returns:
-        Dictionary with calculated statistics
-    """
-    rrr_label = f"1:{rrr_ratio:g}"
-
-    new_sl = trades["SL"] * (1 - frac) + buffer
-    eligible = trades[new_sl >= 1.1].copy()
-
-    trigger_dist = eligible["SL"] * frac
-    triggered = eligible[eligible["Pullback"] >= trigger_dist].copy()
-    total_trades = len(triggered)
-
-    frac_pct = int(frac * 100)
-
-    if total_trades == 0:
-        return {
-            "Strategy": strategy_name,
-            "Entry": f"Limit @{frac_pct}%",
-            "Buffer": f"+{buffer}",
-            "RRR": rrr_label,
-            "Trades": 0,
-            "Notation": "0W – 0L",
-            "Win Rate": "0.0%",
-            "Fail": 0,
-            "Pass": 0,
-        }
-
-    eff_sl = triggered["SL"] * (1 - frac) + buffer
-    new_tp = triggered["TP"] + triggered["SL"] * frac
-
-    winning_mask = (
-        (triggered["Pullback"] < triggered["SL"] + buffer) &
-        (triggered["TP"] > 0) &
-        (new_tp >= rrr_ratio * eff_sl)
-    )
-
-    wins = int(winning_mask.sum())
-    losses = total_trades - wins
-    win_rate = (wins / total_trades) * 100
-
-    pass_count, drawdown_count = simulate_challenge(winning_mask, rrr_ratio)
-
-    return {
-        "Strategy": strategy_name,
-        "Entry": f"Limit @{frac_pct}%",
-        "Buffer": f"+{buffer}",
-        "RRR": rrr_label,
-        "Trades": total_trades,
-        "Notation": f"{wins}W – {losses}L",
-        "Win Rate": f"{win_rate:.1f}%",
-        "Fail": drawdown_count,
-        "Pass": pass_count,
-    }
-
-
-def calculate_limit_champion_statistics(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculate statistics for the 3 limit order champion strategies.
-
-    Each strategy uses a limit order entry at a specific pullback fraction,
-    combined with a buffer and RRR, optimized for maximum challenge passes
-    while keeping RRR at 1:3 or below.
-
-    Args:
-        df: DataFrame with trading data
-
-    Returns:
-        DataFrame with limit champion statistics, sorted by passes descending
-    """
-    results = []
-
-    for strat in LIMIT_CHAMPION_STRATEGIES:
-        filtered = strat["filter"](df)
-        stats = _calculate_limit_champion_stats(
-            filtered, strat["name"],
-            strat["frac"], strat["buffer"], strat["rrr"],
-        )
-        results.append(stats)
-
-    result_df = pd.DataFrame(results)
-    result_df = result_df.sort_values(["Pass", "Fail"], ascending=[False, True])
-    result_df = result_df.reset_index(drop=True)
-
-    return result_df
-
-
-def display_limit_champions(df: pd.DataFrame):
-    """
-    Display the 3 limit order champion strategies (max 1:3 RRR).
-
-    Each uses a limit order entry at a pullback fraction of SL, giving a better
-    entry price that naturally improves effective risk-reward without raising
-    the target distance.
-
-    Args:
-        df: DataFrame with trading data
-    """
-    from IPython.display import display, HTML
-
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Limit Order Champions (max 1:3 RRR)</h2>"
-    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Entry at pullback fraction of SL. Better entry price → smaller risk, larger reward. All 1H Aligned.</p>"
-    display(HTML(title_html + subtitle_html))
-
-    stats_df = calculate_limit_champion_statistics(df)
-
-    if stats_df.empty:
-        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
-    else:
-        html_table = create_html_table(stats_df)
-        display(HTML(html_table))
-
-
-CHAMPION_STRATEGIES = [
-    {
-        "name": "Beat #1: SL<4 excl Friday",
-        "filter": lambda df: df[(df["SL"] < 4) & (df["Weekday"] != "Friday")],
-        "buffer": 0.4,
-        "rrr": 3.5,
-    },
-    {
-        "name": "Beat #2: All SL<4",
-        "filter": lambda df: df[df["SL"] < 4],
-        "buffer": 0.4,
-        "rrr": 3.5,
-    },
-    {
-        "name": "Beat #3: All SL<3.5",
-        "filter": lambda df: df[df["SL"] < 3.5],
-        "buffer": 0.4,
-        "rrr": 3.5,
-    },
-    {
-        "name": "Beat #4: SL 0.5-3.5",
-        "filter": lambda df: df[(df["SL"] >= 0.5) & (df["SL"] < 3.5)],
-        "buffer": 0.3,
-        "rrr": 4.5,
-    },
-    {
-        "name": "Beat #5: SL 0.5-4.0",
-        "filter": lambda df: df[(df["SL"] >= 0.5) & (df["SL"] < 4.0)],
-        "buffer": 0.3,
-        "rrr": 4.5,
-    },
-    {
-        "name": "Beat #6: SL 0.5-3.5 (no buffer)",
-        "filter": lambda df: df[(df["SL"] >= 0.5) & (df["SL"] < 3.5)],
-        "buffer": 0.0,
-        "rrr": 10.0,
-    },
-]
-
-
-def calculate_champion_statistics(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculate statistics for the 6 champion strategies found via autoresearch.
-
-    Each strategy has a specific filter, buffer, and RRR that were discovered
-    by scanning thousands of combinations and optimizing for challenge passes.
-
-    Args:
-        df: DataFrame with trading data
-
-    Returns:
-        DataFrame with champion strategy statistics, sorted by passes descending
-    """
-    results = []
-
-    for strat in CHAMPION_STRATEGIES:
-        filtered = strat["filter"](df)
-        stats = _calculate_stats_with_buffer(
-            filtered, strat["name"], strat["buffer"], strat["rrr"]
-        )
-        results.append(stats)
-
-    result_df = pd.DataFrame(results)
-
-    # Sort by Pass descending, then Fail ascending
-    result_df = result_df.sort_values(["Pass", "Fail"], ascending=[False, True])
-    result_df = result_df.reset_index(drop=True)
-
-    return result_df
-
-
-def display_champions(df: pd.DataFrame):
-    """
-    Display the 6 champion strategies found via autoresearch.
-
-    Each strategy was optimized for maximum prop firm challenge passes
-    by scanning SL filters, buffer sizes, RRR ratios, and weekday filters.
-
-    Args:
-        df: DataFrame with trading data
-    """
-    from IPython.display import display, HTML
-
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Champion Strategies</h2>"
-    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Optimized for maximum challenge passes. Each uses a specific SL filter + buffer + RRR combination.</p>"
-    display(HTML(title_html + subtitle_html))
-
-    stats_df = calculate_champion_statistics(df)
-
-    if stats_df.empty:
-        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
-    else:
-        html_table = create_html_table(stats_df)
-        display(HTML(html_table))
