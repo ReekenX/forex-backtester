@@ -35,6 +35,8 @@ from utils.confirmation_candle import (
     _format_wl,
     SL_RANGES,
     calculate_sl_statistics,
+    PULLBACK_RANGES,
+    calculate_pullback_statistics,
     TP_RANGES,
     calculate_tp_statistics,
 )
@@ -1450,6 +1452,147 @@ def test_sl_statistics_buffer_saves_trade():
     assert rows['0-3']['With 2 pips buffer'] == '1W - 0L (100.0%)'
 
 
+def test_pullback_ranges_constant():
+    """Test that PULLBACK_RANGES has expected ranges."""
+    assert len(PULLBACK_RANGES) == 4
+    assert PULLBACK_RANGES[0] == ("0-3", 0, 3)
+    assert PULLBACK_RANGES[1] == ("3-5", 3, 5)
+    assert PULLBACK_RANGES[2] == ("5-10", 5, 10)
+    assert PULLBACK_RANGES[3][0] == "10+"
+    assert PULLBACK_RANGES[3][1] == 10
+
+
+def test_pullback_statistics_columns():
+    """Test that Pullback statistics has expected columns."""
+    sample = get_sample_data()
+    result = calculate_pullback_statistics(sample)
+    assert list(result.columns) == ['Pullback Range', 'Trades', 'Regular', 'With 2 pips buffer']
+
+
+def test_pullback_statistics_all_ranges_present():
+    """Test that all 4 Pullback ranges appear in results."""
+    sample = get_sample_data()
+    result = calculate_pullback_statistics(sample)
+    assert len(result) == 4
+    assert list(result['Pullback Range']) == ['0-3', '3-5', '5-10', '10+']
+
+
+def test_pullback_statistics_trade_counts():
+    """Test trade counts per Pullback range from sample data.
+
+    Sample Pullback values: 3.5, 0.8, 2.1, 1.5, 3.0, 2.0, 2.5, 3.0, 7.0, 0.5
+    0-3 (PB>=0, PB<3): 0.8, 2.1, 1.5, 2.0, 2.5, 0.5 = 6
+    3-5 (PB>=3, PB<5): 3.5, 3.0, 3.0 = 3
+    5-10 (PB>=5, PB<10): 7.0 = 1
+    10+: 0
+    """
+    sample = get_sample_data()
+    result = calculate_pullback_statistics(sample)
+    counts = dict(zip(result['Pullback Range'], result['Trades']))
+    assert counts['0-3'] == 6
+    assert counts['3-5'] == 3
+    assert counts['5-10'] == 1
+    assert counts['10+'] == 0
+
+
+def test_pullback_statistics_regular():
+    """Test Regular column per Pullback range from sample data.
+
+    Win condition: Pullback < SL AND TP > 0.
+    0-3: PB=0.8 SL=1.1 TP=12 => W, PB=2.1 SL=2.0 TP=0 => L, PB=1.5 SL=4.0 TP=10 => W,
+         PB=2.0 SL=5.0 TP=8 => W, PB=2.5 SL=2.5 TP=0 => L, PB=0.5 SL=1.5 TP=5 => W
+    3-5: PB=3.5 SL=3.5 TP=0 => L, PB=3.0 SL=3.0 TP=0 => L, PB=3.0 SL=6.0 TP=15 => W
+    5-10: PB=7.0 SL=8.0 TP=10 => W
+    """
+    sample = get_sample_data()
+    result = calculate_pullback_statistics(sample)
+    rows = {row['Pullback Range']: row for _, row in result.iterrows()}
+
+    assert rows['0-3']['Regular'] == '4W - 2L (66.7%)'
+    assert rows['3-5']['Regular'] == '1W - 2L (33.3%)'
+    assert rows['5-10']['Regular'] == '1W - 0L (100.0%)'
+
+
+def test_pullback_statistics_buffer():
+    """Test With 2 pips buffer column per Pullback range from sample data.
+
+    Buffer win: Pullback < SL + 2 AND TP > 0.
+    0-3: PB=0.8 SL=1.1 TP=12 => W, PB=2.1 SL=2.0 TP=0 => L(TP=0), PB=1.5 SL=4.0 TP=10 => W,
+         PB=2.0 SL=5.0 TP=8 => W, PB=2.5 SL=2.5 TP=0 => L(TP=0), PB=0.5 SL=1.5 TP=5 => W
+    3-5: PB=3.5 SL=3.5 TP=0 => L(TP=0), PB=3.0 SL=3.0 TP=0 => L(TP=0), PB=3.0 SL=6.0 TP=15 => W
+    5-10: PB=7.0 SL=8.0 TP=10 => W
+    """
+    sample = get_sample_data()
+    result = calculate_pullback_statistics(sample)
+    rows = {row['Pullback Range']: row for _, row in result.iterrows()}
+
+    # 0-3: same wins since losses are TP=0
+    assert rows['0-3']['With 2 pips buffer'] == '4W - 2L (66.7%)'
+    # 3-5: same since losses are TP=0
+    assert rows['3-5']['With 2 pips buffer'] == '1W - 2L (33.3%)'
+    assert rows['5-10']['With 2 pips buffer'] == '1W - 0L (100.0%)'
+
+
+def test_pullback_statistics_empty():
+    """Test Pullback statistics with empty dataset."""
+    empty = get_empty_data()
+    result = calculate_pullback_statistics(empty)
+    assert len(result) == 4
+    for _, row in result.iterrows():
+        assert row['Trades'] == 0
+        assert row['Regular'] == '0W - 0L (0.0%)'
+        assert row['With 2 pips buffer'] == '0W - 0L (0.0%)'
+
+
+def test_pullback_statistics_large_pullback():
+    """Test Pullback statistics with trades in the 10+ range."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02'],
+        'Weekday': ['Monday', 'Monday'],
+        'Trade': ['#1', '#2'],
+        'Direction': ['Buy', 'Buy'],
+        '1H': ['Buy', 'Buy'],
+        'SL': [15.0, 12.0],
+        'Pullback': [12.0, 14.0],
+        'TP': [20.0, 20.0],
+        'R': [1.3, 0],
+    })
+
+    result = calculate_pullback_statistics(trades)
+    rows = {row['Pullback Range']: row for _, row in result.iterrows()}
+
+    assert rows['10+']['Trades'] == 2
+    # PB=12 < SL=15 TP=20 => W, PB=14 >= SL=12 TP=20 => L
+    assert rows['10+']['Regular'] == '1W - 1L (50.0%)'
+    # PB=12 < SL+2=17 => W, PB=14 >= SL+2=14 => L (not strictly less)
+    assert rows['10+']['With 2 pips buffer'] == '1W - 1L (50.0%)'
+    assert rows['0-3']['Trades'] == 0
+
+
+def test_pullback_statistics_buffer_saves_trade():
+    """Test that buffer can save a trade in Pullback range analysis.
+
+    SL=3.0, PB=4.0, TP=10. Regular: PB(4) >= SL(3) => L. Buffer: PB(4) < SL+2(5) => W.
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        'Direction': ['Buy'],
+        '1H': ['Buy'],
+        'SL': [3.0],
+        'Pullback': [4.0],
+        'TP': [10.0],
+        'R': [0],
+    })
+
+    result = calculate_pullback_statistics(trades)
+    rows = {row['Pullback Range']: row for _, row in result.iterrows()}
+
+    assert rows['3-5']['Regular'] == '0W - 1L (0.0%)'
+    assert rows['3-5']['With 2 pips buffer'] == '1W - 0L (100.0%)'
+
+
 def test_tp_ranges_constant():
     """Test that TP_RANGES has expected ranges."""
     assert len(TP_RANGES) == 5
@@ -1714,6 +1857,15 @@ def run_all_tests():
         test_sl_statistics_empty,
         test_sl_statistics_large_sl,
         test_sl_statistics_buffer_saves_trade,
+        test_pullback_ranges_constant,
+        test_pullback_statistics_columns,
+        test_pullback_statistics_all_ranges_present,
+        test_pullback_statistics_trade_counts,
+        test_pullback_statistics_regular,
+        test_pullback_statistics_buffer,
+        test_pullback_statistics_empty,
+        test_pullback_statistics_large_pullback,
+        test_pullback_statistics_buffer_saves_trade,
         test_tp_ranges_constant,
         test_tp_statistics_columns,
         test_tp_statistics_all_ranges_present,

@@ -1195,6 +1195,83 @@ def display_analysis_sl(df: pd.DataFrame):
     display(HTML(html_table))
 
 
+PULLBACK_RANGES = [
+    ("0-3", 0, 3),
+    ("3-5", 3, 5),
+    ("5-10", 5, 10),
+    ("10+", 10, float("inf")),
+]
+
+
+def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate win/loss statistics for Pullback pip ranges.
+
+    Shows regular win/loss and with +2 pip buffer added to SL.
+    Regular win: Pullback < SL AND TP > 0.
+    Buffer win: Pullback < SL + 2 AND TP > 0.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with columns: Pullback Range, Trades, Regular, With 2 pips buffer
+    """
+    buffer = 2.0
+    results = []
+
+    for label, low, high in PULLBACK_RANGES:
+        range_trades = df[(df['Pullback'] >= low) & (df['Pullback'] < high)]
+        total = len(range_trades)
+
+        if total == 0:
+            results.append({
+                'Pullback Range': label,
+                'Trades': 0,
+                'Regular': _format_wl(0, 0, 0),
+                'With 2 pips buffer': _format_wl(0, 0, 0),
+            })
+            continue
+
+        wins = len(range_trades[
+            (range_trades['Pullback'] < range_trades['SL']) &
+            (range_trades['TP'] > 0)
+        ])
+        losses = total - wins
+
+        buf_wins = len(range_trades[
+            (range_trades['Pullback'] < range_trades['SL'] + buffer) &
+            (range_trades['TP'] > 0)
+        ])
+        buf_losses = total - buf_wins
+
+        results.append({
+            'Pullback Range': label,
+            'Trades': total,
+            'Regular': _format_wl(wins, losses, total),
+            'With 2 pips buffer': _format_wl(buf_wins, buf_losses, total),
+        })
+
+    return pd.DataFrame(results)
+
+
+def display_analysis_pullback(df: pd.DataFrame):
+    """
+    Display win/loss statistics broken down by Pullback pip range.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Pullback Range Statistics</h2>"
+    display(HTML(title_html))
+
+    stats_df = calculate_pullback_statistics(df)
+    html_table = create_html_table(stats_df)
+    display(HTML(html_table))
+
+
 TP_RANGES = [
     ("0-10", 0, 10),
     ("10-20", 10, 20),
