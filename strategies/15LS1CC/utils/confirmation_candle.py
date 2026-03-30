@@ -1088,3 +1088,135 @@ def display_weekday(df: pd.DataFrame):
     stats_df = calculate_weekday_statistics(df)
     html_table = create_html_table(stats_df)
     display(HTML(html_table))
+
+
+SL_RANGES = [
+    ("0-3", 0, 3),
+    ("3-5", 3, 5),
+    ("5-10", 5, 10),
+    ("10+", 10, float("inf")),
+]
+
+
+def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate win/loss statistics for SL pip ranges.
+
+    Win condition: Pullback < SL AND TP > 0.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with columns: SL Range, Trades, Wins, Losses, Win Rate
+    """
+    results = []
+
+    for label, low, high in SL_RANGES:
+        range_trades = df[(df['SL'] >= low) & (df['SL'] < high)]
+        total = len(range_trades)
+
+        if total == 0:
+            results.append({'SL Range': label, 'Trades': 0, 'Wins': 0, 'Losses': 0, 'Win Rate': '0.0%'})
+            continue
+
+        wins = len(range_trades[
+            (range_trades['Pullback'] < range_trades['SL']) &
+            (range_trades['TP'] > 0)
+        ])
+        losses = total - wins
+        win_rate = (wins / total) * 100
+
+        results.append({
+            'SL Range': label,
+            'Trades': total,
+            'Wins': wins,
+            'Losses': losses,
+            'Win Rate': f'{win_rate:.1f}%',
+        })
+
+    return pd.DataFrame(results)
+
+
+def display_analysis_sl(df: pd.DataFrame):
+    """
+    Display win/loss statistics broken down by SL pip range.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>SL Range Statistics</h2>"
+    display(HTML(title_html))
+
+    stats_df = calculate_sl_statistics(df)
+    html_table = create_html_table(stats_df)
+    display(HTML(html_table))
+
+
+TP_RANGES = [
+    ("0-10", 0, 10),
+    ("10-20", 10, 20),
+    ("20-30", 20, 30),
+    ("30-50", 30, 50),
+    ("50+", 50, float("inf")),
+]
+
+
+def calculate_tp_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate win/loss statistics for TP pip ranges.
+
+    Win condition: Pullback < SL AND TP > 0.
+    Trades with TP == 0 (no profit target reached) go into the 0-10 bucket.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with columns: TP Range, Trades, Wins, Losses, Win Rate
+    """
+    results = []
+
+    for label, low, high in TP_RANGES:
+        range_trades = df[(df['TP'] >= low) & (df['TP'] < high)]
+        total = len(range_trades)
+
+        if total == 0:
+            results.append({'TP Range': label, 'Trades': 0, 'Wins': 0, 'Losses': 0, 'Win Rate': '0.0%'})
+            continue
+
+        wins = len(range_trades[
+            (range_trades['Pullback'] < range_trades['SL']) &
+            (range_trades['TP'] > 0)
+        ])
+        losses = total - wins
+        win_rate = (wins / total) * 100
+
+        results.append({
+            'TP Range': label,
+            'Trades': total,
+            'Wins': wins,
+            'Losses': losses,
+            'Win Rate': f'{win_rate:.1f}%',
+        })
+
+    return pd.DataFrame(results)
+
+
+def display_analysis_tp(df: pd.DataFrame):
+    """
+    Display win/loss statistics broken down by TP pip range.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>TP Range Statistics</h2>"
+    display(HTML(title_html))
+
+    stats_df = calculate_tp_statistics(df)
+    html_table = create_html_table(stats_df)
+    display(HTML(html_table))

@@ -32,6 +32,10 @@ from utils.confirmation_candle import (
     BUFFER_PIPS,
     FIXED_SL_SIZES,
     WEEKDAY_ORDER,
+    SL_RANGES,
+    calculate_sl_statistics,
+    TP_RANGES,
+    calculate_tp_statistics,
 )
 
 
@@ -1274,6 +1278,225 @@ def test_weekday_statistics_single_day():
     assert rows['Tuesday']['Trades'] == 0
 
 
+def test_sl_ranges_constant():
+    """Test that SL_RANGES has expected ranges."""
+    assert len(SL_RANGES) == 4
+    assert SL_RANGES[0] == ("0-3", 0, 3)
+    assert SL_RANGES[1] == ("3-5", 3, 5)
+    assert SL_RANGES[2] == ("5-10", 5, 10)
+    assert SL_RANGES[3][0] == "10+"
+    assert SL_RANGES[3][1] == 10
+
+
+def test_sl_statistics_columns():
+    """Test that SL statistics has expected columns."""
+    sample = get_sample_data()
+    result = calculate_sl_statistics(sample)
+    assert list(result.columns) == ['SL Range', 'Trades', 'Wins', 'Losses', 'Win Rate']
+
+
+def test_sl_statistics_all_ranges_present():
+    """Test that all 4 SL ranges appear in results."""
+    sample = get_sample_data()
+    result = calculate_sl_statistics(sample)
+    assert len(result) == 4
+    assert list(result['SL Range']) == ['0-3', '3-5', '5-10', '10+']
+
+
+def test_sl_statistics_trade_counts():
+    """Test trade counts per SL range from sample data.
+
+    Sample SL values: 3.5, 1.1, 2.0, 4.0, 3.0, 5.0, 2.5, 6.0, 8.0, 1.5
+    0-3 (SL>=0, SL<3): 1.1, 2.0, 2.5, 1.5 = 4
+    3-5 (SL>=3, SL<5): 3.5, 4.0, 3.0 = 3
+    5-10 (SL>=5, SL<10): 5.0, 6.0, 8.0 = 3
+    10+: 0
+    """
+    sample = get_sample_data()
+    result = calculate_sl_statistics(sample)
+    counts = dict(zip(result['SL Range'], result['Trades']))
+    assert counts['0-3'] == 4
+    assert counts['3-5'] == 3
+    assert counts['5-10'] == 3
+    assert counts['10+'] == 0
+
+
+def test_sl_statistics_wins_losses():
+    """Test win/loss counts per SL range from sample data.
+
+    Win condition: Pullback < SL AND TP > 0.
+    0-3: SL=1.1 PB=0.8 TP=12 => W, SL=2.0 PB=2.1 TP=0 => L, SL=2.5 PB=2.5 TP=0 => L, SL=1.5 PB=0.5 TP=5 => W
+    3-5: SL=3.5 PB=3.5 TP=0 => L, SL=4.0 PB=1.5 TP=10 => W, SL=3.0 PB=3.0 TP=0 => L
+    5-10: SL=5.0 PB=2.0 TP=8 => W, SL=6.0 PB=3.0 TP=15 => W, SL=8.0 PB=7.0 TP=10 => W
+    """
+    sample = get_sample_data()
+    result = calculate_sl_statistics(sample)
+    rows = {row['SL Range']: row for _, row in result.iterrows()}
+
+    assert rows['0-3']['Wins'] == 2
+    assert rows['0-3']['Losses'] == 2
+    assert rows['3-5']['Wins'] == 1
+    assert rows['3-5']['Losses'] == 2
+    assert rows['5-10']['Wins'] == 3
+    assert rows['5-10']['Losses'] == 0
+
+
+def test_sl_statistics_win_rate():
+    """Test win rate calculation per SL range."""
+    sample = get_sample_data()
+    result = calculate_sl_statistics(sample)
+    rows = {row['SL Range']: row for _, row in result.iterrows()}
+
+    assert rows['0-3']['Win Rate'] == '50.0%'
+    assert rows['3-5']['Win Rate'] == '33.3%'
+    assert rows['5-10']['Win Rate'] == '100.0%'
+    assert rows['10+']['Win Rate'] == '0.0%'
+
+
+def test_sl_statistics_empty():
+    """Test SL statistics with empty dataset."""
+    empty = get_empty_data()
+    result = calculate_sl_statistics(empty)
+    assert len(result) == 4
+    for _, row in result.iterrows():
+        assert row['Trades'] == 0
+        assert row['Wins'] == 0
+        assert row['Losses'] == 0
+        assert row['Win Rate'] == '0.0%'
+
+
+def test_sl_statistics_large_sl():
+    """Test SL statistics with trades in the 10+ range."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02'],
+        'Weekday': ['Monday', 'Monday'],
+        'Trade': ['#1', '#2'],
+        'Direction': ['Buy', 'Buy'],
+        '1H': ['Buy', 'Buy'],
+        'SL': [12.0, 15.0],
+        'Pullback': [5.0, 16.0],
+        'TP': [20.0, 20.0],
+        'R': [1.7, 0],
+    })
+
+    result = calculate_sl_statistics(trades)
+    rows = {row['SL Range']: row for _, row in result.iterrows()}
+
+    assert rows['10+']['Trades'] == 2
+    assert rows['10+']['Wins'] == 1
+    assert rows['10+']['Losses'] == 1
+    assert rows['0-3']['Trades'] == 0
+
+
+def test_tp_ranges_constant():
+    """Test that TP_RANGES has expected ranges."""
+    assert len(TP_RANGES) == 5
+    assert TP_RANGES[0] == ("0-10", 0, 10)
+    assert TP_RANGES[1] == ("10-20", 10, 20)
+    assert TP_RANGES[2] == ("20-30", 20, 30)
+    assert TP_RANGES[3] == ("30-50", 30, 50)
+    assert TP_RANGES[4][0] == "50+"
+    assert TP_RANGES[4][1] == 50
+
+
+def test_tp_statistics_columns():
+    """Test that TP statistics has expected columns."""
+    sample = get_sample_data()
+    result = calculate_tp_statistics(sample)
+    assert list(result.columns) == ['TP Range', 'Trades', 'Wins', 'Losses', 'Win Rate']
+
+
+def test_tp_statistics_all_ranges_present():
+    """Test that all 5 TP ranges appear in results."""
+    sample = get_sample_data()
+    result = calculate_tp_statistics(sample)
+    assert len(result) == 5
+    assert list(result['TP Range']) == ['0-10', '10-20', '20-30', '30-50', '50+']
+
+
+def test_tp_statistics_trade_counts():
+    """Test trade counts per TP range from sample data.
+
+    Sample TP values: 0, 12.0, 0, 10.0, 0, 8.0, 0, 15.0, 10.0, 5.0
+    0-10 (TP>=0, TP<10): 0, 0, 0, 8.0, 0, 5.0 = 6
+    10-20 (TP>=10, TP<20): 12.0, 10.0, 15.0, 10.0 = 4
+    20-30: 0
+    30-50: 0
+    50+: 0
+    """
+    sample = get_sample_data()
+    result = calculate_tp_statistics(sample)
+    counts = dict(zip(result['TP Range'], result['Trades']))
+    assert counts['0-10'] == 6
+    assert counts['10-20'] == 4
+    assert counts['20-30'] == 0
+    assert counts['30-50'] == 0
+    assert counts['50+'] == 0
+
+
+def test_tp_statistics_wins_losses():
+    """Test win/loss counts per TP range from sample data.
+
+    Win condition: Pullback < SL AND TP > 0.
+    0-10: TP=0 PB=3.5 SL=3.5 => L, TP=0 PB=2.1 SL=2.0 => L, TP=0 PB=3.0 SL=3.0 => L,
+          TP=8 PB=2.0 SL=5.0 => W, TP=0 PB=2.5 SL=2.5 => L, TP=5 PB=0.5 SL=1.5 => W
+    10-20: TP=12 PB=0.8 SL=1.1 => W, TP=10 PB=1.5 SL=4.0 => W,
+           TP=15 PB=3.0 SL=6.0 => W, TP=10 PB=7.0 SL=8.0 => W
+    """
+    sample = get_sample_data()
+    result = calculate_tp_statistics(sample)
+    rows = {row['TP Range']: row for _, row in result.iterrows()}
+
+    assert rows['0-10']['Wins'] == 2
+    assert rows['0-10']['Losses'] == 4
+    assert rows['10-20']['Wins'] == 4
+    assert rows['10-20']['Losses'] == 0
+
+
+def test_tp_statistics_win_rate():
+    """Test win rate calculation per TP range."""
+    sample = get_sample_data()
+    result = calculate_tp_statistics(sample)
+    rows = {row['TP Range']: row for _, row in result.iterrows()}
+
+    assert rows['0-10']['Win Rate'] == '33.3%'
+    assert rows['10-20']['Win Rate'] == '100.0%'
+
+
+def test_tp_statistics_empty():
+    """Test TP statistics with empty dataset."""
+    empty = get_empty_data()
+    result = calculate_tp_statistics(empty)
+    assert len(result) == 5
+    for _, row in result.iterrows():
+        assert row['Trades'] == 0
+        assert row['Wins'] == 0
+        assert row['Losses'] == 0
+        assert row['Win Rate'] == '0.0%'
+
+
+def test_tp_statistics_large_tp():
+    """Test TP statistics with trades in the 50+ range."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02'],
+        'Weekday': ['Monday', 'Monday'],
+        'Trade': ['#1', '#2'],
+        'Direction': ['Buy', 'Buy'],
+        '1H': ['Buy', 'Buy'],
+        'SL': [3.0, 3.0],
+        'Pullback': [1.0, 4.0],
+        'TP': [60.0, 55.0],
+        'R': [20.0, 0],
+    })
+
+    result = calculate_tp_statistics(trades)
+    rows = {row['TP Range']: row for _, row in result.iterrows()}
+
+    assert rows['50+']['Trades'] == 2
+    assert rows['50+']['Wins'] == 1
+    assert rows['50+']['Losses'] == 1
+
+
 def test_buffer_statistics_filtered_all_trades():
     """Test _calculate_buffer_statistics_filtered with All Trades only."""
     sample = get_sample_data()
@@ -1415,6 +1638,22 @@ def run_all_tests():
         test_weekday_statistics_win_rate,
         test_weekday_statistics_empty,
         test_weekday_statistics_single_day,
+        test_sl_ranges_constant,
+        test_sl_statistics_columns,
+        test_sl_statistics_all_ranges_present,
+        test_sl_statistics_trade_counts,
+        test_sl_statistics_wins_losses,
+        test_sl_statistics_win_rate,
+        test_sl_statistics_empty,
+        test_sl_statistics_large_sl,
+        test_tp_ranges_constant,
+        test_tp_statistics_columns,
+        test_tp_statistics_all_ranges_present,
+        test_tp_statistics_trade_counts,
+        test_tp_statistics_wins_losses,
+        test_tp_statistics_win_rate,
+        test_tp_statistics_empty,
+        test_tp_statistics_large_tp,
         test_buffer_statistics_filtered_all_trades,
         test_buffer_statistics_filtered_1h,
         test_buffer_statistics_filtered_excludes_others,
