@@ -34,9 +34,9 @@ def load_data(filepath: str = "../strategies/15LS1CC/data.csv") -> pd.DataFrame:
     """
     df = pd.read_csv(filepath)
 
-    for col in ["SL", "TP", "Pullback"]:
+    for col in ["SL", "TP", "Pullback", "R"]:
         if col in df.columns:
-            df[col] = df[col].fillna(0)
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
     return df
 
