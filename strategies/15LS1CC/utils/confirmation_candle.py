@@ -1018,6 +1018,7 @@ def display_weekday(df: pd.DataFrame):
 SL_RANGES = [
     ("0-3", 0, 3),
     ("3-5", 3, 5),
+    ("< 5", 0, 5),
     ("5-10", 5, 10),
     ("10+", 10, float("inf")),
 ]

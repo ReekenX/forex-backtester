@@ -1187,12 +1187,13 @@ def test_weekday_statistics_single_day():
 
 def test_sl_ranges_constant():
     """Test that SL_RANGES has expected ranges."""
-    assert len(SL_RANGES) == 4
+    assert len(SL_RANGES) == 5
     assert SL_RANGES[0] == ("0-3", 0, 3)
     assert SL_RANGES[1] == ("3-5", 3, 5)
-    assert SL_RANGES[2] == ("5-10", 5, 10)
-    assert SL_RANGES[3][0] == "10+"
-    assert SL_RANGES[3][1] == 10
+    assert SL_RANGES[2] == ("< 5", 0, 5)
+    assert SL_RANGES[3] == ("5-10", 5, 10)
+    assert SL_RANGES[4][0] == "10+"
+    assert SL_RANGES[4][1] == 10
 
 
 def test_sl_statistics_columns():
@@ -1206,8 +1207,8 @@ def test_sl_statistics_all_ranges_present():
     """Test that all 4 SL ranges appear in results."""
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
-    assert len(result) == 4
-    assert list(result['SL Range']) == ['0-3', '3-5', '5-10', '10+']
+    assert len(result) == 5
+    assert list(result['SL Range']) == ['0-3', '3-5', '< 5', '5-10', '10+']
 
 
 def test_sl_statistics_trade_counts():
@@ -1268,7 +1269,7 @@ def test_sl_statistics_empty():
     """Test SL statistics with empty dataset."""
     empty = get_empty_data()
     result = calculate_sl_statistics(empty)
-    assert len(result) == 4
+    assert len(result) == 5
     for _, row in result.iterrows():
         assert row['Trades'] == 0
         assert row['Regular'] == '0W - 0L (0.0%)'
