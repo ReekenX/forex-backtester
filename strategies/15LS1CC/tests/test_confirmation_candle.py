@@ -38,6 +38,13 @@ from utils.confirmation_candle import (
     calculate_pullback_statistics,
     TP_RANGES,
     calculate_tp_statistics,
+    calculate_direction_statistics,
+    calculate_trade_number_statistics,
+    calculate_prev_outcome_statistics,
+    calculate_rrr_sweep_statistics,
+    calculate_stop_after_loss_statistics,
+    RRR_SWEEP,
+    STOP_AFTER_LOSS_RULES,
 )
 
 
@@ -1618,6 +1625,131 @@ def test_buffer_statistics_filtered_empty():
     assert len(result) == 0
 
 
+def test_direction_statistics_structure():
+    """Direction stats should expose Buy + Sell rows with 1:2 and 1:3 columns."""
+    result = calculate_direction_statistics(get_sample_data())
+    assert list(result['Direction']) == ['Buy', 'Sell']
+    assert list(result.columns) == ['Direction', 'Trades', '1:2 W/L', 'Edge 1:2', '1:3 W/L', 'Edge 1:3']
+
+
+def test_direction_statistics_counts():
+    """3 aligned Buys, 3 aligned Sells in the sample."""
+    result = calculate_direction_statistics(get_sample_data())
+    rows = {r['Direction']: r for _, r in result.iterrows()}
+    assert rows['Buy']['Trades'] == 3
+    assert rows['Sell']['Trades'] == 3
+
+
+def test_direction_statistics_buy_winner():
+    """Among aligned Buys, only Row 1 (SL=1.1 PB=0.8 TP=12) wins at both RRRs."""
+    result = calculate_direction_statistics(get_sample_data())
+    rows = {r['Direction']: r for _, r in result.iterrows()}
+    assert rows['Buy']['1:2 W/L'].startswith('1W - 2L')
+    assert rows['Buy']['1:3 W/L'].startswith('1W - 2L')
+    assert rows['Sell']['1:2 W/L'].startswith('0W - 3L')
+
+
+def test_direction_statistics_empty():
+    """Empty input yields zero-trade rows for Buy and Sell."""
+    result = calculate_direction_statistics(get_empty_data())
+    for _, row in result.iterrows():
+        assert row['Trades'] == 0
+        assert row['Edge 1:2'] == '0.000R'
+
+
+def test_trade_number_statistics_structure():
+    """Trade # stats should have Trade # column and the two-RRR columns."""
+    result = calculate_trade_number_statistics(get_sample_data())
+    assert list(result.columns) == ['Trade #', 'Trades', '1:2 W/L', 'Edge 1:2', '1:3 W/L', 'Edge 1:3']
+
+
+def test_trade_number_statistics_skips_missing():
+    """Trade numbers with zero aligned trades should be omitted from the table."""
+    result = calculate_trade_number_statistics(get_sample_data())
+    assert set(result['Trade #']) == {'#1', '#2'}
+
+
+def test_trade_number_statistics_winner():
+    """#2 has 1 winner (Row 1); #1 has 0 winners."""
+    result = calculate_trade_number_statistics(get_sample_data())
+    rows = {r['Trade #']: r for _, r in result.iterrows()}
+    assert rows['#1']['Trades'] == 4
+    assert rows['#1']['1:2 W/L'].startswith('0W - 4L')
+    assert rows['#2']['Trades'] == 2
+    assert rows['#2']['1:2 W/L'].startswith('1W - 1L')
+
+
+def test_prev_outcome_statistics_structure():
+    """Prev-outcome stats should have the three context rows."""
+    result = calculate_prev_outcome_statistics(get_sample_data())
+    assert list(result['Context']) == ['First of Day', 'After Win', 'After Loss']
+
+
+def test_prev_outcome_statistics_after_loss_winner():
+    """The lone aligned winner (Row 1) follows a loss on the same day."""
+    result = calculate_prev_outcome_statistics(get_sample_data())
+    rows = {r['Context']: r for _, r in result.iterrows()}
+    assert rows['After Loss']['Trades'] == 1
+    assert rows['After Loss']['1:2 W/L'].startswith('1W - 0L')
+    assert rows['After Win']['Trades'] == 0
+
+
+def test_prev_outcome_statistics_first_of_day():
+    """5 aligned days start with a losing trade; all 5 First-of-Day rows lose at 1:2."""
+    result = calculate_prev_outcome_statistics(get_sample_data())
+    rows = {r['Context']: r for _, r in result.iterrows()}
+    assert rows['First of Day']['Trades'] == 5
+    assert rows['First of Day']['1:2 W/L'].startswith('0W - 5L')
+
+
+def test_rrr_sweep_statistics_structure():
+    """RRR sweep should cover every RRR_SWEEP entry."""
+    result = calculate_rrr_sweep_statistics(get_sample_data())
+    assert len(result) == len(RRR_SWEEP)
+    assert list(result.columns) == ['RRR', 'Trades', 'W/L', 'Edge R/Trade']
+
+
+def test_rrr_sweep_statistics_counts():
+    """At 1:1 the aligned sample has 4 winners; at 1:3 only 1 winner."""
+    result = calculate_rrr_sweep_statistics(get_sample_data())
+    rows = {r['RRR']: r for _, r in result.iterrows()}
+    assert rows['1:1']['Trades'] == 6
+    assert rows['1:1']['W/L'].startswith('4W - 2L')
+    assert rows['1:3']['W/L'].startswith('1W - 5L')
+
+
+def test_rrr_sweep_statistics_empty():
+    """Empty input still yields one row per RRR with zero trades."""
+    result = calculate_rrr_sweep_statistics(get_empty_data())
+    assert len(result) == len(RRR_SWEEP)
+    assert all(r['Trades'] == 0 for _, r in result.iterrows())
+
+
+def test_stop_after_loss_statistics_structure():
+    """Stop-after-loss stats should include every configured rule."""
+    result = calculate_stop_after_loss_statistics(get_sample_data())
+    assert list(result['Rule']) == [label for label, _ in STOP_AFTER_LOSS_RULES]
+
+
+def test_stop_after_loss_first_cap_excludes_winner():
+    """
+    'Stop after 1st Loss' drops the aligned sample's only winner (Row 1),
+    because Row 0 — the prior trade on 2026-01-12 — is a loss.
+    """
+    result = calculate_stop_after_loss_statistics(get_sample_data())
+    rows = {r['Rule']: r for _, r in result.iterrows()}
+    assert rows['Stop after 1st Loss']['Trades 1:2'] == 5
+    assert rows['Stop after 1st Loss']['1:2 W/L'].startswith('0W - 5L')
+
+
+def test_stop_after_loss_no_cap_matches_baseline():
+    """'No Cap' row should equal the full aligned sample."""
+    result = calculate_stop_after_loss_statistics(get_sample_data())
+    rows = {r['Rule']: r for _, r in result.iterrows()}
+    assert rows['No Cap']['Trades 1:2'] == 6
+    assert rows['No Cap']['1:2 W/L'].startswith('1W - 5L')
+
+
 def run_all_tests():
     """Run all tests and report results."""
     tests = [
@@ -1741,6 +1873,22 @@ def run_all_tests():
         test_buffer_statistics_filtered_1h,
         test_buffer_statistics_filtered_excludes_others,
         test_buffer_statistics_filtered_empty,
+        test_direction_statistics_structure,
+        test_direction_statistics_counts,
+        test_direction_statistics_buy_winner,
+        test_direction_statistics_empty,
+        test_trade_number_statistics_structure,
+        test_trade_number_statistics_skips_missing,
+        test_trade_number_statistics_winner,
+        test_prev_outcome_statistics_structure,
+        test_prev_outcome_statistics_after_loss_winner,
+        test_prev_outcome_statistics_first_of_day,
+        test_rrr_sweep_statistics_structure,
+        test_rrr_sweep_statistics_counts,
+        test_rrr_sweep_statistics_empty,
+        test_stop_after_loss_statistics_structure,
+        test_stop_after_loss_first_cap_excludes_winner,
+        test_stop_after_loss_no_cap_matches_baseline,
     ]
 
     passed = 0
