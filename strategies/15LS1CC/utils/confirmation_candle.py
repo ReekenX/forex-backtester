@@ -1465,3 +1465,111 @@ def calculate_stop_after_loss_statistics(df: pd.DataFrame) -> pd.DataFrame:
 def display_analysis_stop_after_loss(df: pd.DataFrame):
     """Display effect of stopping after N losses per day."""
     _display_section(df, "Stop After N Losses (1H Aligned + 2 pip buffer)", calculate_stop_after_loss_statistics)
+
+
+# ---------------------------------------------------------------------------
+# PD (Premium / Discount) analyses
+#
+# PD column values:
+#   - "Buy"  -> price is in Discount  (favors Buys)
+#   - "Sell" -> price is in Premium   (favors Sells)
+#   - empty  -> PD bias not yet labeled; excluded from PD analyses
+#
+# All evaluated with the +2 pip SL buffer at 1:2 and 1:3 RRR.
+# ---------------------------------------------------------------------------
+
+PD_ZONES = [
+    ('Discount (PD = Buy)', 'Buy'),
+    ('Premium (PD = Sell)', 'Sell'),
+]
+
+
+def _pd_known(df: pd.DataFrame) -> pd.DataFrame:
+    """Filter to trades where the PD column has a Buy/Sell value."""
+    if 'PD' not in df.columns:
+        return df.iloc[0:0].copy()
+    return df[df['PD'].isin(['Buy', 'Sell'])].copy()
+
+
+def calculate_pd_alignment_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Win/loss by PD alignment for trades with a known PD bias (+2 pip buffer).
+
+    Rows: All PD-Known, PD Aligned (Direction == PD), PD Against.
+    """
+    known = _pd_known(df)
+    aligned = known[known['Direction'] == known['PD']]
+    against = known[known['Direction'] != known['PD']]
+    rows = [
+        _two_rrr_row('Filter', 'All PD-Known', known, IMPROVEMENT_BUFFER),
+        _two_rrr_row('Filter', 'PD Aligned', aligned, IMPROVEMENT_BUFFER),
+        _two_rrr_row('Filter', 'PD Against', against, IMPROVEMENT_BUFFER),
+    ]
+    return pd.DataFrame(rows)
+
+
+def display_analysis_pd_alignment(df: pd.DataFrame):
+    """Display PD alignment analysis (with PD vs against PD)."""
+    _display_section(df, "PD Alignment (+2 pip buffer)", calculate_pd_alignment_statistics)
+
+
+def calculate_pd_zone_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Win/loss broken down by PD zone (Discount / Premium), +2 pip buffer.
+    """
+    known = _pd_known(df)
+    rows = [
+        _two_rrr_row('Zone', label, known[known['PD'] == val], IMPROVEMENT_BUFFER)
+        for label, val in PD_ZONES
+    ]
+    return pd.DataFrame(rows)
+
+
+def display_analysis_pd_zone(df: pd.DataFrame):
+    """Display win/loss broken down by PD zone."""
+    _display_section(df, "PD Zone (+2 pip buffer)", calculate_pd_zone_statistics)
+
+
+def calculate_pd_1h_combined_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    2x2 confluence of 1H bias and PD bias on trades with a known PD value.
+    """
+    known = _pd_known(df)
+    combos = [
+        ('1H Aligned + PD Aligned',
+         (known['Direction'] == known['1H']) & (known['Direction'] == known['PD'])),
+        ('1H Aligned + PD Against',
+         (known['Direction'] == known['1H']) & (known['Direction'] != known['PD'])),
+        ('1H Against + PD Aligned',
+         (known['Direction'] != known['1H']) & (known['Direction'] == known['PD'])),
+        ('1H Against + PD Against',
+         (known['Direction'] != known['1H']) & (known['Direction'] != known['PD'])),
+    ]
+    rows = [
+        _two_rrr_row('Combination', label, known[mask], IMPROVEMENT_BUFFER)
+        for label, mask in combos
+    ]
+    return pd.DataFrame(rows)
+
+
+def display_analysis_pd_1h_combined(df: pd.DataFrame):
+    """Display the 2x2 1H x PD confluence table."""
+    _display_section(df, "1H x PD Confluence (+2 pip buffer)", calculate_pd_1h_combined_statistics)
+
+
+def calculate_pd_direction_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    PD-Aligned trades split by Direction (Buy = Discount entries, Sell = Premium entries).
+    """
+    known = _pd_known(df)
+    aligned = known[known['Direction'] == known['PD']]
+    rows = [
+        _two_rrr_row('Direction', d, aligned[aligned['Direction'] == d], IMPROVEMENT_BUFFER)
+        for d in ['Buy', 'Sell']
+    ]
+    return pd.DataFrame(rows)
+
+
+def display_analysis_pd_direction(df: pd.DataFrame):
+    """Display PD-Aligned trades broken down by Direction."""
+    _display_section(df, "PD Aligned by Direction (+2 pip buffer)", calculate_pd_direction_statistics)

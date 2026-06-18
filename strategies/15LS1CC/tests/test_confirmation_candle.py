@@ -45,6 +45,11 @@ from utils.confirmation_candle import (
     calculate_stop_after_loss_statistics,
     RRR_SWEEP,
     STOP_AFTER_LOSS_RULES,
+    calculate_pd_alignment_statistics,
+    calculate_pd_zone_statistics,
+    calculate_pd_1h_combined_statistics,
+    calculate_pd_direction_statistics,
+    PD_ZONES,
 )
 
 
@@ -61,6 +66,8 @@ def get_sample_data():
                       'Sell', 'Buy', 'Buy', 'Sell', 'Sell'],
         '1H': ['Buy', 'Buy', 'Buy', 'Sell', 'Sell',
                'Sell', 'Sell', 'Buy', 'Buy', 'Sell'],
+        'PD': ['Buy', 'Buy', 'Sell', '', 'Buy',
+               'Sell', '', 'Sell', 'Buy', 'Sell'],
         'SL': [3.5, 1.1, 2.0, 4.0, 3.0,
                5.0, 2.5, 6.0, 8.0, 1.5],
         'Pullback': [3.5, 0.8, 2.1, 1.5, 3.0,
@@ -76,7 +83,7 @@ def get_empty_data():
     """Create an empty dataset."""
     return pd.DataFrame({
         'Date': [], 'Weekday': [], 'Trade': [], 'Direction': [],
-        '1H': [], 'SL': [], 'Pullback': [], 'TP': [], 'R': [],
+        '1H': [], 'PD': [], 'SL': [], 'Pullback': [], 'TP': [], 'R': [],
     })
 
 
@@ -1742,6 +1749,68 @@ def test_stop_after_loss_first_cap_excludes_winner():
     assert rows['Stop after 1st Loss']['1:2 W/L'].startswith('0W - 5L')
 
 
+def test_pd_alignment_structure():
+    result = calculate_pd_alignment_statistics(get_sample_data())
+    assert list(result['Filter']) == ['All PD-Known', 'PD Aligned', 'PD Against']
+    assert {'1:2 W/L', '1:3 W/L', 'Edge 1:2', 'Edge 1:3', 'Trades'}.issubset(result.columns)
+
+
+def test_pd_alignment_counts():
+    result = calculate_pd_alignment_statistics(get_sample_data())
+    rows = {r['Filter']: r for _, r in result.iterrows()}
+    assert rows['All PD-Known']['Trades'] == 8
+    assert rows['PD Aligned']['Trades'] == 5
+    assert rows['PD Against']['Trades'] == 3
+
+
+def test_pd_alignment_winner_in_aligned():
+    """Trade #1 (Buy/Buy/Buy, TP=12) is the lone 1:2 win and falls under PD Aligned."""
+    result = calculate_pd_alignment_statistics(get_sample_data())
+    rows = {r['Filter']: r for _, r in result.iterrows()}
+    assert rows['PD Aligned']['1:2 W/L'].startswith('1W - 4L')
+    assert rows['PD Against']['1:2 W/L'].startswith('0W - 3L')
+
+
+def test_pd_alignment_empty():
+    result = calculate_pd_alignment_statistics(get_empty_data())
+    rows = {r['Filter']: r for _, r in result.iterrows()}
+    assert rows['All PD-Known']['Trades'] == 0
+    assert rows['PD Aligned']['Trades'] == 0
+
+
+def test_pd_zone_structure():
+    result = calculate_pd_zone_statistics(get_sample_data())
+    assert list(result['Zone']) == [label for label, _ in PD_ZONES]
+
+
+def test_pd_zone_counts():
+    result = calculate_pd_zone_statistics(get_sample_data())
+    rows = {r['Zone']: r for _, r in result.iterrows()}
+    assert rows['Discount (PD = Buy)']['Trades'] == 4
+    assert rows['Premium (PD = Sell)']['Trades'] == 4
+    assert rows['Discount (PD = Buy)']['1:2 W/L'].startswith('1W - 3L')
+    assert rows['Premium (PD = Sell)']['1:2 W/L'].startswith('0W - 4L')
+
+
+def test_pd_1h_combined_counts():
+    result = calculate_pd_1h_combined_statistics(get_sample_data())
+    rows = {r['Combination']: r for _, r in result.iterrows()}
+    assert rows['1H Aligned + PD Aligned']['Trades'] == 4
+    assert rows['1H Aligned + PD Against']['Trades'] == 2
+    assert rows['1H Against + PD Aligned']['Trades'] == 1
+    assert rows['1H Against + PD Against']['Trades'] == 1
+    assert rows['1H Aligned + PD Aligned']['1:2 W/L'].startswith('1W - 3L')
+
+
+def test_pd_direction_counts():
+    """PD-Aligned trades split by Direction: Buy entries in Discount, Sell entries in Premium."""
+    result = calculate_pd_direction_statistics(get_sample_data())
+    rows = {r['Direction']: r for _, r in result.iterrows()}
+    assert rows['Buy']['Trades'] == 2
+    assert rows['Sell']['Trades'] == 3
+    assert rows['Buy']['1:2 W/L'].startswith('1W - 1L')
+
+
 def test_stop_after_loss_no_cap_matches_baseline():
     """'No Cap' row should equal the full aligned sample."""
     result = calculate_stop_after_loss_statistics(get_sample_data())
@@ -1889,6 +1958,14 @@ def run_all_tests():
         test_stop_after_loss_statistics_structure,
         test_stop_after_loss_first_cap_excludes_winner,
         test_stop_after_loss_no_cap_matches_baseline,
+        test_pd_alignment_structure,
+        test_pd_alignment_counts,
+        test_pd_alignment_winner_in_aligned,
+        test_pd_alignment_empty,
+        test_pd_zone_structure,
+        test_pd_zone_counts,
+        test_pd_1h_combined_counts,
+        test_pd_direction_counts,
     ]
 
     passed = 0
