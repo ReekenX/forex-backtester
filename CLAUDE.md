@@ -122,6 +122,17 @@ Before announcing that any feature or modification is complete and working:
 
 Only after all tests pass successfully should you confirm the work is complete. If any tests fail, fix the issues before announcing completion.
 
+Commit changes you made.
+
+### Commit Convention
+
+Use conventional commits for versioning:
+- `feat:` - New feature/strategy/experiment
+- `fix:` - Bug fix
+- `chore:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:` - for other tasks
+- Subject line only — no body
+- Never use a scope (e.g., write `feat: ...`, not `feat(api): ...`)
+
 ## Standard Table Structure
 
 All analysis tables should follow this standardized column format:
