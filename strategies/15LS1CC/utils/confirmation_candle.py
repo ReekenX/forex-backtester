@@ -1225,6 +1225,198 @@ def display_analysis_tp(df: pd.DataFrame):
 
 
 # ---------------------------------------------------------------------------
+# SL × Pullback correlation analyses
+# ---------------------------------------------------------------------------
+
+SL_PB_SL_RANGES = [
+    ("0-2", 0, 2),
+    ("2-3", 2, 3),
+    ("3-5", 3, 5),
+    ("5-10", 5, 10),
+    ("10+", 10, float("inf")),
+]
+
+SL_PB_PB_RANGES = [
+    ("0-1", 0, 1),
+    ("1-2", 1, 2),
+    ("2-3", 2, 3),
+    ("3-5", 3, 5),
+    ("5-10", 5, 10),
+    ("10+", 10, float("inf")),
+]
+
+SL_PB_BUFFERS = [1.0, 2.0, 3.0]
+
+
+def calculate_sl_pb_crosstab(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Cross-tab of trade counts by SL range (rows) and Pullback range (columns).
+
+    Each cell shows "N (P%)" where P is the percentage of that SL row.
+
+    Returns:
+        DataFrame with columns: SL Range, <one per PB range>, Total
+    """
+    pb_labels = [label for label, _, _ in SL_PB_PB_RANGES]
+    results = []
+
+    for sl_label, sl_lo, sl_hi in SL_PB_SL_RANGES:
+        sl_trades = df[(df['SL'] >= sl_lo) & (df['SL'] < sl_hi)]
+        total = len(sl_trades)
+        row = {'SL Range': sl_label}
+        for pb_label, pb_lo, pb_hi in SL_PB_PB_RANGES:
+            n = len(sl_trades[(sl_trades['Pullback'] >= pb_lo) & (sl_trades['Pullback'] < pb_hi)])
+            pct = (n / total * 100) if total > 0 else 0.0
+            row[pb_label] = f"{n} ({pct:.0f}%)"
+        row['Total'] = total
+        results.append(row)
+
+    return pd.DataFrame(results, columns=['SL Range', *pb_labels, 'Total'])
+
+
+def display_analysis_sl_pb_crosstab(df: pd.DataFrame):
+    """
+    Display a cross-tab of trade counts: SL ranges (rows) × Pullback ranges (cols).
+
+    Useful for spotting where the mass of (SL, Pullback) pairs sits.
+    """
+    from IPython.display import display, HTML
+
+    title_html = (
+        "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>"
+        "SL × Pullback Cross-Tab</h2>"
+    )
+    display(HTML(title_html))
+
+    stats_df = calculate_sl_pb_crosstab(df)
+    html_table = create_html_table(stats_df)
+    display(HTML(html_table))
+
+
+def calculate_sl_pb_distribution(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Per-SL-bucket distribution stats of Pullback.
+
+    Returns:
+        DataFrame with columns: SL Range, Trades, PB Mean, PB Median, PB p75,
+        PB p90, PB Max, PB/SL Median, % PB ≥ SL
+    """
+    results = []
+
+    for sl_label, sl_lo, sl_hi in SL_PB_SL_RANGES:
+        sl_trades = df[(df['SL'] >= sl_lo) & (df['SL'] < sl_hi)]
+        n = len(sl_trades)
+
+        if n == 0:
+            results.append({
+                'SL Range': sl_label,
+                'Trades': 0,
+                'PB Mean': '-',
+                'PB Median': '-',
+                'PB p75': '-',
+                'PB p90': '-',
+                'PB Max': '-',
+                'PB/SL Median': '-',
+                '% PB ≥ SL': '-',
+            })
+            continue
+
+        pb = sl_trades['Pullback']
+        ratio = sl_trades['Pullback'] / sl_trades['SL']
+        loss_pct = (sl_trades['Pullback'] >= sl_trades['SL']).sum() / n * 100
+
+        results.append({
+            'SL Range': sl_label,
+            'Trades': n,
+            'PB Mean': f"{pb.mean():.2f}",
+            'PB Median': f"{pb.median():.2f}",
+            'PB p75': f"{pb.quantile(0.75):.2f}",
+            'PB p90': f"{pb.quantile(0.90):.2f}",
+            'PB Max': f"{pb.max():.2f}",
+            'PB/SL Median': f"{ratio.median():.2f}",
+            '% PB ≥ SL': f"{loss_pct:.0f}%",
+        })
+
+    return pd.DataFrame(results)
+
+
+def display_analysis_sl_pb_distribution(df: pd.DataFrame):
+    """
+    Display per-SL-bucket pullback summary stats: mean, median, p75, p90, max,
+    PB/SL ratio, and loss rate (PB ≥ SL).
+    """
+    from IPython.display import display, HTML
+
+    title_html = (
+        "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>"
+        "Pullback Distribution per SL Bucket</h2>"
+    )
+    display(HTML(title_html))
+
+    stats_df = calculate_sl_pb_distribution(df)
+    html_table = create_html_table(stats_df)
+    display(HTML(html_table))
+
+
+def calculate_sl_pb_buffer_impact(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Per-SL-bucket loss rate and how often a +N pip buffer flips a loss to a win.
+
+    A trade is a loss when Pullback ≥ SL. A buffer of N "saves" a trade when
+    SL ≤ Pullback < SL + N. Save percentages are reported relative to all trades
+    in the SL bucket, so loss rate and save rates are directly comparable.
+
+    Returns:
+        DataFrame with columns: SL Range, Trades, Loss Rate, +1 Saves, +2 Saves, +3 Saves
+    """
+    results = []
+
+    for sl_label, sl_lo, sl_hi in SL_PB_SL_RANGES:
+        sl_trades = df[(df['SL'] >= sl_lo) & (df['SL'] < sl_hi)]
+        n = len(sl_trades)
+
+        if n == 0:
+            row = {'SL Range': sl_label, 'Trades': 0, 'Loss Rate': '-'}
+            for buf in SL_PB_BUFFERS:
+                row[f'+{buf:g} Saves'] = '-'
+            results.append(row)
+            continue
+
+        loss_mask = sl_trades['Pullback'] >= sl_trades['SL']
+        loss_pct = loss_mask.sum() / n * 100
+
+        row = {
+            'SL Range': sl_label,
+            'Trades': n,
+            'Loss Rate': f"{loss_pct:.0f}%",
+        }
+        for buf in SL_PB_BUFFERS:
+            saved = loss_mask & (sl_trades['Pullback'] < sl_trades['SL'] + buf)
+            row[f'+{buf:g} Saves'] = f"{saved.sum() / n * 100:.0f}%"
+        results.append(row)
+
+    return pd.DataFrame(results)
+
+
+def display_analysis_sl_pb_buffer_impact(df: pd.DataFrame):
+    """
+    Display per-SL-bucket loss rate and the % of trades that a +1/+2/+3 pip
+    buffer would flip from a loss to a win.
+    """
+    from IPython.display import display, HTML
+
+    title_html = (
+        "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>"
+        "Buffer Impact per SL Bucket</h2>"
+    )
+    display(HTML(title_html))
+
+    stats_df = calculate_sl_pb_buffer_impact(df)
+    html_table = create_html_table(stats_df)
+    display(HTML(html_table))
+
+
+# ---------------------------------------------------------------------------
 # Improvement-search analyses
 #
 # All evaluated on 1H Aligned trades with a +2 pip SL buffer, at 1:2 and 1:3 RRR.

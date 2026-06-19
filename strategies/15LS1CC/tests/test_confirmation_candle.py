@@ -38,6 +38,12 @@ from utils.confirmation_candle import (
     calculate_pullback_statistics,
     TP_RANGES,
     calculate_tp_statistics,
+    SL_PB_SL_RANGES,
+    SL_PB_PB_RANGES,
+    SL_PB_BUFFERS,
+    calculate_sl_pb_crosstab,
+    calculate_sl_pb_distribution,
+    calculate_sl_pb_buffer_impact,
     calculate_direction_statistics,
     calculate_trade_number_statistics,
     calculate_prev_outcome_statistics,
@@ -1481,11 +1487,10 @@ def test_pullback_statistics_buffer_saves_trade():
 
 def test_tp_ranges_constant():
     """Test that TP_RANGES has expected ranges."""
-    assert len(TP_RANGES) == 3
-    assert TP_RANGES[0] == ("0-20", 0, 20)
-    assert TP_RANGES[1] == ("20-50", 20, 50)
-    assert TP_RANGES[2][0] == "50+"
-    assert TP_RANGES[2][1] == 50
+    assert len(TP_RANGES) == 2
+    assert TP_RANGES[0] == ("0-35", 0, 35)
+    assert TP_RANGES[1][0] == "35+"
+    assert TP_RANGES[1][1] == 35
 
 
 def test_tp_statistics_columns():
@@ -1499,8 +1504,8 @@ def test_tp_statistics_all_ranges_present():
     """Test that all TP ranges appear in results."""
     sample = get_sample_data()
     result = calculate_tp_statistics(sample)
-    assert len(result) == 3
-    assert list(result['TP Range']) == ['0-20', '20-50', '50+']
+    assert len(result) == 2
+    assert list(result['TP Range']) == ['0-35', '35+']
 
 
 def test_tp_statistics_trade_counts():
@@ -1508,27 +1513,26 @@ def test_tp_statistics_trade_counts():
 
     Sample TP values: 0, 12.0, 0, 10.0, 0, 8.0, 0, 15.0, 10.0, 5.0
     Profitable overall (TP > 0): 6
-    0-20 (TP>0, TP<20): 12, 10, 8, 15, 10, 5 = 6
+    0-35 (TP>0, TP<35): 12, 10, 8, 15, 10, 5 = 6
     """
     sample = get_sample_data()
     result = calculate_tp_statistics(sample)
     counts = dict(zip(result['TP Range'], result['Trades']))
-    assert counts['0-20'] == '6 of 6'
-    assert counts['20-50'] == '0 of 6'
-    assert counts['50+'] == '0 of 6'
+    assert counts['0-35'] == '6 of 6'
+    assert counts['35+'] == '0 of 6'
 
 
 def test_tp_statistics_empty():
     """Test TP statistics with empty dataset."""
     empty = get_empty_data()
     result = calculate_tp_statistics(empty)
-    assert len(result) == 3
+    assert len(result) == 2
     for _, row in result.iterrows():
         assert row['Trades'] == '0 of 0'
 
 
 def test_tp_statistics_large_tp():
-    """Test TP statistics with trades in the 50+ range."""
+    """Test TP statistics with trades in the 35+ range."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01', '2026-01-02'],
         'Weekday': ['Monday', 'Monday'],
@@ -1544,7 +1548,147 @@ def test_tp_statistics_large_tp():
     result = calculate_tp_statistics(trades)
     rows = {row['TP Range']: row for _, row in result.iterrows()}
 
-    assert rows['50+']['Trades'] == '2 of 2'
+    assert rows['35+']['Trades'] == '2 of 2'
+
+
+def test_sl_pb_crosstab_columns():
+    """Cross-tab has SL Range, one column per PB range, and Total."""
+    sample = get_sample_data()
+    result = calculate_sl_pb_crosstab(sample)
+    pb_labels = [label for label, _, _ in SL_PB_PB_RANGES]
+    assert list(result.columns) == ['SL Range', *pb_labels, 'Total']
+    assert list(result['SL Range']) == [label for label, _, _ in SL_PB_SL_RANGES]
+
+
+def test_sl_pb_crosstab_counts():
+    """Verify cell counts against hand-computed sample distribution."""
+    sample = get_sample_data()
+    result = calculate_sl_pb_crosstab(sample)
+    rows = {row['SL Range']: row for _, row in result.iterrows()}
+
+    # 0-2 bucket: PBs 0.8, 0.5 → both in 0-1
+    assert rows['0-2']['0-1'] == '2 (100%)'
+    assert rows['0-2']['Total'] == 2
+
+    # 2-3 bucket: PBs 2.1, 2.5 → both in 2-3
+    assert rows['2-3']['2-3'] == '2 (100%)'
+    assert rows['2-3']['Total'] == 2
+
+    # 3-5 bucket: PBs 3.5, 1.5, 3.0 → 1 in 1-2, 2 in 3-5
+    assert rows['3-5']['1-2'] == '1 (33%)'
+    assert rows['3-5']['3-5'] == '2 (67%)'
+    assert rows['3-5']['Total'] == 3
+
+    # 5-10 bucket: PBs 2.0, 3.0, 7.0 → 1 in 2-3, 1 in 3-5, 1 in 5-10
+    assert rows['5-10']['2-3'] == '1 (33%)'
+    assert rows['5-10']['3-5'] == '1 (33%)'
+    assert rows['5-10']['5-10'] == '1 (33%)'
+    assert rows['5-10']['Total'] == 3
+
+    # 10+ bucket: empty
+    assert rows['10+']['Total'] == 0
+
+
+def test_sl_pb_crosstab_empty():
+    """Empty dataset → every row has 0 totals and 0 (0%) cells."""
+    empty = get_empty_data()
+    result = calculate_sl_pb_crosstab(empty)
+    assert len(result) == len(SL_PB_SL_RANGES)
+    for _, row in result.iterrows():
+        assert row['Total'] == 0
+        for pb_label, _, _ in SL_PB_PB_RANGES:
+            assert row[pb_label] == '0 (0%)'
+
+
+def test_sl_pb_distribution_columns():
+    sample = get_sample_data()
+    result = calculate_sl_pb_distribution(sample)
+    assert list(result.columns) == [
+        'SL Range', 'Trades', 'PB Mean', 'PB Median', 'PB p75', 'PB p90',
+        'PB Max', 'PB/SL Median', '% PB ≥ SL',
+    ]
+
+
+def test_sl_pb_distribution_values():
+    """Spot-check distribution stats on sample data."""
+    sample = get_sample_data()
+    result = calculate_sl_pb_distribution(sample)
+    rows = {row['SL Range']: row for _, row in result.iterrows()}
+
+    # 0-2: PBs 0.8, 0.5; SLs 1.1, 1.5 → no losses
+    assert rows['0-2']['Trades'] == 2
+    assert rows['0-2']['PB Mean'] == '0.65'
+    assert rows['0-2']['PB Median'] == '0.65'
+    assert rows['0-2']['PB Max'] == '0.80'
+    assert rows['0-2']['% PB ≥ SL'] == '0%'
+
+    # 2-3: PBs 2.1, 2.5; SLs 2.0, 2.5 → both losses
+    assert rows['2-3']['Trades'] == 2
+    assert rows['2-3']['% PB ≥ SL'] == '100%'
+
+    # 3-5: PBs 3.5, 1.5, 3.0; SLs 3.5, 4.0, 3.0 → 2/3 losses
+    assert rows['3-5']['Trades'] == 3
+    assert rows['3-5']['PB Median'] == '3.00'
+    assert rows['3-5']['% PB ≥ SL'] == '67%'
+
+    # 5-10: PBs 2.0, 3.0, 7.0; SLs 5.0, 6.0, 8.0 → no losses
+    assert rows['5-10']['Trades'] == 3
+    assert rows['5-10']['% PB ≥ SL'] == '0%'
+
+    # 10+: empty
+    assert rows['10+']['Trades'] == 0
+    assert rows['10+']['PB Mean'] == '-'
+
+
+def test_sl_pb_distribution_empty():
+    empty = get_empty_data()
+    result = calculate_sl_pb_distribution(empty)
+    assert len(result) == len(SL_PB_SL_RANGES)
+    for _, row in result.iterrows():
+        assert row['Trades'] == 0
+        assert row['PB Mean'] == '-'
+        assert row['% PB ≥ SL'] == '-'
+
+
+def test_sl_pb_buffer_impact_columns():
+    sample = get_sample_data()
+    result = calculate_sl_pb_buffer_impact(sample)
+    expected = ['SL Range', 'Trades', 'Loss Rate'] + [f'+{b:g} Saves' for b in SL_PB_BUFFERS]
+    assert list(result.columns) == expected
+
+
+def test_sl_pb_buffer_impact_values():
+    sample = get_sample_data()
+    result = calculate_sl_pb_buffer_impact(sample)
+    rows = {row['SL Range']: row for _, row in result.iterrows()}
+
+    # 0-2: no losses
+    assert rows['0-2']['Loss Rate'] == '0%'
+    assert rows['0-2']['+1 Saves'] == '0%'
+
+    # 2-3: both losses, +1 saves both (PB-SL gap is at most 0.1)
+    assert rows['2-3']['Loss Rate'] == '100%'
+    assert rows['2-3']['+1 Saves'] == '100%'
+    assert rows['2-3']['+2 Saves'] == '100%'
+
+    # 3-5: 2/3 losses; +1 saves both (gaps 0 and 0)
+    assert rows['3-5']['Loss Rate'] == '67%'
+    assert rows['3-5']['+1 Saves'] == '67%'
+    assert rows['3-5']['+3 Saves'] == '67%'
+
+    # 5-10: no losses → no saves
+    assert rows['5-10']['Loss Rate'] == '0%'
+    assert rows['5-10']['+2 Saves'] == '0%'
+
+
+def test_sl_pb_buffer_impact_empty():
+    empty = get_empty_data()
+    result = calculate_sl_pb_buffer_impact(empty)
+    for _, row in result.iterrows():
+        assert row['Trades'] == 0
+        assert row['Loss Rate'] == '-'
+        for b in SL_PB_BUFFERS:
+            assert row[f'+{b:g} Saves'] == '-'
 
 
 def test_buffer_statistics_filtered_all_trades():
