@@ -1174,9 +1174,10 @@ def display_analysis_pullback(df: pd.DataFrame):
 
 
 TP_RANGES = [
-    ("0-20", 0, 20),
-    ("20-50", 20, 50),
-    ("50+", 50, float("inf")),
+    # 80% of trades
+    ("0-35", 0, 35),
+    # 20% of trades
+    ("35+", 35, float("inf")),
 ]
 
 
