@@ -1481,13 +1481,11 @@ def test_pullback_statistics_buffer_saves_trade():
 
 def test_tp_ranges_constant():
     """Test that TP_RANGES has expected ranges."""
-    assert len(TP_RANGES) == 5
-    assert TP_RANGES[0] == ("0-10", 0, 10)
-    assert TP_RANGES[1] == ("10-20", 10, 20)
-    assert TP_RANGES[2] == ("20-30", 20, 30)
-    assert TP_RANGES[3] == ("30-50", 30, 50)
-    assert TP_RANGES[4][0] == "50+"
-    assert TP_RANGES[4][1] == 50
+    assert len(TP_RANGES) == 3
+    assert TP_RANGES[0] == ("0-20", 0, 20)
+    assert TP_RANGES[1] == ("20-50", 20, 50)
+    assert TP_RANGES[2][0] == "50+"
+    assert TP_RANGES[2][1] == 50
 
 
 def test_tp_statistics_columns():
@@ -1498,11 +1496,11 @@ def test_tp_statistics_columns():
 
 
 def test_tp_statistics_all_ranges_present():
-    """Test that all 5 TP ranges appear in results."""
+    """Test that all TP ranges appear in results."""
     sample = get_sample_data()
     result = calculate_tp_statistics(sample)
-    assert len(result) == 5
-    assert list(result['TP Range']) == ['0-10', '10-20', '20-30', '30-50', '50+']
+    assert len(result) == 3
+    assert list(result['TP Range']) == ['0-20', '20-50', '50+']
 
 
 def test_tp_statistics_trade_counts():
@@ -1510,16 +1508,13 @@ def test_tp_statistics_trade_counts():
 
     Sample TP values: 0, 12.0, 0, 10.0, 0, 8.0, 0, 15.0, 10.0, 5.0
     Profitable overall (TP > 0): 6
-    0-10 (TP>=0, TP<10): 0, 0, 0, 8.0, 0, 5.0 = 6
-    10-20 (TP>=10, TP<20): 12.0, 10.0, 15.0, 10.0 = 4
+    0-20 (TP>0, TP<20): 12, 10, 8, 15, 10, 5 = 6
     """
     sample = get_sample_data()
     result = calculate_tp_statistics(sample)
     counts = dict(zip(result['TP Range'], result['Trades']))
-    assert counts['0-10'] == '6 of 6'
-    assert counts['10-20'] == '4 of 6'
-    assert counts['20-30'] == '0 of 6'
-    assert counts['30-50'] == '0 of 6'
+    assert counts['0-20'] == '6 of 6'
+    assert counts['20-50'] == '0 of 6'
     assert counts['50+'] == '0 of 6'
 
 
@@ -1527,7 +1522,7 @@ def test_tp_statistics_empty():
     """Test TP statistics with empty dataset."""
     empty = get_empty_data()
     result = calculate_tp_statistics(empty)
-    assert len(result) == 5
+    assert len(result) == 3
     for _, row in result.iterrows():
         assert row['Trades'] == '0 of 0'
 

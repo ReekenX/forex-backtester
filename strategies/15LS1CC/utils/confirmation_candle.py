@@ -1174,10 +1174,8 @@ def display_analysis_pullback(df: pd.DataFrame):
 
 
 TP_RANGES = [
-    ("0-10", 0, 10),
-    ("10-20", 10, 20),
-    ("20-30", 20, 30),
-    ("30-50", 30, 50),
+    ("0-20", 0, 20),
+    ("20-50", 20, 50),
     ("50+", 50, float("inf")),
 ]
 
@@ -1199,7 +1197,7 @@ def calculate_tp_statistics(df: pd.DataFrame) -> pd.DataFrame:
     results = []
 
     for label, low, high in TP_RANGES:
-        range_trades = df[(df['TP'] >= low) & (df['TP'] < high)]
+        range_trades = df[(df['TP'] > 0) & (df['TP'] >= low) & (df['TP'] < high)]
         results.append({
             'TP Range': label,
             'Trades': f"{len(range_trades)} of {total_profitable}",
