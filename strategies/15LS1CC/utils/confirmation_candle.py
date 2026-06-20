@@ -466,10 +466,47 @@ def _display_analysis_table(df: pd.DataFrame, title: str, strategy_names: List[s
 
 def display_analysis_strategies(df: pd.DataFrame):
     """
-    Display buffer analysis for every configured strategy in a single table.
+    Display buffer analysis for every configured strategy in a single table,
+    followed by a bar chart of each row's win rate (0–60%).
     """
     names = [name for name, _ in get_buffer_strategies()]
     _display_analysis_table(df, "Strategies", names)
+
+    stats_df = _calculate_buffer_statistics_filtered(df, names)
+    if not stats_df.empty:
+        _plot_strategies_win_rate(stats_df)
+
+
+def _plot_strategies_win_rate(stats_df: pd.DataFrame):
+    """Bar chart of win rate (0–60) for each row in the Strategies table."""
+    import matplotlib.pyplot as plt
+
+    win_rates = stats_df['Win Rate'].str.rstrip('%').astype(float).tolist()
+    labels = [
+        f"{row['Strategy']} {row['Buffer']} {row['RRR']}"
+        for _, row in stats_df.iterrows()
+    ]
+
+    fig, ax = plt.subplots(figsize=(max(12, len(labels) * 0.25), 5))
+    fig.patch.set_facecolor('#1e1e1e')
+    ax.set_facecolor('#1e1e1e')
+
+    colors = ['#4ade80' if wr >= 50 else '#f87171' for wr in win_rates]
+    ax.bar(range(len(labels)), win_rates, color=colors, edgecolor='#404040')
+
+    ax.set_ylim(0, 60)
+    ax.set_ylabel('Win Rate (%)', color='#e0e0e0')
+    ax.set_title('Strategies — Win Rate', color='#e0e0e0', loc='left')
+    ax.set_xticks(range(len(labels)))
+    ax.set_xticklabels(labels, rotation=90, color='#e0e0e0', fontsize=8)
+    ax.tick_params(axis='y', colors='#e0e0e0')
+    for spine in ax.spines.values():
+        spine.set_color('#404040')
+    ax.grid(axis='y', color='#404040', linestyle='--', alpha=0.5)
+    ax.set_axisbelow(True)
+
+    plt.tight_layout()
+    plt.show()
 
 
 FIXED_SL_SIZES = [1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
