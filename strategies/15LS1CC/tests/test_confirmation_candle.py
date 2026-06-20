@@ -485,7 +485,7 @@ def test_calculate_buffer_statistics_has_pass_column():
 
 def test_buffer_pips_constant():
     """Test that BUFFER_PIPS has expected values."""
-    assert BUFFER_PIPS == [0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
+    assert BUFFER_PIPS == [0, 1, 2, 3, 4, 5]
 
 
 def test_rrr_ratios_constant():

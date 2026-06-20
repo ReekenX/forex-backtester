@@ -19,7 +19,7 @@ from typing import Dict, List, Tuple, Callable
 RRR_RATIOS = [1, 2]
 
 # Extra pip buffer values to test
-BUFFER_PIPS = [0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
+BUFFER_PIPS = [0, 1, 2, 3, 4, 5]
 
 
 def load_data(filepath: str = "../strategies/15LS1CC/data.csv") -> pd.DataFrame:
