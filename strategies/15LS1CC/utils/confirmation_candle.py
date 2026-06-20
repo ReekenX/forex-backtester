@@ -466,11 +466,9 @@ def _display_analysis_table(df: pd.DataFrame, title: str, strategy_names: List[s
 
 def display_analysis_strategies(df: pd.DataFrame):
     """
-    Display buffer analysis for All Trades and 1H Aligned/Against in a single table.
+    Display buffer analysis for every configured strategy in a single table.
     """
-    names = ["All Trades", "1H Aligned", "1H Against"] + [
-        f"Fixed SL {x}" for x in FIXED_SL_STRATEGY_VALUES
-    ]
+    names = [name for name, _ in get_buffer_strategies()]
     _display_analysis_table(df, "Strategies", names)
 
 
