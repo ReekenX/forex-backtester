@@ -503,13 +503,21 @@ def display_analysis_strategies(df: pd.DataFrame):
         f"{row['Strategy']} {row['Buffer']} {row['RRR']}"
         for _, row in stats_df.iterrows()
     ]
+    breakevens = [
+        100.0 / (1 + float(str(rrr).split(':')[-1]))
+        for rrr in stats_df['RRR']
+    ]
 
     fig, ax = plt.subplots(figsize=(max(12, len(labels) * 0.25), 5))
     fig.patch.set_facecolor('#1e1e1e')
     ax.set_facecolor('#1e1e1e')
 
-    colors = ['#4ade80' if wr >= 50 else '#f87171' for wr in win_rates]
+    colors = ['#4ade80' if wr > be else '#f87171' for wr, be in zip(win_rates, breakevens)]
     ax.bar(range(len(labels)), win_rates, color=colors, edgecolor='#404040')
+
+    # Per-bar breakeven markers (50% for 1:1, 33.3% for 1:2, ...).
+    for i, be in enumerate(breakevens):
+        ax.hlines(be, i - 0.4, i + 0.4, colors='#e0e0e0', linewidth=1, alpha=0.6)
 
     ax.set_ylim(0, 60)
     ax.set_ylabel('Win Rate (%)', color='#e0e0e0')
