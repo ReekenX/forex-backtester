@@ -28,6 +28,8 @@ from utils.confirmation_candle import (
     _breakeven_rate,
     RRR_RATIOS,
     BUFFER_PIPS,
+    MIN_SL_VALUES,
+    FIXED_SL_STRATEGY_VALUES,
     FIXED_SL_SIZES,
     WEEKDAY_ORDER,
     _format_wl,
@@ -460,6 +462,65 @@ def test_calculate_buffer_statistics():
 def test_buffer_pips_constant():
     """Test that BUFFER_PIPS has expected values."""
     assert BUFFER_PIPS == [0, 1, 2, 3, 4, 5]
+
+
+def test_min_sl_values_constant():
+    """Min SL gating is tested at 0 (no filter), 1, 2, 3 pips."""
+    assert MIN_SL_VALUES == [0, 1, 2, 3]
+
+
+def test_buffer_statistics_has_min_sl_column():
+    """Strategies table should expose a Min SL column right after Buffer."""
+    sample = get_sample_data()
+    result = calculate_buffer_statistics(sample)
+    cols = list(result.columns)
+    assert "Min SL" in cols
+    assert cols.index("Min SL") == cols.index("Buffer") + 1
+
+
+def test_buffer_statistics_covers_every_min_sl_per_strategy():
+    """Every configured strategy must appear at every Min SL value."""
+    sample = get_sample_data()
+    result = calculate_buffer_statistics(sample)
+    strategy_names = [name for name, _ in get_buffer_strategies()]
+    for strategy in strategy_names:
+        present = set(result[result["Strategy"] == strategy]["Min SL"].unique())
+        assert present == set(MIN_SL_VALUES), f"{strategy} missing Min SL values: {set(MIN_SL_VALUES) - present}"
+
+
+def test_buffer_statistics_min_sl_filters_trades():
+    """Min SL > 0 keeps only trades whose original SL is strictly greater than Min SL.
+
+    Sample SL values are 3.5, 1.1, 2.0, 4.0, 3.0, 5.0, 2.5, 6.0, 8.0, 1.5:
+      Min SL 0 → 10
+      Min SL 1 → 10 (every SL > 1)
+      Min SL 2 → 7 (drops 1.1, 2.0, 1.5)
+      Min SL 3 → 5 (drops 1.1, 2.0, 3.0, 2.5, 1.5)
+    """
+    sample = get_sample_data()
+    result = calculate_buffer_statistics(sample)
+    all_buffer_zero_1_1 = result[
+        (result["Strategy"] == "All Trades")
+        & (result["Buffer"] == "+0")
+        & (result["RRR"] == "1:1")
+    ].set_index("Min SL")
+    assert all_buffer_zero_1_1.loc[0, "Trades"] == 10
+    assert all_buffer_zero_1_1.loc[1, "Trades"] == 10
+    assert all_buffer_zero_1_1.loc[2, "Trades"] == 7
+    assert all_buffer_zero_1_1.loc[3, "Trades"] == 5
+
+
+def test_buffer_statistics_min_sl_filter_applies_before_fixed_sl():
+    """Fixed-SL strategies first filter by original SL, then replace SL with the fixed value."""
+    sample = get_sample_data()
+    result = calculate_buffer_statistics(sample)
+    fixed_2 = result[
+        (result["Strategy"] == "Fixed SL 2") & (result["RRR"] == "1:1")
+    ].set_index("Min SL")
+    # Min SL 0 should include all 10 trades (Fixed SL replaces SL with 2 afterwards).
+    assert fixed_2.loc[0, "Trades"] == 10
+    # Min SL 3 should drop everything with original SL <= 3, leaving 5 trades.
+    assert fixed_2.loc[3, "Trades"] == 5
 
 
 def test_rrr_ratios_constant():

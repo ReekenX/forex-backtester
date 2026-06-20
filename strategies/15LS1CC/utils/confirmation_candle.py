@@ -321,6 +321,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
         return {
             "Strategy": strategy_name,
             "Buffer": f"+{buffer}",
+            "Min SL": 0,
             "RRR": rrr_label,
             "Trades": 0,
             "Notation": "0W – 0L",
@@ -337,6 +338,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
     return {
         "Strategy": strategy_name,
         "Buffer": f"+{buffer}",
+        "Min SL": 0,
         "RRR": rrr_label,
         "Trades": total_trades,
         "Notation": f"{wins}W – {losses}L",
@@ -344,7 +346,13 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
     }
 
 
+MIN_SL_VALUES = [0, 1, 2, 3]
 FIXED_SL_STRATEGY_VALUES = list(range(2, 11))
+
+
+def _apply_min_sl(df: pd.DataFrame, min_sl: int) -> pd.DataFrame:
+    """Keep only trades whose original SL is strictly greater than min_sl pips."""
+    return df if min_sl == 0 else df[df["SL"] > min_sl]
 
 
 def _fixed_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
@@ -398,11 +406,13 @@ def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     results = []
 
     for strategy_name, filter_func in strategies:
-        filtered_df = filter_func(df)
-        for rrr in RRR_RATIOS:
-            for buffer in _buffers_for(strategy_name):
-                stats = _calculate_stats_with_buffer(filtered_df, strategy_name, buffer, rrr)
-                results.append(stats)
+        for min_sl in MIN_SL_VALUES:
+            filtered_df = filter_func(_apply_min_sl(df, min_sl))
+            for rrr in RRR_RATIOS:
+                for buffer in _buffers_for(strategy_name):
+                    stats = _calculate_stats_with_buffer(filtered_df, strategy_name, buffer, rrr)
+                    stats["Min SL"] = min_sl
+                    results.append(stats)
 
     result_df = pd.DataFrame(results)
     result_df = _sort_strategy_rows(result_df)
@@ -424,7 +434,11 @@ def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
 
     sort_index = sorted(
         result_df.index,
-        key=lambda i: (strategy_key(result_df.at[i, 'Strategy']), rrr_key(result_df.at[i, 'RRR'])),
+        key=lambda i: (
+            strategy_key(result_df.at[i, 'Strategy']),
+            rrr_key(result_df.at[i, 'RRR']),
+            int(result_df.at[i, 'Min SL']) if 'Min SL' in result_df.columns else 0,
+        ),
     )
     return result_df.loc[sort_index].reset_index(drop=True)
 
@@ -444,11 +458,13 @@ def _calculate_buffer_statistics_filtered(df: pd.DataFrame, strategy_names: List
     results = []
 
     for strategy_name, filter_func in strategies:
-        filtered_df = filter_func(df)
-        for rrr in RRR_RATIOS:
-            for buffer in _buffers_for(strategy_name):
-                stats = _calculate_stats_with_buffer(filtered_df, strategy_name, buffer, rrr)
-                results.append(stats)
+        for min_sl in MIN_SL_VALUES:
+            filtered_df = filter_func(_apply_min_sl(df, min_sl))
+            for rrr in RRR_RATIOS:
+                for buffer in _buffers_for(strategy_name):
+                    stats = _calculate_stats_with_buffer(filtered_df, strategy_name, buffer, rrr)
+                    stats["Min SL"] = min_sl
+                    results.append(stats)
 
     result_df = pd.DataFrame(results)
     result_df = _sort_strategy_rows(result_df)
@@ -500,7 +516,7 @@ def display_analysis_strategies(df: pd.DataFrame):
 
     win_rates = stats_df['Win Rate'].str.rstrip('%').astype(float).tolist()
     labels = [
-        f"{row['Strategy']} {row['Buffer']} {row['RRR']}"
+        f"{row['Strategy']} {row['Buffer']} min{row['Min SL']} {row['RRR']}"
         for _, row in stats_df.iterrows()
     ]
     breakevens = [
