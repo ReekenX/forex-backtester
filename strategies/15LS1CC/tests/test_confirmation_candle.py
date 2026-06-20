@@ -20,7 +20,6 @@ from utils.confirmation_candle import (
     create_html_table,
     get_strategies,
     get_buffer_strategies,
-    simulate_challenge,
     _calculate_stats,
     _calculate_stats_with_buffer,
     _calculate_fixed_sl_stats,
@@ -403,8 +402,6 @@ def test_buffer_stats_empty():
 
     assert stats['Buffer'] == '+1.0'
     assert stats['Notation'] == '0W – 0L'
-    assert stats['Pass'] == 0
-    assert stats['Fail'] == 0
 
 
 def test_get_buffer_strategies():
@@ -458,29 +455,6 @@ def test_calculate_buffer_statistics():
     result = calculate_buffer_statistics(sample)
 
     assert isinstance(result, pd.DataFrame)
-
-
-def test_calculate_buffer_statistics_has_pass_column():
-    """Test that buffer statistics includes Pass and Drawdown columns."""
-    # Need enough trades to produce passes
-    trades = pd.DataFrame({
-        'Date': [f'2026-01-{i+1:02d}' for i in range(20)],
-        'Weekday': ['Monday'] * 20,
-        'Trade': [f'#{i+1}' for i in range(20)],
-        'Direction': ['Buy'] * 20,
-        '1H': ['Buy'] * 20,
-        'SL': [2.0] * 20,
-        'Pullback': [1.0] * 20,
-        'TP': [10.0] * 20,
-        'R': [5.0] * 20,
-    })
-    result = calculate_buffer_statistics(trades)
-
-    assert 'Pass' in result.columns
-    assert 'Fail' in result.columns
-    # All rows should have Pass > 0 (filtered)
-    for _, row in result.iterrows():
-        assert row['Pass'] > 0
 
 
 def test_buffer_pips_constant():
@@ -871,116 +845,6 @@ def test_fixed_sl_1h_aligned_wins_more():
     assert len(against_rows) == 0
 
 
-def test_simulate_challenge_all_wins_1_1():
-    """Test simulate_challenge: 10 consecutive wins at 1:1 = 1 pass."""
-    mask = [True] * 10
-    passes, drawdowns = simulate_challenge(mask, rrr_ratio=1)
-    assert passes == 1
-    assert drawdowns == 0
-
-
-def test_simulate_challenge_all_losses():
-    """Test simulate_challenge: 10 consecutive losses = 1 drawdown."""
-    mask = [False] * 10
-    passes, drawdowns = simulate_challenge(mask, rrr_ratio=1)
-    assert passes == 0
-    assert drawdowns == 1
-
-
-def test_simulate_challenge_20_wins():
-    """Test simulate_challenge: 20 wins at 1:1 = 2 passes."""
-    mask = [True] * 20
-    passes, drawdowns = simulate_challenge(mask, rrr_ratio=1)
-    assert passes == 2
-    assert drawdowns == 0
-
-
-def test_simulate_challenge_20_losses():
-    """Test simulate_challenge: 20 losses = 2 drawdowns."""
-    mask = [False] * 20
-    passes, drawdowns = simulate_challenge(mask, rrr_ratio=1)
-    assert passes == 0
-    assert drawdowns == 2
-
-
-def test_simulate_challenge_reset_after_pass():
-    """Test that sum resets to 0 after a pass, then losses start fresh."""
-    # 10 wins = pass (reset to 0), then 10 losses = drawdown
-    mask = [True] * 10 + [False] * 10
-    passes, drawdowns = simulate_challenge(mask, rrr_ratio=1)
-    assert passes == 1
-    assert drawdowns == 1
-
-
-def test_simulate_challenge_reset_after_drawdown():
-    """Test that sum resets to 0 after a drawdown, then wins start fresh."""
-    # 10 losses = drawdown (reset to 0), then 10 wins = pass
-    mask = [False] * 10 + [True] * 10
-    passes, drawdowns = simulate_challenge(mask, rrr_ratio=1)
-    assert passes == 1
-    assert drawdowns == 1
-
-
-def test_simulate_challenge_1_2_rrr():
-    """Test simulate_challenge at 1:2 RRR: each win = +2R, so 5 wins = pass."""
-    mask = [True] * 5
-    passes, drawdowns = simulate_challenge(mask, rrr_ratio=2)
-    assert passes == 1
-    assert drawdowns == 0
-
-
-def test_simulate_challenge_1_2_rrr_10_wins():
-    """Test simulate_challenge at 1:2 RRR: 10 wins = +20R = 2 passes."""
-    mask = [True] * 10
-    passes, drawdowns = simulate_challenge(mask, rrr_ratio=2)
-    assert passes == 2
-    assert drawdowns == 0
-
-
-def test_simulate_challenge_empty():
-    """Test simulate_challenge with no trades."""
-    passes, drawdowns = simulate_challenge([], rrr_ratio=1)
-    assert passes == 0
-    assert drawdowns == 0
-
-
-def test_simulate_challenge_mixed_no_threshold():
-    """Test simulate_challenge: alternating wins/losses never reaches threshold."""
-    # Win, Loss, Win, Loss... at 1:1 → sum oscillates between 0 and 1
-    mask = [True, False] * 5
-    passes, drawdowns = simulate_challenge(mask, rrr_ratio=1)
-    assert passes == 0
-    assert drawdowns == 0
-
-
-def test_simulate_challenge_near_threshold():
-    """Test that reaching exactly the threshold triggers pass/drawdown."""
-    # 9 wins at 1:1 = 9R (not enough), 10th win = 10R = pass
-    mask = [True] * 9
-    passes, _ = simulate_challenge(mask, rrr_ratio=1)
-    assert passes == 0
-
-    mask = [True] * 10
-    passes, _ = simulate_challenge(mask, rrr_ratio=1)
-    assert passes == 1
-
-
-def test_buffer_stats_has_challenge_columns():
-    """Test that _calculate_stats_with_buffer returns Pass and Drawdown."""
-    trades = pd.DataFrame({
-        'Date': [f'2026-01-{i+1:02d}' for i in range(10)],
-        'SL': [2.0] * 10,
-        'Pullback': [1.0] * 10,
-        'TP': [10.0] * 10,
-    })
-
-    stats = _calculate_stats_with_buffer(trades, 'Test', 0.0)
-    assert 'Pass' in stats
-    assert 'Fail' in stats
-    assert stats['Pass'] == 1  # 10 wins at 1:1 = 1 pass
-    assert stats['Fail'] == 0
-
-
 def test_buffer_stats_has_trades_column():
     """Test that _calculate_stats_with_buffer returns Trades count."""
     trades = pd.DataFrame({
@@ -999,31 +863,6 @@ def test_buffer_stats_empty_has_trades_zero():
     empty = get_empty_data()
     stats = _calculate_stats_with_buffer(empty, 'Empty', 1.0)
     assert stats['Trades'] == 0
-
-
-def test_simulate_challenge_float_rrr():
-    """Test simulate_challenge with float RRR (e.g., 3.5)."""
-    # 3 wins at 1:3.5 = +10.5R => 1 pass
-    mask = [True] * 3
-    passes, drawdowns = simulate_challenge(mask, rrr_ratio=3.5)
-    assert passes == 1
-    assert drawdowns == 0
-
-
-def test_simulate_challenge_float_rrr_not_enough():
-    """Test simulate_challenge with float RRR: 2 wins at 1:4.5 = +9R, not enough."""
-    mask = [True] * 2
-    passes, drawdowns = simulate_challenge(mask, rrr_ratio=4.5)
-    assert passes == 0
-    assert drawdowns == 0
-
-
-def test_simulate_challenge_float_rrr_10():
-    """Test simulate_challenge at 1:10 RRR: 1 win = +10R = 1 pass."""
-    mask = [True]
-    passes, drawdowns = simulate_challenge(mask, rrr_ratio=10.0)
-    assert passes == 1
-    assert drawdowns == 0
 
 
 def test_buffer_stats_with_float_rrr():
@@ -1713,11 +1552,11 @@ def test_buffer_statistics_filtered_excludes_others():
 
 
 def test_buffer_statistics_filtered_empty():
-    """Test _calculate_buffer_statistics_filtered with empty data."""
+    """Empty input still emits a row per (buffer, RRR) with zero trades."""
     empty = get_empty_data()
     result = _calculate_buffer_statistics_filtered(empty, ["All Trades"])
     assert isinstance(result, pd.DataFrame)
-    assert len(result) == 0
+    assert (result['Trades'] == 0).all()
 
 
 def run_all_tests():
@@ -1753,7 +1592,6 @@ def run_all_tests():
         # test_buffer_sl_cap_filter,
         # test_buffer_sl_cap_with_1h_filter,
         test_calculate_buffer_statistics,
-        test_calculate_buffer_statistics_has_pass_column,
         test_buffer_pips_constant,
         test_rrr_ratios_constant,
         test_breakeven_rate,
@@ -1784,23 +1622,8 @@ def run_all_tests():
         test_fixed_sl_1h_has_strategy_column,
         test_fixed_sl_1h_strategies_present,
         test_fixed_sl_1h_aligned_wins_more,
-        test_simulate_challenge_all_wins_1_1,
-        test_simulate_challenge_all_losses,
-        test_simulate_challenge_20_wins,
-        test_simulate_challenge_20_losses,
-        test_simulate_challenge_reset_after_pass,
-        test_simulate_challenge_reset_after_drawdown,
-        test_simulate_challenge_1_2_rrr,
-        test_simulate_challenge_1_2_rrr_10_wins,
-        test_simulate_challenge_empty,
-        test_simulate_challenge_mixed_no_threshold,
-        test_simulate_challenge_near_threshold,
-        test_buffer_stats_has_challenge_columns,
         test_buffer_stats_has_trades_column,
         test_buffer_stats_empty_has_trades_zero,
-        test_simulate_challenge_float_rrr,
-        test_simulate_challenge_float_rrr_not_enough,
-        test_simulate_challenge_float_rrr_10,
         test_buffer_stats_with_float_rrr,
         test_buffer_stats_with_float_rrr_loss,
         test_format_wl,

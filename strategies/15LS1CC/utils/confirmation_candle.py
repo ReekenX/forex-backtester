@@ -296,17 +296,6 @@ def create_html_table(df: pd.DataFrame) -> str:
                     css_class = "positive-edge" if edge_val > 0 else "negative-edge"
                 except (ValueError, TypeError):
                     pass
-            elif col == "Pass":
-                try:
-                    css_class = "positive-edge" if int(value) > 0 else ""
-                except (ValueError, TypeError):
-                    pass
-            elif col == "Fail":
-                try:
-                    css_class = "negative-edge" if int(value) > 0 else ""
-                except (ValueError, TypeError):
-                    pass
-
             cls_attr = f' class="{css_class}"' if css_class else ""
             html += f"                <td{cls_attr}>{value}</td>\n"
         html += "            </tr>\n"
@@ -318,60 +307,12 @@ def create_html_table(df: pd.DataFrame) -> str:
     return html
 
 
-def simulate_challenge(winning_mask, rrr_ratio: float, pass_threshold: float = 10, drawdown_threshold: float = 10) -> Tuple[int, int]:
-    """
-    Simulate prop firm challenge attempts by walking through trades sequentially.
-
-    Tracks cumulative R. On reaching +pass_threshold, counts a pass and resets.
-    On reaching -drawdown_threshold, counts a drawdown and resets.
-
-    Args:
-        winning_mask: Boolean series/list where True = win, False = loss
-        rrr_ratio: R gained per win (e.g., 1 for 1:1, 2 for 1:2)
-        pass_threshold: R needed to pass challenge
-        drawdown_threshold: R loss that fails challenge
-
-    Returns:
-        Tuple of (pass_count, drawdown_count)
-    """
-    running_sum = 0.0
-    pass_count = 0
-    drawdown_count = 0
-
-    for is_win in winning_mask:
-        if is_win:
-            running_sum += rrr_ratio
-        else:
-            running_sum -= 1
-
-        if running_sum >= pass_threshold:
-            pass_count += 1
-            running_sum = 0.0
-        elif running_sum <= -drawdown_threshold:
-            drawdown_count += 1
-            running_sum = 0.0
-
-    return pass_count, drawdown_count
-
-
 def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffer: float, rrr_ratio: float = 1) -> Dict:
     """
     Calculate trading statistics with extra pips added to SL.
 
     With buffer, effective SL = SL + buffer. Trade survives if Pullback < effective SL.
     Trade wins if TP >= rrr_ratio * effective SL.
-
-    Includes prop firm challenge simulation: walks through trades tracking cumulative R,
-    counting passes (+10R) and drawdowns (-10R).
-
-    Args:
-        trades: DataFrame containing filtered trades
-        strategy_name: Name of the strategy
-        buffer: Extra pips to add to SL
-        rrr_ratio: Risk-reward ratio (1 for 1:1, 2 for 1:2)
-
-    Returns:
-        Dictionary with calculated statistics
     """
     rrr_label = f"1:{rrr_ratio:g}"
     total_trades = len(trades)
@@ -384,20 +325,14 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
             "Trades": 0,
             "Notation": "0W – 0L",
             "Win Rate": "0.0%",
-            "Fail": 0,
-            "Pass": 0,
         }
 
     effective_sl = trades["SL"] + buffer
-
-    # Win condition with buffer: Pullback < effective_sl AND TP >= rrr_ratio * effective_sl
     winning_mask = (trades["Pullback"] < effective_sl) & (trades["TP"] >= rrr_ratio * effective_sl)
 
     wins = winning_mask.sum()
     losses = total_trades - wins
     win_rate = (wins / total_trades) * 100
-
-    pass_count, drawdown_count = simulate_challenge(winning_mask, rrr_ratio)
 
     return {
         "Strategy": strategy_name,
@@ -406,8 +341,6 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
         "Trades": total_trades,
         "Notation": f"{wins}W – {losses}L",
         "Win Rate": f"{win_rate:.1f}%",
-        "Fail": drawdown_count,
-        "Pass": pass_count,
     }
 
 
@@ -464,16 +397,7 @@ def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
                 results.append(stats)
 
     result_df = pd.DataFrame(results)
-
-    # Filter to only show strategies with at least one pass
-    result_df = result_df[result_df["Pass"] > 0].copy()
-
-    # Sort by Pass descending, then Drawdown ascending
-    result_df = result_df.sort_values(["Pass", "Fail"], ascending=[False, True])
-
-    # Reset index
     result_df = result_df.reset_index(drop=True)
-
     return result_df
 
 
@@ -499,10 +423,7 @@ def _calculate_buffer_statistics_filtered(df: pd.DataFrame, strategy_names: List
                 results.append(stats)
 
     result_df = pd.DataFrame(results)
-    result_df = result_df[result_df["Pass"] > 0].copy()
-    result_df = result_df.sort_values(["Pass", "Fail"], ascending=[False, True])
     result_df = result_df.reset_index(drop=True)
-
     return result_df
 
 
