@@ -456,24 +456,11 @@ def _display_analysis_table(df: pd.DataFrame, title: str, strategy_names: List[s
         display(HTML(html_table))
 
 
-def display_analysis_all(df: pd.DataFrame):
+def display_analysis_strategies(df: pd.DataFrame):
     """
-    Display buffer analysis for All Trades.
-
-    Args:
-        df: DataFrame with trading data
+    Display buffer analysis for All Trades and 1H Aligned/Against in a single table.
     """
-    _display_analysis_table(df, "All Trades Analysis", ["All Trades"])
-
-
-def display_analysis_1h(df: pd.DataFrame):
-    """
-    Display buffer analysis for 1H Aligned and 1H Against trades.
-
-    Args:
-        df: DataFrame with trading data
-    """
-    _display_analysis_table(df, "1H Alignment Analysis", ["1H Aligned", "1H Against"])
+    _display_analysis_table(df, "Strategies", ["All Trades", "1H Aligned", "1H Against"])
 
 
 FIXED_SL_SIZES = [1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
