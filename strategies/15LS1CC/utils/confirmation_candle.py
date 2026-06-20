@@ -469,17 +469,14 @@ def display_analysis_strategies(df: pd.DataFrame):
     Display buffer analysis for every configured strategy in a single table,
     followed by a bar chart of each row's win rate (0–60%).
     """
+    import matplotlib.pyplot as plt
+
     names = [name for name, _ in get_buffer_strategies()]
     _display_analysis_table(df, "Strategies", names)
 
     stats_df = _calculate_buffer_statistics_filtered(df, names)
-    if not stats_df.empty:
-        _plot_strategies_win_rate(stats_df)
-
-
-def _plot_strategies_win_rate(stats_df: pd.DataFrame):
-    """Bar chart of win rate (0–60) for each row in the Strategies table."""
-    import matplotlib.pyplot as plt
+    if stats_df.empty:
+        return
 
     win_rates = stats_df['Win Rate'].str.rstrip('%').astype(float).tolist()
     labels = [
