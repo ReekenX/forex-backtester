@@ -296,6 +296,19 @@ def create_html_table(df: pd.DataFrame) -> str:
                     css_class = "positive-edge" if edge_val > 0 else "negative-edge"
                 except (ValueError, TypeError):
                     pass
+            elif col == "Win Rate":
+                try:
+                    wr = float(str(value).rstrip("%"))
+                    rrr_val = 1.0
+                    if "RRR" in df.columns:
+                        try:
+                            rrr_val = float(str(row["RRR"]).split(":")[-1])
+                        except (ValueError, IndexError):
+                            pass
+                    breakeven = 100.0 / (1 + rrr_val)
+                    css_class = "positive-edge" if wr > breakeven else "negative-edge"
+                except (ValueError, TypeError):
+                    pass
             cls_attr = f' class="{css_class}"' if css_class else ""
             html += f"                <td{cls_attr}>{value}</td>\n"
         html += "            </tr>\n"
