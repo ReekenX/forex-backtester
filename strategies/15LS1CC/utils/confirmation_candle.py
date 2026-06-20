@@ -344,30 +344,38 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
     }
 
 
+FIXED_SL_STRATEGY_VALUES = list(range(2, 11))
+
+
+def _fixed_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
+    """Return a filter that replaces the SL column with a fixed value of x pips."""
+    def _filter(df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+        out["SL"] = float(x)
+        return out
+    return _filter
+
+
 def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]:
     """
     Get key strategies to test with SL buffers.
 
-    Returns:
-        List of tuples (strategy_name, filter_function)
+    "Fixed SL X" strategies override SL to X pips and are evaluated only at buffer 0.
     """
-    base_strategies = [
+    strategies: List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]] = [
         ("All Trades", lambda df: df),
         ("1H Aligned", lambda df: df[df["Direction"] == df["1H"]]),
         ("1H Against", lambda df: df[df["Direction"] != df["1H"]]),
     ]
-
-    strategies = list(base_strategies)
-
-    # sl_caps = [3, 4, 5]
-    # for name, base_func in base_strategies:
-    #     for cap in sl_caps:
-    #         strategies.append((
-    #             f"{name} + SL < {cap}",
-    #             lambda df, f=base_func, c=cap: f(df[df["SL"] < c])
-    #         ))
-
+    strategies.extend(
+        (f"Fixed SL {x}", _fixed_sl_filter(x)) for x in FIXED_SL_STRATEGY_VALUES
+    )
     return strategies
+
+
+def _buffers_for(strategy_name: str) -> List[float]:
+    """Fixed-SL strategies only run with buffer 0; everything else uses BUFFER_PIPS."""
+    return [0] if strategy_name.startswith("Fixed SL ") else BUFFER_PIPS
 
 
 def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
@@ -392,7 +400,7 @@ def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     for strategy_name, filter_func in strategies:
         filtered_df = filter_func(df)
         for rrr in RRR_RATIOS:
-            for buffer in BUFFER_PIPS:
+            for buffer in _buffers_for(strategy_name):
                 stats = _calculate_stats_with_buffer(filtered_df, strategy_name, buffer, rrr)
                 results.append(stats)
 
@@ -418,7 +426,7 @@ def _calculate_buffer_statistics_filtered(df: pd.DataFrame, strategy_names: List
     for strategy_name, filter_func in strategies:
         filtered_df = filter_func(df)
         for rrr in RRR_RATIOS:
-            for buffer in BUFFER_PIPS:
+            for buffer in _buffers_for(strategy_name):
                 stats = _calculate_stats_with_buffer(filtered_df, strategy_name, buffer, rrr)
                 results.append(stats)
 
@@ -460,7 +468,10 @@ def display_analysis_strategies(df: pd.DataFrame):
     """
     Display buffer analysis for All Trades and 1H Aligned/Against in a single table.
     """
-    _display_analysis_table(df, "Strategies", ["All Trades", "1H Aligned", "1H Against"])
+    names = ["All Trades", "1H Aligned", "1H Against"] + [
+        f"Fixed SL {x}" for x in FIXED_SL_STRATEGY_VALUES
+    ]
+    _display_analysis_table(df, "Strategies", names)
 
 
 FIXED_SL_SIZES = [1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
