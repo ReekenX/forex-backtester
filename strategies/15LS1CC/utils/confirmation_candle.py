@@ -405,8 +405,28 @@ def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
                 results.append(stats)
 
     result_df = pd.DataFrame(results)
-    result_df = result_df.reset_index(drop=True)
+    result_df = _sort_strategy_rows(result_df)
     return result_df
+
+
+def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
+    """Sort rows by Strategy (natural order, numbers compared numerically) then RRR ascending."""
+    import re
+
+    def strategy_key(name: str):
+        return [int(p) if p.isdigit() else p.lower() for p in re.split(r'(\d+)', str(name))]
+
+    def rrr_key(rrr: str):
+        try:
+            return float(str(rrr).split(':')[-1])
+        except (ValueError, IndexError):
+            return float('inf')
+
+    sort_index = sorted(
+        result_df.index,
+        key=lambda i: (strategy_key(result_df.at[i, 'Strategy']), rrr_key(result_df.at[i, 'RRR'])),
+    )
+    return result_df.loc[sort_index].reset_index(drop=True)
 
 
 def _calculate_buffer_statistics_filtered(df: pd.DataFrame, strategy_names: List[str]) -> pd.DataFrame:
@@ -431,7 +451,7 @@ def _calculate_buffer_statistics_filtered(df: pd.DataFrame, strategy_names: List
                 results.append(stats)
 
     result_df = pd.DataFrame(results)
-    result_df = result_df.reset_index(drop=True)
+    result_df = _sort_strategy_rows(result_df)
     return result_df
 
 
