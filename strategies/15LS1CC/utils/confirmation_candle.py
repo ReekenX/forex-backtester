@@ -995,14 +995,7 @@ def display_weekday(df: pd.DataFrame):
 
 
 SL_RANGES = [
-    # 90% of trades are in this range (eg. 2026-06-19 there were 535 trades)
-    ("< 5", 0, 5),
-
-    # Other 10% of trades are in this range (eg. 2026-06-19 there were 67 trades)
-    ("5+", 5, float("inf")),
-    # ("5-10", 5, 10),
-    # ("10-15", 10, 15),
-    # ("15+", 15, float("inf")),
+    (f"0-{x}", 0, x) for x in range(1, 11)
 ]
 
 
