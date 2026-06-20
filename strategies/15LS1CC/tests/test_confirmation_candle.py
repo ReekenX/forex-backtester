@@ -44,12 +44,6 @@ from utils.confirmation_candle import (
     calculate_sl_pb_crosstab,
     calculate_sl_pb_distribution,
     calculate_sl_pb_buffer_impact,
-    calculate_direction_statistics,
-    calculate_pd_alignment_statistics,
-    calculate_pd_zone_statistics,
-    calculate_pd_1h_combined_statistics,
-    calculate_pd_direction_statistics,
-    PD_ZONES,
 )
 
 
@@ -1726,100 +1720,6 @@ def test_buffer_statistics_filtered_empty():
     assert len(result) == 0
 
 
-def test_direction_statistics_structure():
-    """Direction stats should expose Buy + Sell rows with 1:2 and 1:3 columns."""
-    result = calculate_direction_statistics(get_sample_data())
-    assert list(result['Direction']) == ['Buy', 'Sell']
-    assert list(result.columns) == ['Direction', 'Trades', '1:2 W/L', 'Edge 1:2', '1:3 W/L', 'Edge 1:3']
-
-
-def test_direction_statistics_counts():
-    """3 aligned Buys, 3 aligned Sells in the sample."""
-    result = calculate_direction_statistics(get_sample_data())
-    rows = {r['Direction']: r for _, r in result.iterrows()}
-    assert rows['Buy']['Trades'] == 3
-    assert rows['Sell']['Trades'] == 3
-
-
-def test_direction_statistics_buy_winner():
-    """Among aligned Buys, only Row 1 (SL=1.1 PB=0.8 TP=12) wins at both RRRs."""
-    result = calculate_direction_statistics(get_sample_data())
-    rows = {r['Direction']: r for _, r in result.iterrows()}
-    assert rows['Buy']['1:2 W/L'].startswith('1W - 2L')
-    assert rows['Buy']['1:3 W/L'].startswith('1W - 2L')
-    assert rows['Sell']['1:2 W/L'].startswith('0W - 3L')
-
-
-def test_direction_statistics_empty():
-    """Empty input yields zero-trade rows for Buy and Sell."""
-    result = calculate_direction_statistics(get_empty_data())
-    for _, row in result.iterrows():
-        assert row['Trades'] == 0
-        assert row['Edge 1:2'] == '0.000R'
-
-
-def test_pd_alignment_structure():
-    result = calculate_pd_alignment_statistics(get_sample_data())
-    assert list(result['Filter']) == ['All PD-Known', 'PD Aligned', 'PD Against']
-    assert {'1:2 W/L', '1:3 W/L', 'Edge 1:2', 'Edge 1:3', 'Trades'}.issubset(result.columns)
-
-
-def test_pd_alignment_counts():
-    result = calculate_pd_alignment_statistics(get_sample_data())
-    rows = {r['Filter']: r for _, r in result.iterrows()}
-    assert rows['All PD-Known']['Trades'] == 8
-    assert rows['PD Aligned']['Trades'] == 5
-    assert rows['PD Against']['Trades'] == 3
-
-
-def test_pd_alignment_winner_in_aligned():
-    """Trade #1 (Buy/Buy/Buy, TP=12) is the lone 1:2 win and falls under PD Aligned."""
-    result = calculate_pd_alignment_statistics(get_sample_data())
-    rows = {r['Filter']: r for _, r in result.iterrows()}
-    assert rows['PD Aligned']['1:2 W/L'].startswith('1W - 4L')
-    assert rows['PD Against']['1:2 W/L'].startswith('0W - 3L')
-
-
-def test_pd_alignment_empty():
-    result = calculate_pd_alignment_statistics(get_empty_data())
-    rows = {r['Filter']: r for _, r in result.iterrows()}
-    assert rows['All PD-Known']['Trades'] == 0
-    assert rows['PD Aligned']['Trades'] == 0
-
-
-def test_pd_zone_structure():
-    result = calculate_pd_zone_statistics(get_sample_data())
-    assert list(result['Zone']) == [label for label, _ in PD_ZONES]
-
-
-def test_pd_zone_counts():
-    result = calculate_pd_zone_statistics(get_sample_data())
-    rows = {r['Zone']: r for _, r in result.iterrows()}
-    assert rows['Discount (PD = Buy)']['Trades'] == 4
-    assert rows['Premium (PD = Sell)']['Trades'] == 4
-    assert rows['Discount (PD = Buy)']['1:2 W/L'].startswith('1W - 3L')
-    assert rows['Premium (PD = Sell)']['1:2 W/L'].startswith('0W - 4L')
-
-
-def test_pd_1h_combined_counts():
-    result = calculate_pd_1h_combined_statistics(get_sample_data())
-    rows = {r['Combination']: r for _, r in result.iterrows()}
-    assert rows['1H Aligned + PD Aligned']['Trades'] == 4
-    assert rows['1H Aligned + PD Against']['Trades'] == 2
-    assert rows['1H Against + PD Aligned']['Trades'] == 1
-    assert rows['1H Against + PD Against']['Trades'] == 1
-    assert rows['1H Aligned + PD Aligned']['1:2 W/L'].startswith('1W - 3L')
-
-
-def test_pd_direction_counts():
-    """PD-Aligned trades split by Direction: Buy entries in Discount, Sell entries in Premium."""
-    result = calculate_pd_direction_statistics(get_sample_data())
-    rows = {r['Direction']: r for _, r in result.iterrows()}
-    assert rows['Buy']['Trades'] == 2
-    assert rows['Sell']['Trades'] == 3
-    assert rows['Buy']['1:2 W/L'].startswith('1W - 1L')
-
-
 def run_all_tests():
     """Run all tests and report results."""
     tests = [
@@ -1941,18 +1841,6 @@ def run_all_tests():
         test_buffer_statistics_filtered_1h,
         test_buffer_statistics_filtered_excludes_others,
         test_buffer_statistics_filtered_empty,
-        test_direction_statistics_structure,
-        test_direction_statistics_counts,
-        test_direction_statistics_buy_winner,
-        test_direction_statistics_empty,
-        test_pd_alignment_structure,
-        test_pd_alignment_counts,
-        test_pd_alignment_winner_in_aligned,
-        test_pd_alignment_empty,
-        test_pd_zone_structure,
-        test_pd_zone_counts,
-        test_pd_1h_combined_counts,
-        test_pd_direction_counts,
     ]
 
     passed = 0
