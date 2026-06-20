@@ -1033,90 +1033,67 @@ def test_weekday_statistics_single_day():
 
 
 def test_sl_ranges_constant():
-    """Test that SL_RANGES has expected ranges."""
-    assert len(SL_RANGES) == 5
-    assert SL_RANGES[0] == ("0-3", 0, 3)
-    assert SL_RANGES[1] == ("3-5", 3, 5)
-    assert SL_RANGES[2] == ("< 5", 0, 5)
-    assert SL_RANGES[3] == ("5-10", 5, 10)
-    assert SL_RANGES[4][0] == "10+"
-    assert SL_RANGES[4][1] == 10
+    """Test that SL_RANGES has the two configured buckets."""
+    assert len(SL_RANGES) == 2
+    assert SL_RANGES[0] == ("< 5", 0, 5)
+    assert SL_RANGES[1][0] == "5+"
+    assert SL_RANGES[1][1] == 5
 
 
 def test_sl_statistics_columns():
-    """Test that SL statistics has expected columns."""
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
     assert list(result.columns) == ['SL Range', 'Trades', 'Regular', 'With 2 pips buffer']
 
 
 def test_sl_statistics_all_ranges_present():
-    """Test that all 4 SL ranges appear in results."""
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
-    assert len(result) == 5
-    assert list(result['SL Range']) == ['0-3', '3-5', '< 5', '5-10', '10+']
+    assert len(result) == 2
+    assert list(result['SL Range']) == ['< 5', '5+']
 
 
 def test_sl_statistics_trade_counts():
-    """Test trade counts per SL range from sample data.
+    """Sample SL values: 3.5, 1.1, 2.0, 4.0, 3.0, 5.0, 2.5, 6.0, 8.0, 1.5.
 
-    Sample SL values: 3.5, 1.1, 2.0, 4.0, 3.0, 5.0, 2.5, 6.0, 8.0, 1.5
-    0-3 (SL>=0, SL<3): 1.1, 2.0, 2.5, 1.5 = 4
-    3-5 (SL>=3, SL<5): 3.5, 4.0, 3.0 = 3
-    5-10 (SL>=5, SL<10): 5.0, 6.0, 8.0 = 3
-    10+: 0
+    < 5: 3.5, 1.1, 2.0, 4.0, 3.0, 2.5, 1.5 = 7
+    5+:  5.0, 6.0, 8.0                       = 3
     """
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
     counts = dict(zip(result['SL Range'], result['Trades']))
-    assert counts['0-3'] == 4
-    assert counts['3-5'] == 3
-    assert counts['5-10'] == 3
-    assert counts['10+'] == 0
+    assert counts['< 5'] == 7
+    assert counts['5+'] == 3
 
 
 def test_sl_statistics_regular():
-    """Test Regular column per SL range from sample data.
+    """Win condition: Pullback < SL AND TP > 0.
 
-    Win condition: Pullback < SL AND TP > 0.
-    0-3: SL=1.1 PB=0.8 TP=12 => W, SL=2.0 PB=2.1 TP=0 => L, SL=2.5 PB=2.5 TP=0 => L, SL=1.5 PB=0.5 TP=5 => W
-    3-5: SL=3.5 PB=3.5 TP=0 => L, SL=4.0 PB=1.5 TP=10 => W, SL=3.0 PB=3.0 TP=0 => L
-    5-10: SL=5.0 PB=2.0 TP=8 => W, SL=6.0 PB=3.0 TP=15 => W, SL=8.0 PB=7.0 TP=10 => W
+    < 5: W,L,L,W,L,L,W → 3W 4L
+    5+:  W,W,W → 3W 0L
     """
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-3']['Regular'] == '2W - 2L (50.0%)'
-    assert rows['3-5']['Regular'] == '1W - 2L (33.3%)'
-    assert rows['5-10']['Regular'] == '3W - 0L (100.0%)'
+    assert rows['< 5']['Regular'] == '3W - 4L (42.9%)'
+    assert rows['5+']['Regular'] == '3W - 0L (100.0%)'
 
 
 def test_sl_statistics_buffer():
-    """Test With 2 pips buffer column per SL range from sample data.
-
-    Buffer win: Pullback < SL + 2 AND TP > 0.
-    0-3: SL=1.1 PB=0.8 TP=12 => W, SL=2.0 PB=2.1 TP=0 => L(TP=0), SL=2.5 PB=2.5 TP=0 => L(TP=0), SL=1.5 PB=0.5 TP=5 => W
-    3-5: SL=3.5 PB=3.5 TP=0 => L(TP=0), SL=4.0 PB=1.5 TP=10 => W, SL=3.0 PB=3.0 TP=0 => L(TP=0)
-    5-10: SL=5.0 PB=2.0 TP=8 => W, SL=6.0 PB=3.0 TP=15 => W, SL=8.0 PB=7.0 TP=10 => W
-    """
+    """Buffer win: Pullback < SL + 2 AND TP > 0. All losses in '< 5' have TP=0, so buffer doesn't help."""
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    # 0-3: same wins since losses are TP=0
-    assert rows['0-3']['With 2 pips buffer'] == '2W - 2L (50.0%)'
-    # 3-5: same since losses are TP=0
-    assert rows['3-5']['With 2 pips buffer'] == '1W - 2L (33.3%)'
-    assert rows['5-10']['With 2 pips buffer'] == '3W - 0L (100.0%)'
+    assert rows['< 5']['With 2 pips buffer'] == '3W - 4L (42.9%)'
+    assert rows['5+']['With 2 pips buffer'] == '3W - 0L (100.0%)'
 
 
 def test_sl_statistics_empty():
-    """Test SL statistics with empty dataset."""
     empty = get_empty_data()
     result = calculate_sl_statistics(empty)
-    assert len(result) == 5
+    assert len(result) == 2
     for _, row in result.iterrows():
         assert row['Trades'] == 0
         assert row['Regular'] == '0W - 0L (0.0%)'
@@ -1124,7 +1101,7 @@ def test_sl_statistics_empty():
 
 
 def test_sl_statistics_large_sl():
-    """Test SL statistics with trades in the 10+ range."""
+    """Both trades land in the 5+ bucket."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01', '2026-01-02'],
         'Weekday': ['Monday', 'Monday'],
@@ -1140,18 +1117,15 @@ def test_sl_statistics_large_sl():
     result = calculate_sl_statistics(trades)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['10+']['Trades'] == 2
-    assert rows['10+']['Regular'] == '1W - 1L (50.0%)'
-    # PB=16 < SL+2=17 => buffer saves it, PB=5 < SL+2=14 => still win
-    assert rows['10+']['With 2 pips buffer'] == '2W - 0L (100.0%)'
-    assert rows['0-3']['Trades'] == 0
+    assert rows['5+']['Trades'] == 2
+    assert rows['5+']['Regular'] == '1W - 1L (50.0%)'
+    # PB=16 < SL+2=17 saves the second trade.
+    assert rows['5+']['With 2 pips buffer'] == '2W - 0L (100.0%)'
+    assert rows['< 5']['Trades'] == 0
 
 
 def test_sl_statistics_buffer_saves_trade():
-    """Test that buffer can save a trade in SL range analysis.
-
-    SL=2.0, PB=3.0, TP=10. Regular: PB(3) >= SL(2) => L. Buffer: PB(3) < SL+2(4) => W.
-    """
+    """SL=2, PB=3, TP=10. Regular loses; +2 buffer flips to win."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
         'Weekday': ['Monday'],
@@ -1167,8 +1141,8 @@ def test_sl_statistics_buffer_saves_trade():
     result = calculate_sl_statistics(trades)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-3']['Regular'] == '0W - 1L (0.0%)'
-    assert rows['0-3']['With 2 pips buffer'] == '1W - 0L (100.0%)'
+    assert rows['< 5']['Regular'] == '0W - 1L (0.0%)'
+    assert rows['< 5']['With 2 pips buffer'] == '1W - 0L (100.0%)'
 
 
 def test_pullback_ranges_constant():
