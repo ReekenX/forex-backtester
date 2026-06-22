@@ -361,6 +361,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
 
 MIN_SL_VALUES = [0, 1, 2, 3]
 FIXED_SL_STRATEGY_VALUES = list(range(2, 11))
+MAX_SL_STRATEGY_VALUES = list(range(3, 11))
 
 
 def _apply_min_sl(df: pd.DataFrame, min_sl: int) -> pd.DataFrame:
@@ -377,11 +378,22 @@ def _fixed_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
     return _filter
 
 
+def _max_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
+    """Return a filter that caps SL at x pips (SL stays as-is when below the cap)."""
+    def _filter(df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+        out["SL"] = out["SL"].clip(upper=float(x))
+        return out
+    return _filter
+
+
 def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]:
     """
     Get key strategies to test with SL buffers.
 
-    "Fixed SL X" strategies override SL to X pips and are evaluated only at buffer 0.
+    "Fixed SL X" replaces SL with X.
+    "Max SL X" caps SL at X (smaller SLs stay as-is).
+    Both run with buffer 0 only.
     """
     strategies: List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]] = [
         ("All Trades", lambda df: df),
@@ -391,12 +403,17 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
     strategies.extend(
         (f"Fixed SL {x}", _fixed_sl_filter(x)) for x in FIXED_SL_STRATEGY_VALUES
     )
+    strategies.extend(
+        (f"Max SL {x}", _max_sl_filter(x)) for x in MAX_SL_STRATEGY_VALUES
+    )
     return strategies
 
 
 def _buffers_for(strategy_name: str) -> List[float]:
-    """Fixed-SL strategies only run with buffer 0; everything else uses BUFFER_PIPS."""
-    return [0] if strategy_name.startswith("Fixed SL ") else BUFFER_PIPS
+    """Fixed-SL and Max-SL strategies only run with buffer 0; everything else uses BUFFER_PIPS."""
+    if strategy_name.startswith("Fixed SL ") or strategy_name.startswith("Max SL "):
+        return [0]
+    return BUFFER_PIPS
 
 
 def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:

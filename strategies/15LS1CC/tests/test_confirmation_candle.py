@@ -30,6 +30,7 @@ from utils.confirmation_candle import (
     BUFFER_PIPS,
     MIN_SL_VALUES,
     FIXED_SL_STRATEGY_VALUES,
+    MAX_SL_STRATEGY_VALUES,
     FIXED_SL_SIZES,
     WEEKDAY_ORDER,
     _format_wl,
@@ -508,6 +509,58 @@ def test_buffer_statistics_min_sl_filters_trades():
     assert all_buffer_zero_1_1.loc[1, "Trades"] == 10
     assert all_buffer_zero_1_1.loc[2, "Trades"] == 7
     assert all_buffer_zero_1_1.loc[3, "Trades"] == 5
+
+
+def test_max_sl_strategy_values_constant():
+    """Max SL strategies span 3 through 10."""
+    assert MAX_SL_STRATEGY_VALUES == list(range(3, 11))
+
+
+def test_max_sl_strategy_listed_in_buffer_strategies():
+    """get_buffer_strategies must surface every Max SL X strategy."""
+    names = {n for n, _ in get_buffer_strategies()}
+    for x in MAX_SL_STRATEGY_VALUES:
+        assert f"Max SL {x}" in names
+
+
+def test_max_sl_caps_only_when_above():
+    """Max SL X caps SL at X — smaller SLs are left untouched.
+
+    Sample SL values: 3.5, 1.1, 2.0, 4.0, 3.0, 5.0, 2.5, 6.0, 8.0, 1.5.
+    With Max SL 3 the SLs become: 3, 1.1, 2, 3, 3, 3, 2.5, 3, 3, 1.5.
+    Wins (Pullback < SL AND TP >= 1 * SL):
+      SL=3   PB=3.5 TP=0  → L
+      SL=1.1 PB=0.8 TP=12 → W (TP >= 1*1.1)
+      SL=2.0 PB=2.1 TP=0  → L
+      SL=3   PB=1.5 TP=10 → W (TP >= 1*3)
+      SL=3   PB=3.0 TP=0  → L (PB not < SL; also TP=0)
+      SL=3   PB=2.0 TP=8  → W
+      SL=2.5 PB=2.5 TP=0  → L
+      SL=3   PB=3.0 TP=15 → L (PB not < SL — capped 6→3 but PB still 3.0)
+      SL=3   PB=7.0 TP=10 → L
+      SL=1.5 PB=0.5 TP=5  → W
+    → 4W / 6L at buffer 0, RRR 1:1.
+    """
+    sample = get_sample_data()
+    result = calculate_buffer_statistics(sample)
+    row = result[
+        (result["Strategy"] == "Max SL 3")
+        & (result["Buffer"] == "+0")
+        & (result["Min SL"] == 0)
+        & (result["RRR"] == "1:1")
+    ]
+    assert len(row) == 1
+    assert row.iloc[0]["Trades"] == 10
+    assert row.iloc[0]["Notation"] == "4W – 6L"
+
+
+def test_max_sl_only_runs_buffer_zero():
+    """Max SL strategies should never emit a non-zero buffer row."""
+    sample = get_sample_data()
+    result = calculate_buffer_statistics(sample)
+    for x in MAX_SL_STRATEGY_VALUES:
+        buffers = result[result["Strategy"] == f"Max SL {x}"]["Buffer"].unique()
+        assert set(buffers) == {"+0"}
 
 
 def test_buffer_statistics_min_sl_filter_applies_before_fixed_sl():
