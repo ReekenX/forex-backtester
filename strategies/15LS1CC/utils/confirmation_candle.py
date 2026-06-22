@@ -379,10 +379,10 @@ def _fixed_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
 
 
 def _max_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
-    """Return a filter that caps SL at x pips (SL stays as-is when below the cap)."""
+    """Return a filter that forces SL to exactly x pips for every trade."""
     def _filter(df: pd.DataFrame) -> pd.DataFrame:
         out = df.copy()
-        out["SL"] = out["SL"].clip(upper=float(x))
+        out["SL"] = float(x)
         return out
     return _filter
 

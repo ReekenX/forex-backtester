@@ -523,35 +523,43 @@ def test_max_sl_strategy_listed_in_buffer_strategies():
         assert f"Max SL {x}" in names
 
 
-def test_max_sl_caps_only_when_above():
-    """Max SL X caps SL at X — smaller SLs are left untouched.
+def test_max_sl_forces_fixed_value():
+    """Max SL X forces every trade's SL to exactly X pips (identical to Fixed SL).
 
-    Sample SL values: 3.5, 1.1, 2.0, 4.0, 3.0, 5.0, 2.5, 6.0, 8.0, 1.5.
-    With Max SL 3 the SLs become: 3, 1.1, 2, 3, 3, 3, 2.5, 3, 3, 1.5.
-    Wins (Pullback < SL AND TP >= 1 * SL):
-      SL=3   PB=3.5 TP=0  → L
-      SL=1.1 PB=0.8 TP=12 → W (TP >= 1*1.1)
-      SL=2.0 PB=2.1 TP=0  → L
-      SL=3   PB=1.5 TP=10 → W (TP >= 1*3)
-      SL=3   PB=3.0 TP=0  → L (PB not < SL; also TP=0)
-      SL=3   PB=2.0 TP=8  → W
-      SL=2.5 PB=2.5 TP=0  → L
-      SL=3   PB=3.0 TP=15 → L (PB not < SL — capped 6→3 but PB still 3.0)
-      SL=3   PB=7.0 TP=10 → L
-      SL=1.5 PB=0.5 TP=5  → W
-    → 4W / 6L at buffer 0, RRR 1:1.
+    Sample Pullback values: 3.5, 0.8, 2.1, 1.5, 3.0, 2.0, 2.5, 3.0, 7.0, 0.5.
+    Sample TP values:       0,   12,  0,   10,  0,   8,   0,   15,  10,  5.
+    With Max SL 3 every SL becomes 3. Wins (Pullback < 3 AND TP >= 3):
+      PB=3.5 → L
+      PB=0.8 TP=12 → W
+      PB=2.1 TP=0  → L
+      PB=1.5 TP=10 → W
+      PB=3.0 → L
+      PB=2.0 TP=8  → W
+      PB=2.5 TP=0  → L
+      PB=3.0 → L
+      PB=7.0 → L
+      PB=0.5 TP=5  → W
+    → 4W / 6L at buffer 0, RRR 1:1. Same result as Fixed SL 3.
     """
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
-    row = result[
+
+    max_row = result[
         (result["Strategy"] == "Max SL 3")
         & (result["Buffer"] == "+0")
         & (result["Min SL"] == 0)
         & (result["RRR"] == "1:1")
     ]
-    assert len(row) == 1
-    assert row.iloc[0]["Trades"] == 10
-    assert row.iloc[0]["Notation"] == "4W – 6L"
+    fixed_row = result[
+        (result["Strategy"] == "Fixed SL 3")
+        & (result["Buffer"] == "+0")
+        & (result["Min SL"] == 0)
+        & (result["RRR"] == "1:1")
+    ]
+    assert len(max_row) == 1
+    assert max_row.iloc[0]["Notation"] == "4W – 6L"
+    assert max_row.iloc[0]["Notation"] == fixed_row.iloc[0]["Notation"]
+    assert max_row.iloc[0]["Trades"] == fixed_row.iloc[0]["Trades"]
 
 
 def test_max_sl_only_runs_buffer_zero():
