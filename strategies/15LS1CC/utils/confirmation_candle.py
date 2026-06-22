@@ -552,27 +552,31 @@ def display_analysis_strategies(df: pd.DataFrame):
         for rrr in stats_df['RRR']
     ]
 
-    fig, ax = plt.subplots(figsize=(max(12, len(labels) * 0.25), 5))
+    # Top row at top of chart: reverse so position 0 in the bar series is the last row visually.
+    positions = list(range(len(labels)))[::-1]
+
+    fig, ax = plt.subplots(figsize=(12, max(4, len(labels) * 0.18)))
     fig.patch.set_facecolor('#1e1e1e')
     ax.set_facecolor('#1e1e1e')
 
     colors = ['#4ade80' if wr > be else '#f87171' for wr, be in zip(win_rates, breakevens)]
-    ax.bar(range(len(labels)), win_rates, color=colors, edgecolor='#404040')
+    ax.barh(positions, win_rates, color=colors, edgecolor='#404040')
 
     # Per-bar breakeven markers (50% for 1:1, 33.3% for 1:2, ...).
-    for i, be in enumerate(breakevens):
-        ax.hlines(be, i - 0.4, i + 0.4, colors='#e0e0e0', linewidth=1, alpha=0.6)
+    for pos, be in zip(positions, breakevens):
+        ax.vlines(be, pos - 0.4, pos + 0.4, colors='#e0e0e0', linewidth=1, alpha=0.6)
 
-    ax.set_ylim(0, 60)
-    ax.set_ylabel('Win Rate (%)', color='#e0e0e0')
+    ax.set_xlim(0, 60)
+    ax.set_xlabel('Win Rate (%)', color='#e0e0e0')
     ax.set_title('Strategies — Win Rate', color='#e0e0e0', loc='left')
-    ax.set_xticks(range(len(labels)))
-    ax.set_xticklabels(labels, rotation=90, color='#e0e0e0', fontsize=8)
-    ax.tick_params(axis='y', colors='#e0e0e0')
+    ax.set_yticks(positions)
+    ax.set_yticklabels(labels, color='#e0e0e0', fontsize=8)
+    ax.tick_params(axis='x', colors='#e0e0e0')
     for spine in ax.spines.values():
         spine.set_color('#404040')
-    ax.grid(axis='y', color='#404040', linestyle='--', alpha=0.5)
+    ax.grid(axis='x', color='#404040', linestyle='--', alpha=0.5)
     ax.set_axisbelow(True)
+    ax.margins(y=0.005)
 
     plt.tight_layout()
     plt.show()
