@@ -30,7 +30,7 @@ from utils.confirmation_candle import (
     BUFFER_PIPS,
     MIN_SL_VALUES,
     FIXED_SL_STRATEGY_VALUES,
-    MAX_SL_STRATEGY_VALUES,
+    MAX_SL_VALUES,
     FIXED_SL_SIZES,
     WEEKDAY_ORDER,
     _format_wl,
@@ -503,6 +503,7 @@ def test_buffer_statistics_min_sl_filters_trades():
     all_buffer_zero_1_1 = result[
         (result["Strategy"] == "All Trades")
         & (result["Buffer"] == "+0")
+        & (result["Max SL"] == 0)
         & (result["RRR"] == "1:1")
     ].set_index("Min SL")
     assert all_buffer_zero_1_1.loc[0, "Trades"] == 10
@@ -511,64 +512,75 @@ def test_buffer_statistics_min_sl_filters_trades():
     assert all_buffer_zero_1_1.loc[3, "Trades"] == 5
 
 
-def test_max_sl_strategy_values_constant():
-    """Max SL strategies span 3 through 10."""
-    assert MAX_SL_STRATEGY_VALUES == list(range(3, 11))
+def test_max_sl_values_constant():
+    """Max SL gating values: 0 (disabled) plus 5, 10, 15, 20 pip caps."""
+    assert MAX_SL_VALUES == [0, 5, 10, 15, 20]
 
 
-def test_max_sl_strategy_listed_in_buffer_strategies():
-    """get_buffer_strategies must surface every Max SL X strategy."""
-    names = {n for n, _ in get_buffer_strategies()}
-    for x in MAX_SL_STRATEGY_VALUES:
-        assert f"Max SL {x}" in names
+def test_buffer_statistics_has_max_sl_column():
+    """Max SL column lives directly after Min SL."""
+    sample = get_sample_data()
+    result = calculate_buffer_statistics(sample)
+    cols = list(result.columns)
+    assert "Max SL" in cols
+    assert cols.index("Max SL") == cols.index("Min SL") + 1
 
 
-def test_max_sl_forces_fixed_value():
-    """Max SL X forces every trade's SL to exactly X pips (identical to Fixed SL).
+def test_buffer_statistics_covers_every_max_sl_per_strategy():
+    """Every strategy must appear at every Max SL value."""
+    sample = get_sample_data()
+    result = calculate_buffer_statistics(sample)
+    for strategy, _ in get_buffer_strategies():
+        present = set(result[result["Strategy"] == strategy]["Max SL"].unique())
+        assert present == set(MAX_SL_VALUES), f"{strategy} missing Max SL values: {set(MAX_SL_VALUES) - present}"
 
-    Sample Pullback values: 3.5, 0.8, 2.1, 1.5, 3.0, 2.0, 2.5, 3.0, 7.0, 0.5.
-    Sample TP values:       0,   12,  0,   10,  0,   8,   0,   15,  10,  5.
-    With Max SL 3 every SL becomes 3. Wins (Pullback < 3 AND TP >= 3):
-      PB=3.5 → L
-      PB=0.8 TP=12 → W
-      PB=2.1 TP=0  → L
-      PB=1.5 TP=10 → W
-      PB=3.0 → L
-      PB=2.0 TP=8  → W
-      PB=2.5 TP=0  → L
-      PB=3.0 → L
-      PB=7.0 → L
-      PB=0.5 TP=5  → W
-    → 4W / 6L at buffer 0, RRR 1:1. Same result as Fixed SL 3.
+
+def test_buffer_statistics_max_sl_filters_trades():
+    """Max SL > 0 drops trades whose original SL exceeds it.
+
+    Sample SL values are 3.5, 1.1, 2.0, 4.0, 3.0, 5.0, 2.5, 6.0, 8.0, 1.5:
+      Max SL 0  → 10 (no cap)
+      Max SL 5  → 8 (drops 6.0 and 8.0)
+      Max SL 10 → 10
+      Max SL 15 → 10
+      Max SL 20 → 10
     """
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
-
-    max_row = result[
-        (result["Strategy"] == "Max SL 3")
+    rows = result[
+        (result["Strategy"] == "All Trades")
         & (result["Buffer"] == "+0")
         & (result["Min SL"] == 0)
         & (result["RRR"] == "1:1")
-    ]
-    fixed_row = result[
-        (result["Strategy"] == "Fixed SL 3")
-        & (result["Buffer"] == "+0")
-        & (result["Min SL"] == 0)
-        & (result["RRR"] == "1:1")
-    ]
-    assert len(max_row) == 1
-    assert max_row.iloc[0]["Notation"] == "4W – 6L"
-    assert max_row.iloc[0]["Notation"] == fixed_row.iloc[0]["Notation"]
-    assert max_row.iloc[0]["Trades"] == fixed_row.iloc[0]["Trades"]
+    ].set_index("Max SL")
+    assert rows.loc[0, "Trades"] == 10
+    assert rows.loc[5, "Trades"] == 8
+    assert rows.loc[10, "Trades"] == 10
+    assert rows.loc[15, "Trades"] == 10
+    assert rows.loc[20, "Trades"] == 10
 
 
-def test_max_sl_only_runs_buffer_zero():
-    """Max SL strategies should never emit a non-zero buffer row."""
+def test_buffer_statistics_min_and_max_sl_compose():
+    """Min SL and Max SL filters apply together on the original SL."""
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
-    for x in MAX_SL_STRATEGY_VALUES:
-        buffers = result[result["Strategy"] == f"Max SL {x}"]["Buffer"].unique()
-        assert set(buffers) == {"+0"}
+    row = result[
+        (result["Strategy"] == "All Trades")
+        & (result["Buffer"] == "+0")
+        & (result["Min SL"] == 2)
+        & (result["Max SL"] == 5)
+        & (result["RRR"] == "1:1")
+    ]
+    assert len(row) == 1
+    # SL > 2 AND SL <= 5: 3.5, 4.0, 3.0, 5.0, 2.5 = 5.
+    assert row.iloc[0]["Trades"] == 5
+
+
+def test_max_sl_strategy_removed():
+    """Max SL is now a column, not a strategy."""
+    names = {n for n, _ in get_buffer_strategies()}
+    for n in names:
+        assert not n.startswith("Max SL "), f"Unexpected Max SL strategy: {n}"
 
 
 def test_buffer_statistics_min_sl_filter_applies_before_fixed_sl():
@@ -576,7 +588,9 @@ def test_buffer_statistics_min_sl_filter_applies_before_fixed_sl():
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
     fixed_2 = result[
-        (result["Strategy"] == "Fixed SL 2") & (result["RRR"] == "1:1")
+        (result["Strategy"] == "Fixed SL 2")
+        & (result["RRR"] == "1:1")
+        & (result["Max SL"] == 0)
     ].set_index("Min SL")
     # Min SL 0 should include all 10 trades (Fixed SL replaces SL with 2 afterwards).
     assert fixed_2.loc[0, "Trades"] == 10
