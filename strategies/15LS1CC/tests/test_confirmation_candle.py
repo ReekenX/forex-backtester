@@ -62,8 +62,6 @@ def get_sample_data():
                       'Sell', 'Buy', 'Buy', 'Sell', 'Sell'],
         '1H': ['Buy', 'Buy', 'Buy', 'Sell', 'Sell',
                'Sell', 'Sell', 'Buy', 'Buy', 'Sell'],
-        'PD': ['Buy', 'Buy', 'Sell', '', 'Buy',
-               'Sell', '', 'Sell', 'Buy', 'Sell'],
         'SL': [3.5, 1.1, 2.0, 4.0, 3.0,
                5.0, 2.5, 6.0, 8.0, 1.5],
         'Pullback': [3.5, 0.8, 2.1, 1.5, 3.0,
@@ -79,7 +77,7 @@ def get_empty_data():
     """Create an empty dataset."""
     return pd.DataFrame({
         'Date': [], 'Weekday': [], 'Trade': [], 'Direction': [],
-        '1H': [], 'PD': [], 'SL': [], 'Pullback': [], 'TP': [], 'R': [],
+        '1H': [], 'SL': [], 'Pullback': [], 'TP': [], 'R': [],
     })
 
 
