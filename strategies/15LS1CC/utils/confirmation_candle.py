@@ -581,6 +581,23 @@ def display_analysis_strategies(df: pd.DataFrame):
     plt.tight_layout()
     plt.show()
 
+    from IPython.display import display, HTML
+
+    win_rate_values = stats_df['Win Rate'].str.rstrip('%').astype(float)
+    breakeven_values = pd.Series(breakevens, index=stats_df.index)
+    winners_df = stats_df.loc[win_rate_values > breakeven_values].copy()
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Winning Strategies</h2>"
+    display(HTML(title_html))
+
+    if winners_df.empty:
+        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No winning strategies found</p>"))
+    else:
+        winners_df = winners_df.assign(
+            _wr=winners_df['Win Rate'].str.rstrip('%').astype(float)
+        ).sort_values('_wr', ascending=False).drop(columns='_wr').reset_index(drop=True)
+        display(HTML(create_html_table(winners_df)))
+
 
 FIXED_SL_SIZES = [1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
 
