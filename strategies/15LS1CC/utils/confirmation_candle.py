@@ -1073,13 +1073,17 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate win/loss statistics for SL pip ranges.
 
-    Win: TP > 0 (the Pullback < SL condition is intentionally not checked).
+    Win (Notation): TP > 0.
+    Win (Notation 1:2 RRR): TP >= 2 * SL.
+    Win (Notation 1:3 RRR): TP >= 3 * SL.
+    The Pullback < SL condition is intentionally not checked in any column.
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: SL Range, Trades, Notation
+        DataFrame with columns: SL Range, Trades, Notation,
+        Notation (1:2 RRR), Notation (1:3 RRR)
     """
     results = []
 
@@ -1092,16 +1096,21 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
                 'SL Range': label,
                 'Trades': 0,
                 'Notation': _format_wl(0, 0, 0),
+                'Notation (1:2 RRR)': _format_wl(0, 0, 0),
+                'Notation (1:3 RRR)': _format_wl(0, 0, 0),
             })
             continue
 
         wins = len(range_trades[range_trades['TP'] > 0])
-        losses = total - wins
+        wins_2r = len(range_trades[range_trades['TP'] >= 2 * range_trades['SL']])
+        wins_3r = len(range_trades[range_trades['TP'] >= 3 * range_trades['SL']])
 
         results.append({
             'SL Range': label,
             'Trades': total,
-            'Notation': _format_wl(wins, losses, total),
+            'Notation': _format_wl(wins, total - wins, total),
+            'Notation (1:2 RRR)': _format_wl(wins_2r, total - wins_2r, total),
+            'Notation (1:3 RRR)': _format_wl(wins_3r, total - wins_3r, total),
         })
 
     return pd.DataFrame(results)
