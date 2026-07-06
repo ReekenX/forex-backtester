@@ -19,7 +19,7 @@ from typing import Dict, List, Tuple, Callable
 RRR_RATIOS = [1, 2]
 
 # Extra pip buffer values to test
-BUFFER_PIPS = [0, 1, 2, 3, 4, 5]
+BUFFER_PIPS = [0, 1, 2, 3]
 
 
 def load_data(filepath: str = "../strategies/15LS1CC/data.csv") -> pd.DataFrame:
@@ -362,7 +362,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
 
 
 MIN_SL_VALUES = [0, 1, 2, 3]
-MAX_SL_VALUES = [0, 5, 10, 15, 20]
+MAX_SL_VALUES = [0, 10, 15, 20]
 FIXED_SL_STRATEGY_VALUES = list(range(2, 11))
 
 
@@ -385,6 +385,17 @@ def _fixed_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
     return _filter
 
 
+def _one_h_location_filter(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only trades that were taken per the "1H Location" column (value TRUE).
+
+    Handles the column being parsed as a bool or a string, and returns no trades
+    if the column is absent (e.g. legacy data without it).
+    """
+    if "1H Location" not in df.columns:
+        return df.iloc[0:0]
+    return df[df["1H Location"].astype(str).str.upper() == "TRUE"]
+
+
 def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]:
     """
     Get key strategies to test with SL buffers.
@@ -395,6 +406,7 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
         ("All Trades", lambda df: df),
         ("1H Aligned", lambda df: df[df["Direction"] == df["1H"]]),
         ("1H Against", lambda df: df[df["Direction"] != df["1H"]]),
+        ("1H Location", _one_h_location_filter),
     ]
     strategies.extend(
         (f"Fixed SL {x}", _fixed_sl_filter(x)) for x in FIXED_SL_STRATEGY_VALUES

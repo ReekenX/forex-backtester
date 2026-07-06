@@ -58,6 +58,8 @@ def get_sample_data():
                       'Sell', 'Buy', 'Buy', 'Sell', 'Sell'],
         '1H': ['Buy', 'Buy', 'Buy', 'Sell', 'Sell',
                'Sell', 'Sell', 'Buy', 'Buy', 'Sell'],
+        '1H Location': [None, True, None, True, None,
+                        True, None, True, None, None],
         'SL': [3.5, 1.1, 2.0, 4.0, 3.0,
                5.0, 2.5, 6.0, 8.0, 1.5],
         'Pullback': [3.5, 0.8, 2.1, 1.5, 3.0,
@@ -73,7 +75,7 @@ def get_empty_data():
     """Create an empty dataset."""
     return pd.DataFrame({
         'Date': [], 'Weekday': [], 'Trade': [], 'Direction': [],
-        '1H': [], 'SL': [], 'Pullback': [], 'TP': [], 'R': [],
+        '1H': [], '1H Location': [], 'SL': [], 'Pullback': [], 'TP': [], 'R': [],
     })
 
 
@@ -409,6 +411,33 @@ def test_get_buffer_strategies():
     assert 'All Trades' in names
     assert '1H Aligned' in names
     assert '1H Against' in names
+    assert '1H Location' in names
+
+
+def test_one_h_location_strategy_filters_taken_trades():
+    """The 1H Location strategy keeps only trades flagged TRUE.
+
+    Sample flags TRUE at idx 1,3,5,7 (SL 1.1, 4.0, 5.0, 6.0) -> 4 trades.
+    """
+    sample = get_sample_data()
+    strategy = [f for n, f in get_buffer_strategies() if n == '1H Location'][0]
+    filtered = strategy(sample)
+    assert len(filtered) == 4
+    assert sorted(filtered['SL'].tolist()) == [1.1, 4.0, 5.0, 6.0]
+
+
+def test_one_h_location_strategy_missing_column():
+    """Legacy data without the column yields no 1H Location trades (no error)."""
+    legacy = get_sample_data().drop(columns=['1H Location'])
+    strategy = [f for n, f in get_buffer_strategies() if n == '1H Location'][0]
+    assert len(strategy(legacy)) == 0
+
+
+def test_calculate_buffer_statistics_includes_1h_location():
+    """1H Location appears as a strategy in the buffer statistics output."""
+    sample = get_sample_data()
+    result = calculate_buffer_statistics(sample)
+    assert '1H Location' in set(result['Strategy'])
 
 
 # def test_get_buffer_strategies_includes_sl_caps():
@@ -456,7 +485,7 @@ def test_calculate_buffer_statistics():
 
 def test_buffer_pips_constant():
     """Test that BUFFER_PIPS has expected values."""
-    assert BUFFER_PIPS == [0, 1, 2, 3, 4, 5]
+    assert BUFFER_PIPS == [0, 1, 2, 3]
 
 
 def test_min_sl_values_constant():
@@ -507,8 +536,8 @@ def test_buffer_statistics_min_sl_filters_trades():
 
 
 def test_max_sl_values_constant():
-    """Max SL gating values: 0 (disabled) plus 5, 10, 15, 20 pip caps."""
-    assert MAX_SL_VALUES == [0, 5, 10, 15, 20]
+    """Max SL gating values: 0 (disabled) plus 10, 15, 20 pip caps."""
+    assert MAX_SL_VALUES == [0, 10, 15, 20]
 
 
 def test_buffer_statistics_has_max_sl_column():
@@ -534,7 +563,6 @@ def test_buffer_statistics_max_sl_filters_trades():
 
     Sample SL values are 3.5, 1.1, 2.0, 4.0, 3.0, 5.0, 2.5, 6.0, 8.0, 1.5:
       Max SL 0  → 10 (no cap)
-      Max SL 5  → 8 (drops 6.0 and 8.0)
       Max SL 10 → 10
       Max SL 15 → 10
       Max SL 20 → 10
@@ -548,7 +576,6 @@ def test_buffer_statistics_max_sl_filters_trades():
         & (result["RRR"] == "1:1")
     ].set_index("Max SL")
     assert rows.loc[0, "Trades"] == 10
-    assert rows.loc[5, "Trades"] == 8
     assert rows.loc[10, "Trades"] == 10
     assert rows.loc[15, "Trades"] == 10
     assert rows.loc[20, "Trades"] == 10
@@ -562,12 +589,12 @@ def test_buffer_statistics_min_and_max_sl_compose():
         (result["Strategy"] == "All Trades")
         & (result["Buffer"] == "+0")
         & (result["Min SL"] == 2)
-        & (result["Max SL"] == 5)
+        & (result["Max SL"] == 10)
         & (result["RRR"] == "1:1")
     ]
     assert len(row) == 1
-    # SL > 2 AND SL <= 5: 3.5, 4.0, 3.0, 5.0, 2.5 = 5.
-    assert row.iloc[0]["Trades"] == 5
+    # SL > 2 AND SL <= 10: 3.5, 4.0, 3.0, 5.0, 2.5, 6.0, 8.0 = 7.
+    assert row.iloc[0]["Trades"] == 7
 
 
 def test_max_sl_strategy_removed():
@@ -1791,6 +1818,9 @@ def run_all_tests():
         test_buffer_stats_has_buffer_column,
         test_buffer_stats_empty,
         test_get_buffer_strategies,
+        test_one_h_location_strategy_filters_taken_trades,
+        test_one_h_location_strategy_missing_column,
+        test_calculate_buffer_statistics_includes_1h_location,
         # test_get_buffer_strategies_includes_sl_caps,
         # test_buffer_sl_cap_filter,
         # test_buffer_sl_cap_with_1h_filter,
