@@ -1177,7 +1177,7 @@ def test_sl_ranges_constant():
 def test_sl_statistics_columns():
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
-    assert list(result.columns) == ['SL Range', 'Trades', 'Regular', 'With 2 pips buffer']
+    assert list(result.columns) == ['SL Range', 'Trades', 'Notation']
 
 
 def test_sl_statistics_all_ranges_present():
@@ -1209,8 +1209,8 @@ def test_sl_statistics_trade_counts():
     assert counts['0-10'] == 10
 
 
-def test_sl_statistics_regular():
-    """Win condition: Pullback < SL AND TP > 0.
+def test_sl_statistics_notation():
+    """Win condition: TP > 0 (Pullback < SL is NOT checked).
 
     Per cumulative bucket the wins are: 0W, 2W, 2W, 2W, 3W, 4W, 5W, 5W, 6W, 6W.
     """
@@ -1218,21 +1218,31 @@ def test_sl_statistics_regular():
     result = calculate_sl_statistics(sample)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-1']['Regular'] == '0W - 0L (0.0%)'
-    assert rows['0-2']['Regular'] == '2W - 0L (100.0%)'
-    assert rows['0-3']['Regular'] == '2W - 2L (50.0%)'
-    assert rows['0-5']['Regular'] == '3W - 4L (42.9%)'
-    assert rows['0-10']['Regular'] == '6W - 4L (60.0%)'
+    assert rows['0-1']['Notation'] == '0W - 0L (0.0%)'
+    assert rows['0-2']['Notation'] == '2W - 0L (100.0%)'
+    assert rows['0-3']['Notation'] == '2W - 2L (50.0%)'
+    assert rows['0-5']['Notation'] == '3W - 4L (42.9%)'
+    assert rows['0-10']['Notation'] == '6W - 4L (60.0%)'
 
 
-def test_sl_statistics_buffer():
-    """All losses in the sample have TP=0, so the +2 buffer can't save them."""
-    sample = get_sample_data()
-    result = calculate_sl_statistics(sample)
+def test_sl_statistics_ignores_pullback():
+    """A trade with Pullback >= SL but TP > 0 still counts as a win."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        'Direction': ['Buy'],
+        '1H': ['Buy'],
+        'SL': [2.0],
+        'Pullback': [5.0],  # Pullback > SL, would be a loss if that were checked
+        'TP': [10.0],
+        'R': [5.0],
+    })
+
+    result = calculate_sl_statistics(trades)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-5']['With 2 pips buffer'] == '3W - 4L (42.9%)'
-    assert rows['0-10']['With 2 pips buffer'] == '6W - 4L (60.0%)'
+    assert rows['0-3']['Notation'] == '1W - 0L (100.0%)'
 
 
 def test_sl_statistics_empty():
@@ -1241,8 +1251,7 @@ def test_sl_statistics_empty():
     assert len(result) == 10
     for _, row in result.iterrows():
         assert row['Trades'] == 0
-        assert row['Regular'] == '0W - 0L (0.0%)'
-        assert row['With 2 pips buffer'] == '0W - 0L (0.0%)'
+        assert row['Notation'] == '0W - 0L (0.0%)'
 
 
 def test_sl_statistics_large_sl():
@@ -1264,8 +1273,8 @@ def test_sl_statistics_large_sl():
         assert row['Trades'] == 0
 
 
-def test_sl_statistics_buffer_saves_trade():
-    """SL=2, PB=3, TP=10. Regular loses; +2 buffer flips to win. Trade is in every 0-X with X >= 3."""
+def test_sl_statistics_no_tp_is_loss():
+    """TP=0 is a loss regardless of Pullback. Trade is in every 0-X with X >= 3."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
         'Weekday': ['Monday'],
@@ -1273,18 +1282,16 @@ def test_sl_statistics_buffer_saves_trade():
         'Direction': ['Buy'],
         '1H': ['Buy'],
         'SL': [2.0],
-        'Pullback': [3.0],
-        'TP': [10.0],
+        'Pullback': [1.0],
+        'TP': [0],
         'R': [0],
     })
 
     result = calculate_sl_statistics(trades)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-3']['Regular'] == '0W - 1L (0.0%)'
-    assert rows['0-3']['With 2 pips buffer'] == '1W - 0L (100.0%)'
-    assert rows['0-10']['Regular'] == '0W - 1L (0.0%)'
-    assert rows['0-10']['With 2 pips buffer'] == '1W - 0L (100.0%)'
+    assert rows['0-3']['Notation'] == '0W - 1L (0.0%)'
+    assert rows['0-10']['Notation'] == '0W - 1L (0.0%)'
 
 
 def test_pullback_ranges_constant():
@@ -1756,11 +1763,11 @@ def run_all_tests():
         test_sl_statistics_columns,
         test_sl_statistics_all_ranges_present,
         test_sl_statistics_trade_counts,
-        test_sl_statistics_regular,
-        test_sl_statistics_buffer,
+        test_sl_statistics_notation,
+        test_sl_statistics_ignores_pullback,
         test_sl_statistics_empty,
         test_sl_statistics_large_sl,
-        test_sl_statistics_buffer_saves_trade,
+        test_sl_statistics_no_tp_is_loss,
         test_pullback_ranges_constant,
         test_pullback_statistics_columns,
         test_pullback_statistics_all_ranges_present,

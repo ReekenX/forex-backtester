@@ -1068,17 +1068,14 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate win/loss statistics for SL pip ranges.
 
-    Shows regular win/loss and with +2 pip buffer added to SL.
-    Regular win: Pullback < SL AND TP > 0.
-    Buffer win: Pullback < SL + 2 AND TP > 0.
+    Win: TP > 0 (the Pullback < SL condition is intentionally not checked).
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: SL Range, Trades, Regular, With 2 pips buffer
+        DataFrame with columns: SL Range, Trades, Notation
     """
-    buffer = 2.0
     results = []
 
     for label, low, high in SL_RANGES:
@@ -1089,28 +1086,17 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
             results.append({
                 'SL Range': label,
                 'Trades': 0,
-                'Regular': _format_wl(0, 0, 0),
-                'With 2 pips buffer': _format_wl(0, 0, 0),
+                'Notation': _format_wl(0, 0, 0),
             })
             continue
 
-        wins = len(range_trades[
-            (range_trades['Pullback'] < range_trades['SL']) &
-            (range_trades['TP'] > 0)
-        ])
+        wins = len(range_trades[range_trades['TP'] > 0])
         losses = total - wins
-
-        buf_wins = len(range_trades[
-            (range_trades['Pullback'] < range_trades['SL'] + buffer) &
-            (range_trades['TP'] > 0)
-        ])
-        buf_losses = total - buf_wins
 
         results.append({
             'SL Range': label,
             'Trades': total,
-            'Regular': _format_wl(wins, losses, total),
-            'With 2 pips buffer': _format_wl(buf_wins, buf_losses, total),
+            'Notation': _format_wl(wins, losses, total),
         })
 
     return pd.DataFrame(results)
