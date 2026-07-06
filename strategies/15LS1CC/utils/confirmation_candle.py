@@ -1214,12 +1214,14 @@ def display_analysis_sl_buffer_impact(df: pd.DataFrame):
 
 def calculate_sl_vs_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Compare two mutually exclusive 1:1 RRR levers - one OR the other, never both.
+    Compare 1:1 RRR levers: each alone, then the SL floors combined with a buffer.
 
     * Limiting SL ("0-X SL" caps and "X-10 SL" floors): take only trades whose
       SL is inside the range, with no buffer. Win: TP >= SL.
     * Adding buffer ("N pip buffer"): take every trade, padding the stop by
       N pips. Win: TP >= SL + N.
+    * Combined ("X-10 SL and N pip buffer"): take only floored-SL trades AND
+      pad the stop by N pips. Win: TP >= SL + N.
 
     The Pullback < SL condition is intentionally not checked (matching the
     other SL tables).
@@ -1255,13 +1257,27 @@ def calculate_sl_vs_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
             'Notation': _format_wl(wins, total - wins, total),
         })
 
+    # Combined: SL floor AND buffer, 1:1 win = TP >= SL + buffer.
+    for label, low, high in SL_RANGES:
+        if low == 0:  # only the X-10 floors
+            continue
+        range_trades = df[(df['SL'] >= low) & (df['SL'] < high)]
+        total = len(range_trades)
+        for col, buffer in SL_BUFFER_COLS:
+            wins = len(range_trades[range_trades['TP'] >= range_trades['SL'] + buffer]) if total else 0
+            results.append({
+                'Hypothesis': f'{label} SL and {col} buffer',
+                'Trades': total,
+                'Notation': _format_wl(wins, total - wins, total),
+            })
+
     return pd.DataFrame(results)
 
 
 def display_analysis_sl_vs_buffer(df: pd.DataFrame):
     """
     Display a head-to-head comparison of limiting SL versus adding a stop
-    buffer at 1:1 RRR - each lever used on its own, never combined.
+    buffer at 1:1 RRR, each lever alone and then the two combined.
 
     Args:
         df: DataFrame with trading data
