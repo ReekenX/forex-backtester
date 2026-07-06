@@ -1137,6 +1137,81 @@ def display_analysis_sl(df: pd.DataFrame):
     display(HTML(html_table))
 
 
+SL_BUFFER_COLS = [
+    ("1 pip", 1.0),
+    ("2 pips", 2.0),
+    ("3 pips", 3.0),
+]
+
+
+def calculate_sl_buffer_impact_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate 1:1 RRR win/loss statistics for SL pip ranges, showing the impact
+    of padding the stop loss with a safety buffer.
+
+    At 1:1 RRR the reward target equals the risk. Adding a buffer widens the risk
+    to SL + buffer, so a win requires TP >= SL + buffer. The Pullback < SL
+    condition is intentionally not checked (matching calculate_sl_statistics).
+
+    Columns:
+        Notation: TP >= SL       (1:1, no buffer)
+        1 pip:    TP >= SL + 1
+        2 pips:   TP >= SL + 2
+        3 pips:   TP >= SL + 3
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with columns: SL Range, Trades, Notation, 1 pip, 2 pips, 3 pips
+    """
+    results = []
+
+    for label, low, high in SL_RANGES:
+        range_trades = df[(df['SL'] >= low) & (df['SL'] < high)]
+        total = len(range_trades)
+
+        row = {'SL Range': label, 'Trades': total}
+
+        if total == 0:
+            row['Notation'] = _format_wl(0, 0, 0)
+            for col, _ in SL_BUFFER_COLS:
+                row[col] = _format_wl(0, 0, 0)
+            results.append(row)
+            continue
+
+        wins = len(range_trades[range_trades['TP'] >= range_trades['SL']])
+        row['Notation'] = _format_wl(wins, total - wins, total)
+
+        for col, buffer in SL_BUFFER_COLS:
+            buf_wins = len(range_trades[
+                range_trades['TP'] >= range_trades['SL'] + buffer
+            ])
+            row[col] = _format_wl(buf_wins, total - buf_wins, total)
+
+        results.append(row)
+
+    return pd.DataFrame(results)
+
+
+def display_analysis_sl_buffer_impact(df: pd.DataFrame):
+    """
+    Display 1:1 RRR win/loss statistics by SL pip range with the impact of
+    padding the stop with a 1, 2, or 3 pip safety buffer.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>SL Range Buffer Impact (1:1 RRR)</h2>"
+    display(HTML(title_html))
+
+    stats_df = calculate_sl_buffer_impact_statistics(df)
+    html_table = create_html_table(stats_df)
+    display(HTML(html_table))
+
+
 PULLBACK_RANGES = [
     ("0-3", 0, 3),
     ("3-5", 3, 5),

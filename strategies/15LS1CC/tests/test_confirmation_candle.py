@@ -36,6 +36,7 @@ from utils.confirmation_candle import (
     _format_wl,
     SL_RANGES,
     calculate_sl_statistics,
+    calculate_sl_buffer_impact_statistics,
     PULLBACK_RANGES,
     calculate_pullback_statistics,
     TP_RANGES,
@@ -1344,6 +1345,78 @@ def test_sl_statistics_no_tp_is_loss():
     assert rows['0-10']['Notation'] == '0W - 1L (0.0%)'
 
 
+def test_sl_buffer_impact_columns():
+    sample = get_sample_data()
+    result = calculate_sl_buffer_impact_statistics(sample)
+    assert list(result.columns) == [
+        'SL Range', 'Trades', 'Notation', '1 pip', '2 pips', '3 pips',
+    ]
+
+
+def test_sl_buffer_impact_all_ranges_present():
+    sample = get_sample_data()
+    result = calculate_sl_buffer_impact_statistics(sample)
+    assert len(result) == 14
+    expected = [f"0-{x}" for x in range(1, 11)] + ["2-10", "3-10", "4-10", "5-10"]
+    assert list(result['SL Range']) == expected
+
+
+def test_sl_buffer_impact_values():
+    """1:1 win = TP >= SL + buffer (Pullback not checked). Sample SL/TP:
+    3.5/0, 1.1/12, 2.0/0, 4.0/10, 3.0/0, 5.0/8, 2.5/0, 6.0/15, 8.0/10, 1.5/5.
+
+    0-10 (all 10):
+      Notation (TP>=SL):     idx 1,3,5,7,8,9 -> 6W
+      1 pip  (TP>=SL+1):     same 6 -> 6W
+      2 pips (TP>=SL+2):     same 6 -> 6W
+      3 pips (TP>=SL+3):     idx8 (10>=11) drops -> 5W
+    """
+    sample = get_sample_data()
+    result = calculate_sl_buffer_impact_statistics(sample)
+    rows = {row['SL Range']: row for _, row in result.iterrows()}
+
+    assert rows['0-10']['Notation'] == '6W - 4L (60.0%)'
+    assert rows['0-10']['1 pip'] == '6W - 4L (60.0%)'
+    assert rows['0-10']['2 pips'] == '6W - 4L (60.0%)'
+    assert rows['0-10']['3 pips'] == '5W - 5L (50.0%)'
+
+
+def test_sl_buffer_impact_erosion():
+    """Single trade SL=2, TP=4. 1:1 win at 0/1/2 pip buffer (TP>=4);
+    3 pip buffer needs TP>=5, so it flips to a loss."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        'Direction': ['Buy'],
+        '1H': ['Buy'],
+        'SL': [2.0],
+        'Pullback': [1.0],
+        'TP': [4.0],
+        'R': [1.0],
+    })
+
+    result = calculate_sl_buffer_impact_statistics(trades)
+    rows = {row['SL Range']: row for _, row in result.iterrows()}
+
+    assert rows['0-3']['Notation'] == '1W - 0L (100.0%)'
+    assert rows['0-3']['1 pip'] == '1W - 0L (100.0%)'
+    assert rows['0-3']['2 pips'] == '1W - 0L (100.0%)'
+    assert rows['0-3']['3 pips'] == '0W - 1L (0.0%)'
+
+
+def test_sl_buffer_impact_empty():
+    empty = get_empty_data()
+    result = calculate_sl_buffer_impact_statistics(empty)
+    assert len(result) == 14
+    for _, row in result.iterrows():
+        assert row['Trades'] == 0
+        assert row['Notation'] == '0W - 0L (0.0%)'
+        assert row['1 pip'] == '0W - 0L (0.0%)'
+        assert row['2 pips'] == '0W - 0L (0.0%)'
+        assert row['3 pips'] == '0W - 0L (0.0%)'
+
+
 def test_pullback_ranges_constant():
     """Test that PULLBACK_RANGES has expected ranges."""
     assert len(PULLBACK_RANGES) == 4
@@ -1820,6 +1893,11 @@ def run_all_tests():
         test_sl_statistics_empty,
         test_sl_statistics_large_sl,
         test_sl_statistics_no_tp_is_loss,
+        test_sl_buffer_impact_columns,
+        test_sl_buffer_impact_all_ranges_present,
+        test_sl_buffer_impact_values,
+        test_sl_buffer_impact_erosion,
+        test_sl_buffer_impact_empty,
         test_pullback_ranges_constant,
         test_pullback_statistics_columns,
         test_pullback_statistics_all_ranges_present,
