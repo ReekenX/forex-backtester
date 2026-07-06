@@ -1167,11 +1167,15 @@ def test_weekday_statistics_single_day():
 
 
 def test_sl_ranges_constant():
-    """SL_RANGES are cumulative 0-1 through 0-10."""
-    assert len(SL_RANGES) == 10
+    """SL_RANGES are cumulative 0-1..0-10, then floored bands 2-10..5-10."""
+    assert len(SL_RANGES) == 14
     assert SL_RANGES[0] == ("0-1", 0, 1)
     assert SL_RANGES[1] == ("0-2", 0, 2)
     assert SL_RANGES[9] == ("0-10", 0, 10)
+    assert SL_RANGES[10] == ("2-10", 2, 10)
+    assert SL_RANGES[11] == ("3-10", 3, 10)
+    assert SL_RANGES[12] == ("4-10", 4, 10)
+    assert SL_RANGES[13] == ("5-10", 5, 10)
 
 
 def test_sl_statistics_columns():
@@ -1183,8 +1187,9 @@ def test_sl_statistics_columns():
 def test_sl_statistics_all_ranges_present():
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
-    assert len(result) == 10
-    assert list(result['SL Range']) == [f"0-{x}" for x in range(1, 11)]
+    assert len(result) == 14
+    expected = [f"0-{x}" for x in range(1, 11)] + ["2-10", "3-10", "4-10", "5-10"]
+    assert list(result['SL Range']) == expected
 
 
 def test_sl_statistics_trade_counts():
@@ -1225,6 +1230,23 @@ def test_sl_statistics_notation():
     assert rows['0-10']['Notation'] == '6W - 4L (60.0%)'
 
 
+def test_sl_statistics_floored_bands():
+    """Floored bands apply a lower SL bound. Sample SL/TP:
+    3.5/0, 1.1/12, 2.0/0, 4.0/10, 3.0/0, 5.0/8, 2.5/0, 6.0/15, 8.0/10, 1.5/5.
+
+    2-10 (2<=SL<10): 3.5,2.0,4.0,3.0,5.0,2.5,6.0,8.0 -> 8 trades, wins 4.0/5.0/6.0/8.0.
+    5-10 (5<=SL<10): 5.0,6.0,8.0 -> 3 trades, all wins.
+    """
+    sample = get_sample_data()
+    result = calculate_sl_statistics(sample)
+    rows = {row['SL Range']: row for _, row in result.iterrows()}
+
+    assert rows['2-10']['Trades'] == 8
+    assert rows['2-10']['Notation'] == '4W - 4L (50.0%)'
+    assert rows['5-10']['Trades'] == 3
+    assert rows['5-10']['Notation'] == '3W - 0L (100.0%)'
+
+
 def test_sl_statistics_ignores_pullback():
     """A trade with Pullback >= SL but TP > 0 still counts as a win."""
     trades = pd.DataFrame({
@@ -1248,7 +1270,7 @@ def test_sl_statistics_ignores_pullback():
 def test_sl_statistics_empty():
     empty = get_empty_data()
     result = calculate_sl_statistics(empty)
-    assert len(result) == 10
+    assert len(result) == 14
     for _, row in result.iterrows():
         assert row['Trades'] == 0
         assert row['Notation'] == '0W - 0L (0.0%)'
@@ -1764,6 +1786,7 @@ def run_all_tests():
         test_sl_statistics_all_ranges_present,
         test_sl_statistics_trade_counts,
         test_sl_statistics_notation,
+        test_sl_statistics_floored_bands,
         test_sl_statistics_ignores_pullback,
         test_sl_statistics_empty,
         test_sl_statistics_large_sl,
