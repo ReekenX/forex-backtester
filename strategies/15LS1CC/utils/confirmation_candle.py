@@ -1216,8 +1216,8 @@ def calculate_sl_vs_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Compare two mutually exclusive 1:1 RRR levers - one OR the other, never both.
 
-    * Limiting SL ("0-X SL"): take only trades whose SL is below the cap,
-      with no buffer. Win: TP >= SL.
+    * Limiting SL ("0-X SL" caps and "X-10 SL" floors): take only trades whose
+      SL is inside the range, with no buffer. Win: TP >= SL.
     * Adding buffer ("N pip buffer"): take every trade, padding the stop by
       N pips. Win: TP >= SL + N.
 
@@ -1232,10 +1232,9 @@ def calculate_sl_vs_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     results = []
 
-    # Limiting SL: cumulative 0-X caps (no buffer), 1:1 win = TP >= SL.
+    # Limiting SL: cumulative 0-X caps then X-10 floors (no buffer),
+    # 1:1 win = TP >= SL.
     for label, low, high in SL_RANGES:
-        if low != 0:  # skip floored bands, keep only the 0-X caps
-            continue
         range_trades = df[(df['SL'] >= low) & (df['SL'] < high)]
         total = len(range_trades)
         wins = len(range_trades[range_trades['TP'] >= range_trades['SL']]) if total else 0

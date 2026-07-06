@@ -1425,12 +1425,14 @@ def test_sl_vs_buffer_columns():
 
 
 def test_sl_vs_buffer_hypotheses():
-    """10 SL caps (0-1 SL .. 0-10 SL) followed by 3 buffer rows."""
+    """10 SL caps (0-1 .. 0-10), 4 SL floors (2-10 .. 5-10), then 3 buffer rows."""
     sample = get_sample_data()
     result = calculate_sl_vs_buffer_statistics(sample)
-    expected = [f'0-{x} SL' for x in range(1, 11)] + [
-        '1 pip buffer', '2 pips buffer', '3 pips buffer',
-    ]
+    expected = (
+        [f'0-{x} SL' for x in range(1, 11)]
+        + ['2-10 SL', '3-10 SL', '4-10 SL', '5-10 SL']
+        + ['1 pip buffer', '2 pips buffer', '3 pips buffer']
+    )
     assert list(result['Hypothesis']) == expected
 
 
@@ -1452,6 +1454,14 @@ def test_sl_vs_buffer_values():
     assert rows['0-2 SL']['Notation'] == '2W - 0L (100.0%)'
     assert rows['0-10 SL']['Trades'] == 10
     assert rows['0-10 SL']['Notation'] == '6W - 4L (60.0%)'
+
+    # SL floors (win TP>=SL, no buffer):
+    #   2-10 SL: idx0,2,3,4,5,6,7,8 -> 8 trades, wins idx3,5,7,8 -> 4W.
+    #   5-10 SL: idx5,7,8 -> 3 trades, all wins.
+    assert rows['2-10 SL']['Trades'] == 8
+    assert rows['2-10 SL']['Notation'] == '4W - 4L (50.0%)'
+    assert rows['5-10 SL']['Trades'] == 3
+    assert rows['5-10 SL']['Notation'] == '3W - 0L (100.0%)'
 
     # Buffer rows take every trade (10), regardless of SL size.
     assert rows['1 pip buffer']['Trades'] == 10
@@ -1489,7 +1499,7 @@ def test_sl_vs_buffer_buffer_uses_all_trades():
 def test_sl_vs_buffer_empty():
     empty = get_empty_data()
     result = calculate_sl_vs_buffer_statistics(empty)
-    assert len(result) == 13
+    assert len(result) == 17
     for _, row in result.iterrows():
         assert row['Trades'] == 0
         assert row['Notation'] == '0W - 0L (0.0%)'
