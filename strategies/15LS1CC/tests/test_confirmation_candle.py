@@ -37,6 +37,7 @@ from utils.confirmation_candle import (
     SL_RANGES,
     calculate_sl_statistics,
     calculate_sl_buffer_impact_statistics,
+    calculate_sl_vs_buffer_statistics,
     PULLBACK_RANGES,
     calculate_pullback_statistics,
     TP_RANGES,
@@ -1417,6 +1418,83 @@ def test_sl_buffer_impact_empty():
         assert row['3 pips'] == '0W - 0L (0.0%)'
 
 
+def test_sl_vs_buffer_columns():
+    sample = get_sample_data()
+    result = calculate_sl_vs_buffer_statistics(sample)
+    assert list(result.columns) == ['Hypothesis', 'Trades', 'Notation']
+
+
+def test_sl_vs_buffer_hypotheses():
+    """10 SL caps (0-1 SL .. 0-10 SL) followed by 3 buffer rows."""
+    sample = get_sample_data()
+    result = calculate_sl_vs_buffer_statistics(sample)
+    expected = [f'0-{x} SL' for x in range(1, 11)] + [
+        '1 pip buffer', '2 pips buffer', '3 pips buffer',
+    ]
+    assert list(result['Hypothesis']) == expected
+
+
+def test_sl_vs_buffer_values():
+    """Sample SL/TP: 3.5/0, 1.1/12, 2.0/0, 4.0/10, 3.0/0, 5.0/8, 2.5/0,
+    6.0/15, 8.0/10, 1.5/5. All 10 have SL < 10.
+
+    Limiting SL (win TP>=SL, no buffer):
+      0-2 SL: idx1,idx9 -> 2 trades, 2W.
+      0-10 SL: all 10, wins idx1,3,5,7,8,9 -> 6W.
+    Adding buffer over all 10 trades (win TP>=SL+buffer):
+      1 pip -> 6W, 2 pips -> 6W, 3 pips -> 5W (idx8 10>=11 drops).
+    """
+    sample = get_sample_data()
+    result = calculate_sl_vs_buffer_statistics(sample)
+    rows = {row['Hypothesis']: row for _, row in result.iterrows()}
+
+    assert rows['0-2 SL']['Trades'] == 2
+    assert rows['0-2 SL']['Notation'] == '2W - 0L (100.0%)'
+    assert rows['0-10 SL']['Trades'] == 10
+    assert rows['0-10 SL']['Notation'] == '6W - 4L (60.0%)'
+
+    # Buffer rows take every trade (10), regardless of SL size.
+    assert rows['1 pip buffer']['Trades'] == 10
+    assert rows['1 pip buffer']['Notation'] == '6W - 4L (60.0%)'
+    assert rows['2 pips buffer']['Notation'] == '6W - 4L (60.0%)'
+    assert rows['3 pips buffer']['Notation'] == '5W - 5L (50.0%)'
+
+
+def test_sl_vs_buffer_buffer_uses_all_trades():
+    """A high-SL trade (SL=12) is excluded from every 0-X SL cap but still
+    counts in the buffer rows."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02'],
+        'Weekday': ['Monday', 'Tuesday'],
+        'Trade': ['#1', '#2'],
+        'Direction': ['Buy', 'Buy'],
+        '1H': ['Buy', 'Buy'],
+        'SL': [3.0, 12.0],
+        'Pullback': [1.0, 1.0],
+        'TP': [5.0, 20.0],
+        'R': [1.6, 1.6],
+    })
+
+    result = calculate_sl_vs_buffer_statistics(trades)
+    rows = {row['Hypothesis']: row for _, row in result.iterrows()}
+
+    # 0-10 SL cap sees only the SL=3 trade.
+    assert rows['0-10 SL']['Trades'] == 1
+    # Buffer rows see both trades.
+    assert rows['1 pip buffer']['Trades'] == 2
+    # 1 pip: SL3 needs TP>=4 (5 ok), SL12 needs TP>=13 (20 ok) -> 2W.
+    assert rows['1 pip buffer']['Notation'] == '2W - 0L (100.0%)'
+
+
+def test_sl_vs_buffer_empty():
+    empty = get_empty_data()
+    result = calculate_sl_vs_buffer_statistics(empty)
+    assert len(result) == 13
+    for _, row in result.iterrows():
+        assert row['Trades'] == 0
+        assert row['Notation'] == '0W - 0L (0.0%)'
+
+
 def test_pullback_ranges_constant():
     """Test that PULLBACK_RANGES has expected ranges."""
     assert len(PULLBACK_RANGES) == 4
@@ -1898,6 +1976,11 @@ def run_all_tests():
         test_sl_buffer_impact_values,
         test_sl_buffer_impact_erosion,
         test_sl_buffer_impact_empty,
+        test_sl_vs_buffer_columns,
+        test_sl_vs_buffer_hypotheses,
+        test_sl_vs_buffer_values,
+        test_sl_vs_buffer_buffer_uses_all_trades,
+        test_sl_vs_buffer_empty,
         test_pullback_ranges_constant,
         test_pullback_statistics_columns,
         test_pullback_statistics_all_ranges_present,

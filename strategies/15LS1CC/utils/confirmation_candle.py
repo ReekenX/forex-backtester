@@ -1212,6 +1212,71 @@ def display_analysis_sl_buffer_impact(df: pd.DataFrame):
     display(HTML(html_table))
 
 
+def calculate_sl_vs_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compare two mutually exclusive 1:1 RRR levers - one OR the other, never both.
+
+    * Limiting SL ("0-X SL"): take only trades whose SL is below the cap,
+      with no buffer. Win: TP >= SL.
+    * Adding buffer ("N pip buffer"): take every trade, padding the stop by
+      N pips. Win: TP >= SL + N.
+
+    The Pullback < SL condition is intentionally not checked (matching the
+    other SL tables).
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with columns: Hypothesis, Trades, Notation
+    """
+    results = []
+
+    # Limiting SL: cumulative 0-X caps (no buffer), 1:1 win = TP >= SL.
+    for label, low, high in SL_RANGES:
+        if low != 0:  # skip floored bands, keep only the 0-X caps
+            continue
+        range_trades = df[(df['SL'] >= low) & (df['SL'] < high)]
+        total = len(range_trades)
+        wins = len(range_trades[range_trades['TP'] >= range_trades['SL']]) if total else 0
+        results.append({
+            'Hypothesis': f'{label} SL',
+            'Trades': total,
+            'Notation': _format_wl(wins, total - wins, total),
+        })
+
+    # Adding buffer: every trade (no SL cap), 1:1 win = TP >= SL + buffer.
+    all_trades = df[df['SL'].notna()]
+    total = len(all_trades)
+    for col, buffer in SL_BUFFER_COLS:
+        wins = len(all_trades[all_trades['TP'] >= all_trades['SL'] + buffer]) if total else 0
+        results.append({
+            'Hypothesis': f'{col} buffer',
+            'Trades': total,
+            'Notation': _format_wl(wins, total - wins, total),
+        })
+
+    return pd.DataFrame(results)
+
+
+def display_analysis_sl_vs_buffer(df: pd.DataFrame):
+    """
+    Display a head-to-head comparison of limiting SL versus adding a stop
+    buffer at 1:1 RRR - each lever used on its own, never combined.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Limiting SL vs Adding Buffer (1:1 RRR)</h2>"
+    display(HTML(title_html))
+
+    stats_df = calculate_sl_vs_buffer_statistics(df)
+    html_table = create_html_table(stats_df)
+    display(HTML(html_table))
+
+
 PULLBACK_RANGES = [
     ("0-3", 0, 3),
     ("3-5", 3, 5),
