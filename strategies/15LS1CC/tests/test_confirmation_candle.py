@@ -1183,7 +1183,7 @@ def test_sl_statistics_columns():
     result = calculate_sl_statistics(sample)
     assert list(result.columns) == [
         'SL Range', 'Trades', 'Notation',
-        'Notation (1:2 RRR)', 'Notation (1:3 RRR)',
+        'Notation (1:2 RRR)', 'Notation (1:3 RRR)', 'Notation (1:4 RRR)',
     ]
 
 
@@ -1193,6 +1193,7 @@ def test_sl_statistics_rrr_notation():
 
     1:2 wins (TP>=2*SL): idx 1,3,7,9 -> 4 of 10.
     1:3 wins (TP>=3*SL): idx 1,9 -> 2 of 10.
+    1:4 wins (TP>=4*SL): idx 1 -> 1 of 10.
     """
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
@@ -1200,10 +1201,12 @@ def test_sl_statistics_rrr_notation():
 
     assert rows['0-10']['Notation (1:2 RRR)'] == '4W - 6L (40.0%)'
     assert rows['0-10']['Notation (1:3 RRR)'] == '2W - 8L (20.0%)'
+    assert rows['0-10']['Notation (1:4 RRR)'] == '1W - 9L (10.0%)'
     # Floored band 2-10 (SL 3.5,2.0,4.0,3.0,5.0,2.5,6.0,8.0):
-    # 1:2 wins idx3,idx7 -> 2; 1:3 wins none.
+    # 1:2 wins idx3,idx7 -> 2; 1:3 and 1:4 wins none (idx1 is SL 1.1, excluded).
     assert rows['2-10']['Notation (1:2 RRR)'] == '2W - 6L (25.0%)'
     assert rows['2-10']['Notation (1:3 RRR)'] == '0W - 8L (0.0%)'
+    assert rows['2-10']['Notation (1:4 RRR)'] == '0W - 8L (0.0%)'
 
 
 def test_sl_statistics_all_ranges_present():
@@ -1298,6 +1301,7 @@ def test_sl_statistics_empty():
         assert row['Notation'] == '0W - 0L (0.0%)'
         assert row['Notation (1:2 RRR)'] == '0W - 0L (0.0%)'
         assert row['Notation (1:3 RRR)'] == '0W - 0L (0.0%)'
+        assert row['Notation (1:4 RRR)'] == '0W - 0L (0.0%)'
 
 
 def test_sl_statistics_large_sl():
