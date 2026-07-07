@@ -1270,15 +1270,20 @@ def calculate_sl_buffer_impact_statistics(df: pd.DataFrame, rrr: int = 1) -> pd.
     Calculate win/loss statistics for SL pip ranges at a given RRR, showing the
     impact of padding the stop loss with a safety buffer.
 
-    The reward target equals RRR times the risk. Adding a buffer widens the risk
-    to SL + buffer, so a win requires TP >= RRR * (SL + buffer). The Pullback < SL
-    condition is intentionally not checked (matching calculate_sl_statistics).
+    The reward target equals RRR times the risk. Adding a buffer widens the stop
+    to SL + buffer. A trade wins only if it BOTH survives the (widened) stop and
+    reaches the target:
+        Pullback < SL + buffer   AND   TP >= RRR * (SL + buffer)
+
+    The survival check matters here: a buffer's whole purpose is to keep trades
+    from being stopped out, so ignoring Pullback would both inflate win rates and
+    hide the buffer's actual effect. This matches _calculate_stats_with_buffer.
 
     Columns (for RRR = R):
-        Notation: TP >= R * SL         (no buffer)
-        1 pip:    TP >= R * (SL + 1)
-        2 pips:   TP >= R * (SL + 2)
-        3 pips:   TP >= R * (SL + 3)
+        Notation: Pullback < SL     AND TP >= R * SL         (no buffer)
+        1 pip:    Pullback < SL + 1 AND TP >= R * (SL + 1)
+        2 pips:   Pullback < SL + 2 AND TP >= R * (SL + 2)
+        3 pips:   Pullback < SL + 3 AND TP >= R * (SL + 3)
 
     Args:
         df: DataFrame with trading data
@@ -1302,13 +1307,18 @@ def calculate_sl_buffer_impact_statistics(df: pd.DataFrame, rrr: int = 1) -> pd.
             results.append(row)
             continue
 
-        wins = len(range_trades[range_trades['TP'] >= rrr * range_trades['SL']])
+        def _wins(buffer: float) -> int:
+            effective_sl = range_trades['SL'] + buffer
+            return len(range_trades[
+                (range_trades['Pullback'] < effective_sl)
+                & (range_trades['TP'] >= rrr * effective_sl)
+            ])
+
+        wins = _wins(0.0)
         row['Notation'] = _format_wl(wins, total - wins, total)
 
         for col, buffer in SL_BUFFER_COLS:
-            buf_wins = len(range_trades[
-                range_trades['TP'] >= rrr * (range_trades['SL'] + buffer)
-            ])
+            buf_wins = _wins(buffer)
             row[col] = _format_wl(buf_wins, total - buf_wins, total)
 
         results.append(row)

@@ -1442,14 +1442,15 @@ def test_sl_buffer_impact_all_ranges_present():
 
 
 def test_sl_buffer_impact_values():
-    """1:1 win = TP >= SL + buffer (Pullback not checked). Sample SL/TP:
-    3.5/0, 1.1/12, 2.0/0, 4.0/10, 3.0/0, 5.0/8, 2.5/0, 6.0/15, 8.0/10, 1.5/5.
+    """1:1 win = Pullback < SL+buffer AND TP >= SL+buffer. Sample SL/PB/TP:
+    3.5/3.5/0, 1.1/0.8/12, 2.0/2.1/0, 4.0/1.5/10, 3.0/3.0/0, 5.0/2.0/8,
+    2.5/2.5/0, 6.0/3.0/15, 8.0/7.0/10, 1.5/0.5/5.
 
-    0-10 (all 10):
-      Notation (TP>=SL):     idx 1,3,5,7,8,9 -> 6W
-      1 pip  (TP>=SL+1):     same 6 -> 6W
-      2 pips (TP>=SL+2):     same 6 -> 6W
-      3 pips (TP>=SL+3):     idx8 (10>=11) drops -> 5W
+    0-10 (all 10) - every TP-reaching trade also survives its pullback here:
+      Notation:  idx 1,3,5,7,8,9 -> 6W
+      1 pip:     same 6 -> 6W
+      2 pips:    same 6 -> 6W
+      3 pips:    idx8 (TP 10 < 11) drops -> 5W
     """
     sample = get_sample_data()
     result = calculate_sl_buffer_impact_statistics(sample)
@@ -1461,9 +1462,40 @@ def test_sl_buffer_impact_values():
     assert rows['0-10']['3 pips'] == '5W - 5L (50.0%)'
 
 
+def test_sl_buffer_impact_requires_surviving_stop():
+    """A trade that reaches the target in hindsight but was stopped out first
+    (Pullback >= SL) is NOT a win until the buffer is wide enough to survive it.
+
+    SL=3, Pullback=5, TP=10 at 1:1:
+      Notation (stop 3):  PB 5 >= 3  -> stopped out -> loss
+      1 pip   (stop 4):   PB 5 >= 4  -> stopped out -> loss
+      2 pips  (stop 5):   PB 5 >= 5  -> stopped out -> loss
+      3 pips  (stop 6):   PB 5 < 6 and TP 10 >= 6 -> win
+    """
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        'Direction': ['Buy'],
+        '1H': ['Buy'],
+        'SL': [3.0],
+        'Pullback': [5.0],
+        'TP': [10.0],
+        'R': [0],
+    })
+
+    result = calculate_sl_buffer_impact_statistics(trades)
+    rows = {row['SL Range']: row for _, row in result.iterrows()}
+
+    assert rows['0-10']['Notation'] == '0W - 1L (0.0%)'
+    assert rows['0-10']['1 pip'] == '0W - 1L (0.0%)'
+    assert rows['0-10']['2 pips'] == '0W - 1L (0.0%)'
+    assert rows['0-10']['3 pips'] == '1W - 0L (100.0%)'
+
+
 def test_sl_buffer_impact_erosion():
-    """Single trade SL=2, TP=4. 1:1 win at 0/1/2 pip buffer (TP>=4);
-    3 pip buffer needs TP>=5, so it flips to a loss."""
+    """Single trade SL=2, Pullback=1, TP=4. Survives the stop at every buffer.
+    1:1 win at 0/1/2 pip buffer (TP>=SL+buffer); 3 pip buffer needs TP>=5 -> loss."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
         'Weekday': ['Monday'],
@@ -1506,8 +1538,8 @@ def test_sl_buffer_impact_default_rrr_is_1():
 
 
 def test_sl_buffer_impact_rrr_2_values():
-    """1:2 win = TP >= 2*(SL+buffer). Sample SL/TP:
-    3.5/0, 1.1/12, 2.0/0, 4.0/10, 3.0/0, 5.0/8, 2.5/0, 6.0/15, 8.0/10, 1.5/5.
+    """1:2 win = Pullback < SL+buffer AND TP >= 2*(SL+buffer). In this sample the
+    target-reaching trades all survive their pullback, so counts are unchanged.
 
     0-10 (all 10):
       Notation (TP>=2*SL):        idx 1,3,7,9 -> 4W
@@ -1981,6 +2013,7 @@ def run_all_tests():
         test_sl_buffer_impact_columns,
         test_sl_buffer_impact_all_ranges_present,
         test_sl_buffer_impact_values,
+        test_sl_buffer_impact_requires_surviving_stop,
         test_sl_buffer_impact_erosion,
         test_sl_buffer_impact_empty,
         test_sl_buffer_impact_default_rrr_is_1,
