@@ -1074,6 +1074,7 @@ def display_weekday(df: pd.DataFrame):
 SL_RANGES = [
     (f"0-{x}", 0, x) for x in range(1, 11)
 ] + [
+    ("1-10", 1, 10),
     ("2-10", 2, 10),
     ("3-10", 3, 10),
     ("4-10", 4, 10),

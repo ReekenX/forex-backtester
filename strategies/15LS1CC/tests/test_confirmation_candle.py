@@ -1191,15 +1191,16 @@ def test_weekday_statistics_single_day():
 
 
 def test_sl_ranges_constant():
-    """SL_RANGES are cumulative 0-1..0-10, then floored bands 2-10..5-10."""
-    assert len(SL_RANGES) == 14
+    """SL_RANGES are cumulative 0-1..0-10, then floored bands 1-10..5-10."""
+    assert len(SL_RANGES) == 15
     assert SL_RANGES[0] == ("0-1", 0, 1)
     assert SL_RANGES[1] == ("0-2", 0, 2)
     assert SL_RANGES[9] == ("0-10", 0, 10)
-    assert SL_RANGES[10] == ("2-10", 2, 10)
-    assert SL_RANGES[11] == ("3-10", 3, 10)
-    assert SL_RANGES[12] == ("4-10", 4, 10)
-    assert SL_RANGES[13] == ("5-10", 5, 10)
+    assert SL_RANGES[10] == ("1-10", 1, 10)
+    assert SL_RANGES[11] == ("2-10", 2, 10)
+    assert SL_RANGES[12] == ("3-10", 3, 10)
+    assert SL_RANGES[13] == ("4-10", 4, 10)
+    assert SL_RANGES[14] == ("5-10", 5, 10)
 
 
 def test_sl_statistics_columns():
@@ -1236,8 +1237,8 @@ def test_sl_statistics_rrr_notation():
 def test_sl_statistics_all_ranges_present():
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
-    assert len(result) == 14
-    expected = [f"0-{x}" for x in range(1, 11)] + ["2-10", "3-10", "4-10", "5-10"]
+    assert len(result) == 15
+    expected = [f"0-{x}" for x in range(1, 11)] + ["1-10", "2-10", "3-10", "4-10", "5-10"]
     assert list(result['SL Range']) == expected
 
 
@@ -1319,7 +1320,7 @@ def test_sl_statistics_ignores_pullback():
 def test_sl_statistics_empty():
     empty = get_empty_data()
     result = calculate_sl_statistics(empty)
-    assert len(result) == 14
+    assert len(result) == 15
     for _, row in result.iterrows():
         assert row['Trades'] == 0
         assert row['Notation'] == '0W - 0L (0.0%)'
@@ -1413,8 +1414,8 @@ def test_sl_buffer_impact_columns():
 def test_sl_buffer_impact_all_ranges_present():
     sample = get_sample_data()
     result = calculate_sl_buffer_impact_statistics(sample)
-    assert len(result) == 14
-    expected = [f"0-{x}" for x in range(1, 11)] + ["2-10", "3-10", "4-10", "5-10"]
+    assert len(result) == 15
+    expected = [f"0-{x}" for x in range(1, 11)] + ["1-10", "2-10", "3-10", "4-10", "5-10"]
     assert list(result['SL Range']) == expected
 
 
@@ -1465,7 +1466,7 @@ def test_sl_buffer_impact_erosion():
 def test_sl_buffer_impact_empty():
     empty = get_empty_data()
     result = calculate_sl_buffer_impact_statistics(empty)
-    assert len(result) == 14
+    assert len(result) == 15
     for _, row in result.iterrows():
         assert row['Trades'] == 0
         assert row['Notation'] == '0W - 0L (0.0%)'
@@ -1481,17 +1482,18 @@ def test_sl_vs_buffer_columns():
 
 
 def test_sl_vs_buffer_hypotheses():
-    """10 SL caps, 4 SL floors, 3 buffer rows, then 4x3 combined floor+buffer rows."""
+    """10 SL caps, 5 SL floors, 3 buffer rows, then 5x3 combined floor+buffer rows."""
     sample = get_sample_data()
     result = calculate_sl_vs_buffer_statistics(sample)
+    floors = ['1-10', '2-10', '3-10', '4-10', '5-10']
     combined = [
         f'{floor} SL and {buf} buffer'
-        for floor in ['2-10', '3-10', '4-10', '5-10']
+        for floor in floors
         for buf in ['1 pip', '2 pips', '3 pips']
     ]
     expected = (
         [f'0-{x} SL' for x in range(1, 11)]
-        + ['2-10 SL', '3-10 SL', '4-10 SL', '5-10 SL']
+        + [f'{floor} SL' for floor in floors]
         + ['1 pip buffer', '2 pips buffer', '3 pips buffer']
         + combined
     )
@@ -1570,7 +1572,7 @@ def test_sl_vs_buffer_buffer_uses_all_trades():
 def test_sl_vs_buffer_empty():
     empty = get_empty_data()
     result = calculate_sl_vs_buffer_statistics(empty)
-    assert len(result) == 29
+    assert len(result) == 33
     for _, row in result.iterrows():
         assert row['Trades'] == 0
         assert row['Notation'] == '0W - 0L (0.0%)'
