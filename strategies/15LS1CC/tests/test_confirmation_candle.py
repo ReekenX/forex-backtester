@@ -1666,6 +1666,21 @@ def test_sl_vs_buffer_empty():
         assert row['Notation'] == '0W - 0L (0.0%)'
 
 
+def test_sl_vs_buffer_sortable_notation():
+    """The Notation column is click-to-sort DESC; Hypothesis and Trades are not."""
+    sample = get_sample_data()
+    stats = calculate_sl_vs_buffer_statistics(sample)
+    html = _create_sl_sortable_table(stats, "sl-vs-buffer")
+
+    notation_idx = list(stats.columns).index("Notation")
+    assert f"sortSlRange('sl-vs-buffer', {notation_idx}, this)" in html
+    assert "Notation ↓" in html
+    # Hypothesis and Trades headers stay plain.
+    assert ">Hypothesis</th>" in html
+    assert ">Trades</th>" in html
+    assert "return pct(b) - pct(a);" in html
+
+
 def test_pullback_ranges_constant():
     """Test that PULLBACK_RANGES has expected ranges."""
     assert len(PULLBACK_RANGES) == 4
@@ -2024,6 +2039,7 @@ def run_all_tests():
         test_sl_vs_buffer_values,
         test_sl_vs_buffer_buffer_uses_all_trades,
         test_sl_vs_buffer_empty,
+        test_sl_vs_buffer_sortable_notation,
         test_pullback_ranges_constant,
         test_pullback_statistics_columns,
         test_pullback_statistics_all_ranges_present,

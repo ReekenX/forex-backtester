@@ -1418,6 +1418,8 @@ def display_analysis_sl_vs_buffer(df: pd.DataFrame):
     Display a head-to-head comparison of limiting SL versus adding a stop
     buffer at 1:1 RRR, each lever alone and then the two combined.
 
+    The Notation column header is click-to-sort by win rate, descending.
+
     Args:
         df: DataFrame with trading data
     """
@@ -1427,7 +1429,7 @@ def display_analysis_sl_vs_buffer(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_vs_buffer_statistics(df)
-    html_table = create_html_table(stats_df)
+    html_table = _create_sl_sortable_table(stats_df, "sl-vs-buffer")
     display(HTML(html_table))
 
 
