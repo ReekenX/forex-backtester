@@ -337,6 +337,36 @@ def test_create_html_table_empty():
     assert 'No profitable strategies found' in html
 
 
+def test_create_html_table_no_sort_by_default():
+    """Without sort_id, no sort script or clickable headers are emitted."""
+    df = pd.DataFrame({'Strategy': ['A'], 'Win Rate': ['40.0%']})
+    html = create_html_table(df)
+    assert 'sortAnalysisTable' not in html
+    assert 'class="sortable"' not in html
+
+
+def test_create_html_table_sortable_win_rate():
+    """With sort_id, a percentage column (Win Rate) becomes click-to-sort DESC,
+    while non-percentage columns stay plain."""
+    df = pd.DataFrame({
+        'Strategy': ['A', 'B'],
+        'Trades': [10, 20],
+        'Win Rate': ['40.0%', '55.5%'],
+    })
+    html = create_html_table(df, sort_id='strategies-table')
+
+    assert 'id="strategies-table"' in html
+    assert 'function sortAnalysisTable' in html
+    assert 'return pct(b) - pct(a);' in html  # DESC only
+    # Win Rate (index 2) is the only sortable column.
+    assert "sortAnalysisTable('strategies-table', 2, this)" in html
+    assert 'Win Rate ↓' in html
+    # Strategy and Trades headers stay plain.
+    assert '>Trades</th>' in html
+    assert 'sortAnalysisTable(\'strategies-table\', 0' not in html
+    assert 'sortAnalysisTable(\'strategies-table\', 1' not in html
+
+
 def test_buffer_saves_losing_trade():
     """Test that adding buffer pips can save a trade that would otherwise lose.
 
@@ -1953,6 +1983,8 @@ def run_all_tests():
         test_calculate_statistics_columns,
         test_create_html_table_basic,
         test_create_html_table_empty,
+        test_create_html_table_no_sort_by_default,
+        test_create_html_table_sortable_win_rate,
         test_buffer_saves_losing_trade,
         test_buffer_tp_must_reach_effective_sl,
         test_buffer_stats_has_buffer_column,

@@ -12,7 +12,7 @@ CSV columns: Date, Weekday, Trade, Direction, 1H, SL, Pullback, TP, R
 """
 
 import pandas as pd
-from typing import Dict, List, Tuple, Callable
+from typing import Dict, List, Optional, Tuple, Callable
 
 
 # RRR ratios to test
@@ -220,18 +220,31 @@ def _calculate_stats(trades: pd.DataFrame, strategy_name: str, rrr_ratio: int = 
     }
 
 
-def create_html_table(df: pd.DataFrame) -> str:
+def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None) -> str:
     """
     Create a dark-mode HTML table with styled formatting.
 
     Args:
         df: DataFrame to convert to HTML table
+        sort_id: When set, gives the table this DOM id and makes every column
+            whose cells carry a percentage (e.g. a "Win Rate" of "23.4%")
+            click-to-sort by that percentage, descending only.
 
     Returns:
         HTML string with styled table
     """
+    import re
+
     if df.empty:
         return "<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable strategies found</p>"
+
+    pct_re = re.compile(r"\d+(?:\.\d+)?%")
+    sortable_cols = set()
+    if sort_id:
+        sortable_cols = {
+            col for col in df.columns
+            if any(pct_re.search(str(v)) for v in df[col])
+        }
 
     html = """
     <style>
@@ -258,6 +271,16 @@ def create_html_table(df: pd.DataFrame) -> str:
         .analysis-table tr:hover {
             background-color: #2a2a2a;
         }
+        .analysis-table th.sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+        .analysis-table th.sortable:hover {
+            background-color: #3a3a3a;
+        }
+        .analysis-table th.sorted-desc {
+            color: #4ade80;
+        }
         .strategy-col {
             width: 300px;
         }
@@ -268,14 +291,42 @@ def create_html_table(df: pd.DataFrame) -> str:
             color: #f87171;
         }
     </style>
-    <table class="analysis-table">
-        <thead>
-            <tr>
     """
 
-    for col in df.columns:
-        cls = ' class="strategy-col"' if col == "Strategy" else ""
-        html += f"<th{cls}>{col}</th>"
+    if sort_id:
+        html += """
+    <script>
+        function sortAnalysisTable(tableId, colIndex, th) {
+            var table = document.getElementById(tableId);
+            var tbody = table.tBodies[0];
+            var rows = Array.prototype.slice.call(tbody.rows);
+            function pct(row) {
+                var m = row.cells[colIndex].textContent.match(/([\\d.]+)%/);
+                return m ? parseFloat(m[1]) : -1;
+            }
+            rows.sort(function(a, b) { return pct(b) - pct(a); });
+            rows.forEach(function(r) { tbody.appendChild(r); });
+            var headers = table.tHead.rows[0].cells;
+            for (var i = 0; i < headers.length; i++) {
+                headers[i].classList.remove('sorted-desc');
+            }
+            th.classList.add('sorted-desc');
+        }
+    </script>
+    """
+
+    id_attr = f' id="{sort_id}"' if sort_id else ""
+    html += f'<table class="analysis-table"{id_attr}>\n        <thead>\n            <tr>\n'
+
+    for idx, col in enumerate(df.columns):
+        if col in sortable_cols:
+            html += (
+                f'<th class="sortable" title="Sort by win rate (desc)" '
+                f'onclick="sortAnalysisTable(\'{sort_id}\', {idx}, this)">{col} ↓</th>'
+            )
+        else:
+            cls = ' class="strategy-col"' if col == "Strategy" else ""
+            html += f"<th{cls}>{col}</th>"
     html += """
             </tr>
         </thead>
@@ -511,7 +562,8 @@ def _calculate_buffer_statistics_filtered(df: pd.DataFrame, strategy_names: List
     return result_df
 
 
-def _display_analysis_table(df: pd.DataFrame, title: str, strategy_names: List[str]):
+def _display_analysis_table(df: pd.DataFrame, title: str, strategy_names: List[str],
+                            sort_id: Optional[str] = None):
     """
     Display a buffer analysis table for given strategies.
 
@@ -519,6 +571,7 @@ def _display_analysis_table(df: pd.DataFrame, title: str, strategy_names: List[s
         df: DataFrame with trading data
         title: Table title
         strategy_names: Strategy names to include
+        sort_id: When set, make the table's win-rate column click-to-sort (desc)
     """
     from IPython.display import display, HTML
 
@@ -536,79 +589,18 @@ def _display_analysis_table(df: pd.DataFrame, title: str, strategy_names: List[s
     if stats_df.empty:
         display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No profitable strategies found</p>"))
     else:
-        html_table = create_html_table(stats_df)
+        html_table = create_html_table(stats_df, sort_id=sort_id)
         display(HTML(html_table))
 
 
 def display_analysis_strategies(df: pd.DataFrame):
     """
-    Display buffer analysis for every configured strategy in a single table,
-    followed by a bar chart of each row's win rate (0–60%).
+    Display buffer analysis for every configured strategy in a single table.
+
+    The Win Rate column header is click-to-sort by win rate, descending.
     """
-    import matplotlib.pyplot as plt
-
     names = [name for name, _ in get_buffer_strategies()]
-    _display_analysis_table(df, "Strategies", names)
-
-    stats_df = _calculate_buffer_statistics_filtered(df, names)
-    if stats_df.empty:
-        return
-
-    win_rates = stats_df['Win Rate'].str.rstrip('%').astype(float).tolist()
-    labels = [
-        f"{row['Strategy']} {row['Buffer']} min{row['Min SL']} max{row['Max SL']} {row['RRR']}"
-        for _, row in stats_df.iterrows()
-    ]
-    breakevens = [
-        100.0 / (1 + float(str(rrr).split(':')[-1]))
-        for rrr in stats_df['RRR']
-    ]
-
-    # Top row at top of chart: reverse so position 0 in the bar series is the last row visually.
-    positions = list(range(len(labels)))[::-1]
-
-    fig, ax = plt.subplots(figsize=(12, max(4, len(labels) * 0.18)))
-    fig.patch.set_facecolor('#1e1e1e')
-    ax.set_facecolor('#1e1e1e')
-
-    colors = ['#4ade80' if wr > be else '#f87171' for wr, be in zip(win_rates, breakevens)]
-    ax.barh(positions, win_rates, color=colors, edgecolor='#404040')
-
-    # Per-bar breakeven markers (50% for 1:1, 33.3% for 1:2, ...).
-    for pos, be in zip(positions, breakevens):
-        ax.vlines(be, pos - 0.4, pos + 0.4, colors='#e0e0e0', linewidth=1, alpha=0.6)
-
-    ax.set_xlim(0, 60)
-    ax.set_xlabel('Win Rate (%)', color='#e0e0e0')
-    ax.set_title('Strategies — Win Rate', color='#e0e0e0', loc='left')
-    ax.set_yticks(positions)
-    ax.set_yticklabels(labels, color='#e0e0e0', fontsize=8)
-    ax.tick_params(axis='x', colors='#e0e0e0')
-    for spine in ax.spines.values():
-        spine.set_color('#404040')
-    ax.grid(axis='x', color='#404040', linestyle='--', alpha=0.5)
-    ax.set_axisbelow(True)
-    ax.margins(y=0.005)
-
-    plt.tight_layout()
-    plt.show()
-
-    from IPython.display import display, HTML
-
-    win_rate_values = stats_df['Win Rate'].str.rstrip('%').astype(float)
-    breakeven_values = pd.Series(breakevens, index=stats_df.index)
-    winners_df = stats_df.loc[win_rate_values > breakeven_values].copy()
-
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Winning Strategies</h2>"
-    display(HTML(title_html))
-
-    if winners_df.empty:
-        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No winning strategies found</p>"))
-    else:
-        winners_df = winners_df.assign(
-            _wr=winners_df['Win Rate'].str.rstrip('%').astype(float)
-        ).sort_values('_wr', ascending=False).drop(columns='_wr').reset_index(drop=True)
-        display(HTML(create_html_table(winners_df)))
+    _display_analysis_table(df, "Strategies", names, sort_id="strategies-table")
 
 
 FIXED_SL_SIZES = [1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
