@@ -1132,9 +1132,107 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
+def _create_sl_sortable_table(df: pd.DataFrame) -> str:
+    """
+    Build the SL Range table HTML with click-to-sort headers on every
+    "Notation" column. Clicking a Notation header sorts rows by that column's
+    win-rate percentage, descending only (each click re-sorts DESC).
+
+    Args:
+        df: DataFrame with an 'SL Range' column and one or more 'Notation*' columns
+
+    Returns:
+        HTML string with a sortable, dark-mode styled table
+    """
+    if df.empty:
+        return "<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data</p>"
+
+    table_id = "sl-range-stats"
+    columns = list(df.columns)
+
+    html = """
+    <style>
+        .analysis-table {
+            border-collapse: collapse;
+            width: 100%;
+            background-color: #1e1e1e;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .analysis-table th {
+            background-color: #2d2d2d;
+            color: #e0e0e0;
+            padding: 8px;
+            text-align: left;
+            border: 1px solid #404040;
+            font-weight: bold;
+        }
+        .analysis-table td {
+            padding: 6px 8px;
+            border: 1px solid #404040;
+        }
+        .analysis-table tr:hover {
+            background-color: #2a2a2a;
+        }
+        .analysis-table th.sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+        .analysis-table th.sortable:hover {
+            background-color: #3a3a3a;
+        }
+        .analysis-table th.sorted-desc {
+            color: #4ade80;
+        }
+    </style>
+    <script>
+        function sortSlRange(tableId, colIndex, th) {
+            var table = document.getElementById(tableId);
+            var tbody = table.tBodies[0];
+            var rows = Array.prototype.slice.call(tbody.rows);
+            function pct(row) {
+                var m = row.cells[colIndex].textContent.match(/\\(([\\d.]+)%\\)/);
+                return m ? parseFloat(m[1]) : -1;
+            }
+            rows.sort(function(a, b) { return pct(b) - pct(a); });
+            rows.forEach(function(r) { tbody.appendChild(r); });
+            var headers = table.tHead.rows[0].cells;
+            for (var i = 0; i < headers.length; i++) {
+                headers[i].classList.remove('sorted-desc');
+            }
+            th.classList.add('sorted-desc');
+        }
+    </script>
+    """
+    html += f'<table class="analysis-table" id="{table_id}">\n        <thead>\n            <tr>\n'
+
+    for idx, col in enumerate(columns):
+        if col.startswith("Notation"):
+            html += (
+                f'<th class="sortable" title="Sort by win rate (desc)" '
+                f'onclick="sortSlRange(\'{table_id}\', {idx}, this)">{col} ↓</th>'
+            )
+        else:
+            html += f"<th>{col}</th>"
+
+    html += "\n            </tr>\n        </thead>\n        <tbody>\n"
+
+    for _, row in df.iterrows():
+        html += "            <tr>\n"
+        for col in columns:
+            html += f"                <td>{row[col]}</td>\n"
+        html += "            </tr>\n"
+
+    html += "        </tbody>\n    </table>\n"
+    return html
+
+
 def display_analysis_sl(df: pd.DataFrame):
     """
     Display win/loss statistics broken down by SL pip range.
+
+    Each Notation column header is click-to-sort by win rate, descending.
 
     Args:
         df: DataFrame with trading data
@@ -1145,7 +1243,7 @@ def display_analysis_sl(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_statistics(df)
-    html_table = create_html_table(stats_df)
+    html_table = _create_sl_sortable_table(stats_df)
     display(HTML(html_table))
 
 

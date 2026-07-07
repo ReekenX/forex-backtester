@@ -36,6 +36,7 @@ from utils.confirmation_candle import (
     _format_wl,
     SL_RANGES,
     calculate_sl_statistics,
+    _create_sl_sortable_table,
     calculate_sl_buffer_impact_statistics,
     calculate_sl_vs_buffer_statistics,
     PULLBACK_RANGES,
@@ -1367,6 +1368,40 @@ def test_sl_statistics_no_tp_is_loss():
     assert rows['0-10']['Notation'] == '0W - 1L (0.0%)'
 
 
+def test_sl_sortable_table_notation_headers_clickable():
+    """Every Notation column header is click-to-sort; other columns are not."""
+    sample = get_sample_data()
+    stats = calculate_sl_statistics(sample)
+    html = _create_sl_sortable_table(stats)
+
+    notation_cols = [c for c in stats.columns if c.startswith("Notation")]
+    assert len(notation_cols) >= 1
+    for idx, col in enumerate(stats.columns):
+        if col.startswith("Notation"):
+            assert f"sortSlRange('sl-range-stats', {idx}, this)" in html
+            assert f"{col} ↓" in html
+        else:
+            # Non-notation headers are plain, no onclick.
+            assert f">{col}</th>" in html
+
+
+def test_sl_sortable_table_sorts_descending():
+    """The embedded sort script orders by win-rate percentage, descending only."""
+    sample = get_sample_data()
+    html = _create_sl_sortable_table(calculate_sl_statistics(sample))
+    assert "function sortSlRange" in html
+    # DESC: comparator is pct(b) - pct(a).
+    assert "return pct(b) - pct(a);" in html
+    # Parses the "(NN.N%)" win rate out of the cell text.
+    assert "%)" in html and "match(" in html
+
+
+def test_sl_sortable_table_empty():
+    html = _create_sl_sortable_table(pd.DataFrame())
+    assert "No data" in html
+    assert "sortSlRange" not in html
+
+
 def test_sl_buffer_impact_columns():
     sample = get_sample_data()
     result = calculate_sl_buffer_impact_statistics(sample)
@@ -1880,6 +1915,9 @@ def run_all_tests():
         test_sl_statistics_empty,
         test_sl_statistics_large_sl,
         test_sl_statistics_no_tp_is_loss,
+        test_sl_sortable_table_notation_headers_clickable,
+        test_sl_sortable_table_sorts_descending,
+        test_sl_sortable_table_empty,
         test_sl_buffer_impact_columns,
         test_sl_buffer_impact_all_ranges_present,
         test_sl_buffer_impact_values,
