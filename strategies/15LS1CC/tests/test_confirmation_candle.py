@@ -1370,10 +1370,11 @@ def test_sl_statistics_no_tp_is_loss():
 
 
 def test_sl_sortable_table_notation_headers_clickable():
-    """Every Notation column header is click-to-sort; other columns are not."""
+    """Every win-rate (Notation*) column header is click-to-sort; SL Range and
+    Trades are not."""
     sample = get_sample_data()
     stats = calculate_sl_statistics(sample)
-    html = _create_sl_sortable_table(stats)
+    html = _create_sl_sortable_table(stats, "sl-range-stats")
 
     notation_cols = [c for c in stats.columns if c.startswith("Notation")]
     assert len(notation_cols) >= 1
@@ -1382,14 +1383,35 @@ def test_sl_sortable_table_notation_headers_clickable():
             assert f"sortSlRange('sl-range-stats', {idx}, this)" in html
             assert f"{col} ↓" in html
         else:
-            # Non-notation headers are plain, no onclick.
+            # SL Range / Trades headers are plain, no onclick.
             assert f">{col}</th>" in html
+
+
+def test_sl_sortable_table_buffer_impact_columns_clickable():
+    """The buffer columns (1 pip, 2 pips, 3 pips) are sortable win-rate columns."""
+    sample = get_sample_data()
+    stats = calculate_sl_buffer_impact_statistics(sample)
+    html = _create_sl_sortable_table(stats, "sl-buffer-impact")
+
+    for idx, col in enumerate(stats.columns):
+        if col in ("Notation", "1 pip", "2 pips", "3 pips"):
+            assert f"sortSlRange('sl-buffer-impact', {idx}, this)" in html
+            assert f"{col} ↓" in html
+        else:  # SL Range, Trades
+            assert f">{col}</th>" in html
+
+
+def test_sl_sortable_table_uses_given_id():
+    """The provided table_id is applied to the table element."""
+    sample = get_sample_data()
+    html = _create_sl_sortable_table(calculate_sl_statistics(sample), "my-custom-id")
+    assert 'id="my-custom-id"' in html
 
 
 def test_sl_sortable_table_sorts_descending():
     """The embedded sort script orders by win-rate percentage, descending only."""
     sample = get_sample_data()
-    html = _create_sl_sortable_table(calculate_sl_statistics(sample))
+    html = _create_sl_sortable_table(calculate_sl_statistics(sample), "sl-range-stats")
     assert "function sortSlRange" in html
     # DESC: comparator is pct(b) - pct(a).
     assert "return pct(b) - pct(a);" in html
@@ -1398,7 +1420,7 @@ def test_sl_sortable_table_sorts_descending():
 
 
 def test_sl_sortable_table_empty():
-    html = _create_sl_sortable_table(pd.DataFrame())
+    html = _create_sl_sortable_table(pd.DataFrame(), "sl-range-stats")
     assert "No data" in html
     assert "sortSlRange" not in html
 
@@ -1918,6 +1940,8 @@ def run_all_tests():
         test_sl_statistics_large_sl,
         test_sl_statistics_no_tp_is_loss,
         test_sl_sortable_table_notation_headers_clickable,
+        test_sl_sortable_table_buffer_impact_columns_clickable,
+        test_sl_sortable_table_uses_given_id,
         test_sl_sortable_table_sorts_descending,
         test_sl_sortable_table_empty,
         test_sl_buffer_impact_columns,

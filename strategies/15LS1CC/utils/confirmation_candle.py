@@ -1133,23 +1133,33 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
-def _create_sl_sortable_table(df: pd.DataFrame) -> str:
+def _create_sl_sortable_table(df: pd.DataFrame, table_id: str) -> str:
     """
-    Build the SL Range table HTML with click-to-sort headers on every
-    "Notation" column. Clicking a Notation header sorts rows by that column's
-    win-rate percentage, descending only (each click re-sorts DESC).
+    Build an SL Range table HTML with click-to-sort headers on every win-rate
+    column. A column is sortable when its cells carry a win-rate percentage
+    (e.g. "42W - 61L (40.8%)") - this covers both the "Notation*" columns and
+    the buffer columns ("1 pip", "2 pips", "3 pips"). Clicking a header sorts
+    rows by that column's win rate, descending only (each click re-sorts DESC).
 
     Args:
-        df: DataFrame with an 'SL Range' column and one or more 'Notation*' columns
+        df: DataFrame with an 'SL Range' column and one or more win-rate columns
+        table_id: Unique DOM id for this table (avoids clashes when several
+            sortable tables render in the same notebook)
 
     Returns:
         HTML string with a sortable, dark-mode styled table
     """
+    import re
+
     if df.empty:
         return "<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data</p>"
 
-    table_id = "sl-range-stats"
     columns = list(df.columns)
+    win_rate_re = re.compile(r"\(\d+(?:\.\d+)?%\)")
+    sortable_cols = {
+        col for col in columns
+        if any(win_rate_re.search(str(v)) for v in df[col])
+    }
 
     html = """
     <style>
@@ -1209,7 +1219,7 @@ def _create_sl_sortable_table(df: pd.DataFrame) -> str:
     html += f'<table class="analysis-table" id="{table_id}">\n        <thead>\n            <tr>\n'
 
     for idx, col in enumerate(columns):
-        if col.startswith("Notation"):
+        if col in sortable_cols:
             html += (
                 f'<th class="sortable" title="Sort by win rate (desc)" '
                 f'onclick="sortSlRange(\'{table_id}\', {idx}, this)">{col} ↓</th>'
@@ -1244,7 +1254,7 @@ def display_analysis_sl(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_statistics(df)
-    html_table = _create_sl_sortable_table(stats_df)
+    html_table = _create_sl_sortable_table(stats_df, "sl-range-stats")
     display(HTML(html_table))
 
 
@@ -1310,6 +1320,9 @@ def display_analysis_sl_buffer_impact(df: pd.DataFrame):
     Display 1:1 RRR win/loss statistics by SL pip range with the impact of
     padding the stop with a 1, 2, or 3 pip safety buffer.
 
+    Each win-rate column header (Notation, 1 pip, 2 pips, 3 pips) is
+    click-to-sort by win rate, descending.
+
     Args:
         df: DataFrame with trading data
     """
@@ -1319,7 +1332,7 @@ def display_analysis_sl_buffer_impact(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_buffer_impact_statistics(df)
-    html_table = create_html_table(stats_df)
+    html_table = _create_sl_sortable_table(stats_df, "sl-buffer-impact")
     display(HTML(html_table))
 
 
