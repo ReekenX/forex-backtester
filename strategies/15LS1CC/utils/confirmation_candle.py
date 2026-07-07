@@ -1265,23 +1265,24 @@ SL_BUFFER_COLS = [
 ]
 
 
-def calculate_sl_buffer_impact_statistics(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_sl_buffer_impact_statistics(df: pd.DataFrame, rrr: int = 1) -> pd.DataFrame:
     """
-    Calculate 1:1 RRR win/loss statistics for SL pip ranges, showing the impact
-    of padding the stop loss with a safety buffer.
+    Calculate win/loss statistics for SL pip ranges at a given RRR, showing the
+    impact of padding the stop loss with a safety buffer.
 
-    At 1:1 RRR the reward target equals the risk. Adding a buffer widens the risk
-    to SL + buffer, so a win requires TP >= SL + buffer. The Pullback < SL
+    The reward target equals RRR times the risk. Adding a buffer widens the risk
+    to SL + buffer, so a win requires TP >= RRR * (SL + buffer). The Pullback < SL
     condition is intentionally not checked (matching calculate_sl_statistics).
 
-    Columns:
-        Notation: TP >= SL       (1:1, no buffer)
-        1 pip:    TP >= SL + 1
-        2 pips:   TP >= SL + 2
-        3 pips:   TP >= SL + 3
+    Columns (for RRR = R):
+        Notation: TP >= R * SL         (no buffer)
+        1 pip:    TP >= R * (SL + 1)
+        2 pips:   TP >= R * (SL + 2)
+        3 pips:   TP >= R * (SL + 3)
 
     Args:
         df: DataFrame with trading data
+        rrr: Risk-reward ratio (1 for 1:1, 2 for 1:2, 3 for 1:3)
 
     Returns:
         DataFrame with columns: SL Range, Trades, Notation, 1 pip, 2 pips, 3 pips
@@ -1301,12 +1302,12 @@ def calculate_sl_buffer_impact_statistics(df: pd.DataFrame) -> pd.DataFrame:
             results.append(row)
             continue
 
-        wins = len(range_trades[range_trades['TP'] >= range_trades['SL']])
+        wins = len(range_trades[range_trades['TP'] >= rrr * range_trades['SL']])
         row['Notation'] = _format_wl(wins, total - wins, total)
 
         for col, buffer in SL_BUFFER_COLS:
             buf_wins = len(range_trades[
-                range_trades['TP'] >= range_trades['SL'] + buffer
+                range_trades['TP'] >= rrr * (range_trades['SL'] + buffer)
             ])
             row[col] = _format_wl(buf_wins, total - buf_wins, total)
 
@@ -1315,24 +1316,28 @@ def calculate_sl_buffer_impact_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
-def display_analysis_sl_buffer_impact(df: pd.DataFrame):
+def display_analysis_sl_buffer_impact(df: pd.DataFrame, rrr: int = 1):
     """
-    Display 1:1 RRR win/loss statistics by SL pip range with the impact of
-    padding the stop with a 1, 2, or 3 pip safety buffer.
+    Display win/loss statistics by SL pip range at the given RRR, with the impact
+    of padding the stop with a 1, 2, or 3 pip safety buffer.
 
     Each win-rate column header (Notation, 1 pip, 2 pips, 3 pips) is
     click-to-sort by win rate, descending.
 
     Args:
         df: DataFrame with trading data
+        rrr: Risk-reward ratio (1 for 1:1, 2 for 1:2, 3 for 1:3)
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>SL Range Buffer Impact (1:1 RRR)</h2>"
+    title_html = (
+        f"<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>"
+        f"SL Range Buffer Impact (1:{rrr} RRR)</h2>"
+    )
     display(HTML(title_html))
 
-    stats_df = calculate_sl_buffer_impact_statistics(df)
-    html_table = _create_sl_sortable_table(stats_df, "sl-buffer-impact")
+    stats_df = calculate_sl_buffer_impact_statistics(df, rrr)
+    html_table = _create_sl_sortable_table(stats_df, f"sl-buffer-impact-1-{rrr}")
     display(HTML(html_table))
 
 

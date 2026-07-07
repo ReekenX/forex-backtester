@@ -1497,6 +1497,40 @@ def test_sl_buffer_impact_empty():
         assert row['3 pips'] == '0W - 0L (0.0%)'
 
 
+def test_sl_buffer_impact_default_rrr_is_1():
+    """Omitting rrr matches rrr=1 explicitly."""
+    sample = get_sample_data()
+    default = calculate_sl_buffer_impact_statistics(sample)
+    explicit = calculate_sl_buffer_impact_statistics(sample, rrr=1)
+    assert default.equals(explicit)
+
+
+def test_sl_buffer_impact_rrr_2_values():
+    """1:2 win = TP >= 2*(SL+buffer). Sample SL/TP:
+    3.5/0, 1.1/12, 2.0/0, 4.0/10, 3.0/0, 5.0/8, 2.5/0, 6.0/15, 8.0/10, 1.5/5.
+
+    0-10 (all 10):
+      Notation (TP>=2*SL):        idx 1,3,7,9 -> 4W
+      3 pips  (TP>=2*(SL+3)):     only idx1 (12>=8.2) -> 1W
+    """
+    sample = get_sample_data()
+    result = calculate_sl_buffer_impact_statistics(sample, rrr=2)
+    rows = {row['SL Range']: row for _, row in result.iterrows()}
+
+    assert rows['0-10']['Notation'] == '4W - 6L (40.0%)'
+    assert rows['0-10']['1 pip'] == '4W - 6L (40.0%)'
+    assert rows['0-10']['3 pips'] == '1W - 9L (10.0%)'
+
+
+def test_sl_buffer_impact_rrr_3_values():
+    """1:3 win = TP >= 3*(SL+buffer). 0-10 Notation (TP>=3*SL): idx 1,9 -> 2W."""
+    sample = get_sample_data()
+    result = calculate_sl_buffer_impact_statistics(sample, rrr=3)
+    rows = {row['SL Range']: row for _, row in result.iterrows()}
+
+    assert rows['0-10']['Notation'] == '2W - 8L (20.0%)'
+
+
 def test_sl_vs_buffer_columns():
     sample = get_sample_data()
     result = calculate_sl_vs_buffer_statistics(sample)
@@ -1949,6 +1983,9 @@ def run_all_tests():
         test_sl_buffer_impact_values,
         test_sl_buffer_impact_erosion,
         test_sl_buffer_impact_empty,
+        test_sl_buffer_impact_default_rrr_is_1,
+        test_sl_buffer_impact_rrr_2_values,
+        test_sl_buffer_impact_rrr_3_values,
         test_sl_vs_buffer_columns,
         test_sl_vs_buffer_hypotheses,
         test_sl_vs_buffer_values,
