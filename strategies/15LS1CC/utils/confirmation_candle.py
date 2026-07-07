@@ -1425,61 +1425,61 @@ def display_analysis_sl_vs_buffer(df: pd.DataFrame):
     display(HTML(html_table))
 
 
-PULLBACK_RANGES = [
-    ("0-3", 0, 3),
-    ("3-5", 3, 5),
-    ("5-10", 5, 10),
-    ("10+", 10, float("inf")),
-]
+PULLBACK_ENTRY_PIPS = [1, 2, 3]
+
+
+def _format_wlm(wins: int, losses: int, missed: int) -> str:
+    """
+    Format winners/losers/missed-winners into '1W – 2L – 3M (50.0%)'.
+
+    Win rate is over ENTERED trades only (W / (W + L)); missed winners never
+    filled so they are excluded from the rate.
+    """
+    entered = wins + losses
+    win_rate = (wins / entered * 100) if entered > 0 else 0.0
+    return f"{wins}W – {losses}L – {missed}M ({win_rate:.1f}%)"
 
 
 def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate win/loss statistics for Pullback pip ranges.
+    Calculate limit-order pullback-entry opportunities at 1, 2 and 3 pip pullbacks.
 
-    Shows regular win/loss and with +2 pip buffer added to SL.
-    Regular win: Pullback < SL AND TP > 0.
-    Buffer win: Pullback < SL + 2 AND TP > 0.
+    A limit order placed N pips into the pullback fills only if price pulled back
+    at least N pips (Pullback >= N). A trade is a real winner only if it both
+    survives the safe stop and reaches a profitable target (Pullback < SL AND
+    TP > 0) - a trade that reached TP but pulled back past its SL would have been
+    stopped out, so it does not count as a win.
+
+    For each pullback level N:
+        Entered (Trades) = Pullback >= N
+        W = entered AND Pullback < SL AND TP > 0   (filled + real winner)
+        L = entered - W                            (filled but stopped / unprofitable)
+        M = missed winners = Pullback < N AND Pullback < SL AND TP > 0
+            (real winners that never pulled back N pips, so the limit never filled)
+
+    Missed winners are excluded from Trades because those trades were never entered.
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: Pullback Range, Trades, Regular, With 2 pips buffer
+        DataFrame with columns: Pullback, Trades, Notation
     """
-    buffer = 2.0
     results = []
 
-    for label, low, high in PULLBACK_RANGES:
-        range_trades = df[(df['Pullback'] >= low) & (df['Pullback'] < high)]
-        total = len(range_trades)
+    real_winner = (df['Pullback'] < df['SL']) & (df['TP'] > 0)
 
-        if total == 0:
-            results.append({
-                'Pullback Range': label,
-                'Trades': 0,
-                'Regular': _format_wl(0, 0, 0),
-                'With 2 pips buffer': _format_wl(0, 0, 0),
-            })
-            continue
-
-        wins = len(range_trades[
-            (range_trades['Pullback'] < range_trades['SL']) &
-            (range_trades['TP'] > 0)
-        ])
-        losses = total - wins
-
-        buf_wins = len(range_trades[
-            (range_trades['Pullback'] < range_trades['SL'] + buffer) &
-            (range_trades['TP'] > 0)
-        ])
-        buf_losses = total - buf_wins
+    for n in PULLBACK_ENTRY_PIPS:
+        entered = df['Pullback'] >= n
+        wins = int((entered & real_winner).sum())
+        entered_total = int(entered.sum())
+        losses = entered_total - wins
+        missed = int((~entered & real_winner).sum())
 
         results.append({
-            'Pullback Range': label,
-            'Trades': total,
-            'Regular': _format_wl(wins, losses, total),
-            'With 2 pips buffer': _format_wl(buf_wins, buf_losses, total),
+            'Pullback': f"{n} pip" if n == 1 else f"{n} pips",
+            'Trades': entered_total,
+            'Notation': _format_wlm(wins, losses, missed),
         })
 
     return pd.DataFrame(results)
@@ -1487,14 +1487,17 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
 def display_analysis_pullback(df: pd.DataFrame):
     """
-    Display win/loss statistics broken down by Pullback pip range.
+    Display limit-order pullback-entry opportunities at 1/2/3 pip pullbacks.
+
+    Notation is W - L - M: winners, losers and missed winners (real winners that
+    never pulled back far enough for the limit to fill).
 
     Args:
         df: DataFrame with trading data
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Pullback Range Statistics</h2>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Pullback Entry Opportunities</h2>"
     display(HTML(title_html))
 
     stats_df = calculate_pullback_statistics(df)
