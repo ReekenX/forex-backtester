@@ -30,6 +30,8 @@ from utils.confirmation_candle import (
     BUFFER_PIPS,
     MIN_SL_VALUES,
     FIXED_SL_STRATEGY_VALUES,
+    MAX_SL_STRATEGY_VALUES,
+    _max_sl_filter,
     MAX_SL_VALUES,
     FIXED_SL_SIZES,
     WEEKDAY_ORDER,
@@ -628,11 +630,64 @@ def test_buffer_statistics_min_and_max_sl_compose():
     assert row.iloc[0]["Trades"] == 7
 
 
-def test_max_sl_strategy_removed():
-    """Max SL is now a column, not a strategy."""
+def test_max_sl_strategy_values_constant():
+    """Max SL strategy caps run at 3..10 pips."""
+    assert MAX_SL_STRATEGY_VALUES == [3, 4, 5, 6, 7, 8, 9, 10]
+
+
+def test_max_sl_strategies_present():
+    """Max SL 3..10 are configured strategies."""
     names = {n for n, _ in get_buffer_strategies()}
-    for n in names:
-        assert not n.startswith("Max SL "), f"Unexpected Max SL strategy: {n}"
+    for x in range(3, 11):
+        assert f"Max SL {x}" in names
+
+
+def test_max_sl_filter_caps_sl():
+    """_max_sl_filter(x) caps SL at x (min(SL, x)); tighter stops stay unchanged."""
+    sample = get_sample_data()
+    capped = _max_sl_filter(3)(sample)
+    assert capped['SL'].max() <= 3.0
+    # A trade whose safe stop is already below the cap is unchanged (idx1 SL=1.1).
+    assert capped['SL'].iloc[1] == 1.1
+    # A trade wider than the cap is clipped (idx8 SL=8.0 -> 3.0).
+    assert capped['SL'].iloc[8] == 3.0
+
+
+def test_max_sl_strategy_win_rate():
+    """Max SL 3 caps every stop at 3. Sample SL/Pullback/TP with capped SL:
+      idx0 3.5->3.0 PB3.5 => stopped (loss)
+      idx1 1.1      PB0.8 TP12 => win
+      idx2 2.0      PB2.1 => stopped (loss)
+      idx3 4.0->3.0 PB1.5 TP10 => win
+      idx4 3.0      PB3.0 => stopped (loss)
+      idx5 5.0->3.0 PB2.0 TP8  => win
+      idx6 2.5      PB2.5 => stopped (loss)
+      idx7 6.0->3.0 PB3.0 => stopped (loss)
+      idx8 8.0->3.0 PB7.0 => stopped (loss)
+      idx9 1.5      PB0.5 TP5  => win
+    -> 4W - 6L (40.0%) over all 10 trades at 1:1.
+    """
+    sample = get_sample_data()
+    result = calculate_buffer_statistics(sample)
+    row = result[
+        (result["Strategy"] == "Max SL 3")
+        & (result["Buffer"] == "+0")
+        & (result["Min SL"] == 0)
+        & (result["Max SL"] == 0)
+        & (result["RRR"] == "1:1")
+    ]
+    assert len(row) == 1
+    assert row.iloc[0]["Trades"] == 10
+    assert row.iloc[0]["Notation"] == "4W – 6L"
+    assert row.iloc[0]["Win Rate"] == "40.0%"
+
+
+def test_max_sl_strategy_buffer_zero_only():
+    """Max SL strategies run at buffer +0 only (a buffer would undo the cap)."""
+    sample = get_sample_data()
+    result = calculate_buffer_statistics(sample)
+    buffers = set(result[result["Strategy"] == "Max SL 5"]["Buffer"].unique())
+    assert buffers == {"+0"}
 
 
 def test_buffer_statistics_min_sl_filter_applies_before_fixed_sl():

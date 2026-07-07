@@ -415,6 +415,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
 MIN_SL_VALUES = [0, 1, 2, 3]
 MAX_SL_VALUES = [0, 10, 15, 20]
 FIXED_SL_STRATEGY_VALUES = list(range(2, 11))
+MAX_SL_STRATEGY_VALUES = list(range(3, 11))
 
 
 def _apply_min_sl(df: pd.DataFrame, min_sl: int) -> pd.DataFrame:
@@ -436,6 +437,20 @@ def _fixed_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
     return _filter
 
 
+def _max_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
+    """Return a filter that caps the SL at x pips: effective SL = min(SL, x).
+
+    Every trade is kept; a trade whose safe stop is wider than x now uses a
+    tighter x-pip stop, so it is stopped out whenever Pullback >= x. A trade
+    whose safe stop is already <= x is unchanged.
+    """
+    def _filter(df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+        out["SL"] = out["SL"].clip(upper=float(x))
+        return out
+    return _filter
+
+
 def _one_h_location_filter(df: pd.DataFrame) -> pd.DataFrame:
     """Keep only trades that were taken per the "1H Location" column (value TRUE).
 
@@ -451,7 +466,8 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
     """
     Get key strategies to test with SL buffers.
 
-    "Fixed SL X" replaces SL with X and runs with buffer 0 only.
+    "Fixed SL X" replaces SL with X; "Max SL X" caps SL at X (min(SL, X)).
+    Both run with buffer 0 only.
     """
     strategies: List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]] = [
         ("All Trades", lambda df: df),
@@ -462,12 +478,18 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
     strategies.extend(
         (f"Fixed SL {x}", _fixed_sl_filter(x)) for x in FIXED_SL_STRATEGY_VALUES
     )
+    strategies.extend(
+        (f"Max SL {x}", _max_sl_filter(x)) for x in MAX_SL_STRATEGY_VALUES
+    )
     return strategies
 
 
 def _buffers_for(strategy_name: str) -> List[float]:
-    """Fixed-SL strategies only run with buffer 0; everything else uses BUFFER_PIPS."""
-    return [0] if strategy_name.startswith("Fixed SL ") else BUFFER_PIPS
+    """Fixed-SL and Max-SL strategies only run with buffer 0 (a buffer would
+    undo the fixed/capped stop); everything else uses BUFFER_PIPS."""
+    if strategy_name.startswith("Fixed SL ") or strategy_name.startswith("Max SL "):
+        return [0]
+    return BUFFER_PIPS
 
 
 def calculate_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
