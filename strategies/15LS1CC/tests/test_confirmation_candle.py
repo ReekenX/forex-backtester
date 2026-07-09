@@ -61,8 +61,6 @@ def get_sample_data():
                       'Sell', 'Buy', 'Buy', 'Sell', 'Sell'],
         '1H': ['Buy', 'Buy', 'Buy', 'Sell', 'Sell',
                'Sell', 'Sell', 'Buy', 'Buy', 'Sell'],
-        '1H Location': [None, True, None, True, None,
-                        True, None, True, None, None],
         'SL': [3.5, 1.1, 2.0, 4.0, 3.0,
                5.0, 2.5, 6.0, 8.0, 1.5],
         'Pullback': [3.5, 0.8, 2.1, 1.5, 3.0,
@@ -78,7 +76,7 @@ def get_empty_data():
     """Create an empty dataset."""
     return pd.DataFrame({
         'Date': [], 'Weekday': [], 'Trade': [], 'Direction': [],
-        '1H': [], '1H Location': [], 'SL': [], 'Pullback': [], 'TP': [], 'R': [],
+        '1H': [], 'SL': [], 'Pullback': [], 'TP': [], 'R': [],
     })
 
 
@@ -444,33 +442,6 @@ def test_get_buffer_strategies():
     assert 'All Trades' in names
     assert '1H Aligned' in names
     assert '1H Against' in names
-    assert '1H Location' in names
-
-
-def test_one_h_location_strategy_filters_taken_trades():
-    """The 1H Location strategy keeps only trades flagged TRUE.
-
-    Sample flags TRUE at idx 1,3,5,7 (SL 1.1, 4.0, 5.0, 6.0) -> 4 trades.
-    """
-    sample = get_sample_data()
-    strategy = [f for n, f in get_buffer_strategies() if n == '1H Location'][0]
-    filtered = strategy(sample)
-    assert len(filtered) == 4
-    assert sorted(filtered['SL'].tolist()) == [1.1, 4.0, 5.0, 6.0]
-
-
-def test_one_h_location_strategy_missing_column():
-    """Legacy data without the column yields no 1H Location trades (no error)."""
-    legacy = get_sample_data().drop(columns=['1H Location'])
-    strategy = [f for n, f in get_buffer_strategies() if n == '1H Location'][0]
-    assert len(strategy(legacy)) == 0
-
-
-def test_calculate_buffer_statistics_includes_1h_location():
-    """1H Location appears as a strategy in the buffer statistics output."""
-    sample = get_sample_data()
-    result = calculate_buffer_statistics(sample)
-    assert '1H Location' in set(result['Strategy'])
 
 
 # def test_get_buffer_strategies_includes_sl_caps():

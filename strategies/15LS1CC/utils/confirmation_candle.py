@@ -451,17 +451,6 @@ def _max_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
     return _filter
 
 
-def _one_h_location_filter(df: pd.DataFrame) -> pd.DataFrame:
-    """Keep only trades that were taken per the "1H Location" column (value TRUE).
-
-    Handles the column being parsed as a bool or a string, and returns no trades
-    if the column is absent (e.g. legacy data without it).
-    """
-    if "1H Location" not in df.columns:
-        return df.iloc[0:0]
-    return df[df["1H Location"].astype(str).str.upper() == "TRUE"]
-
-
 def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]:
     """
     Get key strategies to test with SL buffers.
@@ -473,7 +462,6 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
         ("All Trades", lambda df: df),
         ("1H Aligned", lambda df: df[df["Direction"] == df["1H"]]),
         ("1H Against", lambda df: df[df["Direction"] != df["1H"]]),
-        ("1H Location", _one_h_location_filter),
     ]
     strategies.extend(
         (f"Fixed SL {x}", _fixed_sl_filter(x)) for x in FIXED_SL_STRATEGY_VALUES
