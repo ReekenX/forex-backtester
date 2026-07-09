@@ -1435,8 +1435,7 @@ def display_analysis_sl_vs_buffer(df: pd.DataFrame):
     display(HTML(html_table))
 
 
-PULLBACK_ENTRY_PIPS = [1, 2, 3]
-PULLBACK_SL_SIZES = list(range(1, 11))
+PULLBACK_ENTRY_PIPS = [0, 1, 2, 3]
 PULLBACK_BUFFER_COLS = [("Notation", 0), ("+1 pip", 1), ("+2 pips", 2), ("+3 pips", 3)]
 
 
@@ -1454,13 +1453,11 @@ def _format_wlm(wins: int, losses: int, missed: int) -> str:
 
 def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate limit-order pullback-entry statistics at 1:1 RRR, broken down by
-    whole-pip SL size buckets to expose whether bigger SLs pull back deeper.
+    Calculate limit-order pullback-entry statistics at 1:1 RRR across all trades.
 
-    SL size bucket S covers safe stops from S.0 to S.9 inclusive (e.g. bucket
-    2 is 2.0 <= SL < 3.0); trades outside the bucket are excluded from its rows.
     A limit order placed N pips into the pullback fills only if price pulled
-    back at least N pips (Pullback >= N).
+    back at least N pips (Pullback >= N). The 0-pip level means every trade is
+    taken at the signal (no limit order, nothing missed).
 
     Each notation column re-scores the same entered trades with an SL buffer
     (effective SL = SL + buffer, same semantics as the buffer strategies):
@@ -1475,36 +1472,32 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: SL Size, Pullback, Trades, Notation,
-        +1 pip, +2 pips, +3 pips
+        DataFrame with columns: Pullback, Trades, Notation, +1 pip, +2 pips, +3 pips
     """
     results = []
 
-    for s in PULLBACK_SL_SIZES:
-        bucket = df[(df['SL'] >= s) & (df['SL'] < s + 1)]
-        for n in PULLBACK_ENTRY_PIPS:
-            entered = bucket['Pullback'] >= n
-            entered_total = int(entered.sum())
-            row = {
-                'SL Size': f"{s} pip" if s == 1 else f"{s} pips",
-                'Pullback': f"{n} pip" if n == 1 else f"{n} pips",
-                'Trades': entered_total,
-            }
-            for col, buffer in PULLBACK_BUFFER_COLS:
-                effective_sl = bucket['SL'] + buffer
-                winner = (bucket['Pullback'] < effective_sl) & (bucket['TP'] >= effective_sl)
-                wins = int((entered & winner).sum())
-                losses = entered_total - wins
-                missed = int((~entered & winner).sum())
-                row[col] = _format_wlm(wins, losses, missed)
-            results.append(row)
+    for n in PULLBACK_ENTRY_PIPS:
+        entered = df['Pullback'] >= n
+        entered_total = int(entered.sum())
+        row = {
+            'Pullback': f"{n} pip" if n == 1 else f"{n} pips",
+            'Trades': entered_total,
+        }
+        for col, buffer in PULLBACK_BUFFER_COLS:
+            effective_sl = df['SL'] + buffer
+            winner = (df['Pullback'] < effective_sl) & (df['TP'] >= effective_sl)
+            wins = int((entered & winner).sum())
+            losses = entered_total - wins
+            missed = int((~entered & winner).sum())
+            row[col] = _format_wlm(wins, losses, missed)
+        results.append(row)
 
     return pd.DataFrame(results)
 
 
 def display_analysis_pullback(df: pd.DataFrame):
     """
-    Display limit-order pullback-entry statistics per SL size bucket at 1:1 RRR.
+    Display limit-order pullback-entry statistics at 0/1/2/3 pip pullbacks at 1:1 RRR.
 
     Notation is W - L - M: winners, losers and missed winners (real winners that
     never pulled back far enough for the limit to fill). The +1/+2/+3 pip
