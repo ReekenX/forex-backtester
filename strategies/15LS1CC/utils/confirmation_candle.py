@@ -1457,13 +1457,16 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
     A limit order placed N pips into the pullback fills only if price pulled
     back at least N pips (Pullback >= N). The 0-pip level means every trade is
-    taken at the signal (no limit order, nothing missed).
+    taken at the signal (no limit order, nothing missed). Two extra levels
+    scale the fill threshold to each trade's own stop: "Half" fills when the
+    pullback reached at least half the SL, "Full" when it reached the SL itself
+    (such a trade only survives if a buffer widens the stop past the pullback).
 
     Each notation column re-scores the same entered trades with an SL buffer
     (effective SL = SL + buffer, same semantics as the buffer strategies):
         winner = Pullback < effective SL AND TP >= effective SL   (1:1 RRR)
         W = entered winners; L = entered - W; M = missed winners (winners whose
-        pullback never reached N pips, so the limit never filled)
+        pullback never reached the fill threshold, so the limit never filled)
     "Notation" is buffer 0; "+1 pip" / "+2 pips" / "+3 pips" add that buffer.
 
     Missed winners are excluded from Trades because those trades were never entered.
@@ -1476,11 +1479,17 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     results = []
 
-    for n in PULLBACK_ENTRY_PIPS:
-        entered = df['Pullback'] >= n
+    levels = [
+        (f"{n} pip" if n == 1 else f"{n} pips", df['Pullback'] >= n)
+        for n in PULLBACK_ENTRY_PIPS
+    ]
+    levels.append(('Half', df['Pullback'] >= df['SL'] / 2))
+    levels.append(('Full', df['Pullback'] >= df['SL']))
+
+    for label, entered in levels:
         entered_total = int(entered.sum())
         row = {
-            'Pullback': f"{n} pip" if n == 1 else f"{n} pips",
+            'Pullback': label,
             'Trades': entered_total,
         }
         for col, buffer in PULLBACK_BUFFER_COLS:
@@ -1497,7 +1506,8 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
 def display_analysis_pullback(df: pd.DataFrame):
     """
-    Display limit-order pullback-entry statistics at 0/1/2/3 pip pullbacks at 1:1 RRR.
+    Display limit-order pullback-entry statistics at 1:1 RRR for fixed
+    (0/1/2/3 pip) and SL-relative (Half/Full) pullback fill levels.
 
     Notation is W - L - M: winners, losers and missed winners (real winners that
     never pulled back far enough for the limit to fill). The +1/+2/+3 pip

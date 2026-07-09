@@ -1757,11 +1757,11 @@ def test_pullback_statistics_columns():
 
 
 def test_pullback_statistics_levels_present():
-    """All 4 pullback entry levels appear in results."""
+    """All fixed and SL-relative pullback entry levels appear in results."""
     sample = get_sample_data()
     result = calculate_pullback_statistics(sample)
-    assert len(result) == 4
-    assert list(result['Pullback']) == ['0 pips', '1 pip', '2 pips', '3 pips']
+    assert len(result) == 6
+    assert list(result['Pullback']) == ['0 pips', '1 pip', '2 pips', '3 pips', 'Half', 'Full']
 
 
 def test_pullback_statistics_values():
@@ -1796,6 +1796,55 @@ def test_pullback_statistics_values():
     assert rows['3 pips']['Trades'] == 4
     assert rows['3 pips']['Notation'] == '2W – 2L – 4M (50.0%)'
     assert rows['3 pips']['+3 pips'] == '1W – 3L – 4M (25.0%)'
+
+
+def test_pullback_statistics_half_and_full_values():
+    """Half fills when Pullback >= SL/2; Full when Pullback >= SL.
+
+    Half entered: PB >= SL/2 at idx 0,1,2,4,6,7,8 -> 7 trades; buffer-0
+    winners among them are 1.1/0.8/12, 6.0/3.0/15, 8.0/7.0/10 -> 3W, 4L,
+    missed winners 4.0/1.5/10, 5.0/2.0/8, 1.5/0.5/5 -> 3M. At +3 the SL 8
+    trade fails its higher target -> 2W.
+
+    Full entered: PB >= SL at idx 0,2,4,6 -> 4 trades, all TP=0, so they
+    lose at every buffer; every winner pulled back less than its SL -> 6M
+    (5M at +3 where the SL 8 trade is no longer a winner).
+    """
+    sample = get_sample_data()
+    rows = _pullback_rows(calculate_pullback_statistics(sample))
+
+    assert rows['Half']['Trades'] == 7
+    assert rows['Half']['Notation'] == '3W – 4L – 3M (42.9%)'
+    assert rows['Half']['+3 pips'] == '2W – 5L – 3M (28.6%)'
+
+    assert rows['Full']['Trades'] == 4
+    assert rows['Full']['Notation'] == '0W – 4L – 6M (0.0%)'
+    assert rows['Full']['+3 pips'] == '0W – 4L – 5M (0.0%)'
+
+
+def test_pullback_statistics_full_survives_with_buffer():
+    """A Full-pullback trade (SL 3.0, Pullback 4.1, TP 10) is stopped at the
+    safe stop but survives and wins once a 2-pip buffer widens the stop."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        'Direction': ['Buy'],
+        '1H': ['Buy'],
+        'SL': [3.0],
+        'Pullback': [4.1],
+        'TP': [10.0],
+        'R': [0],
+    })
+
+    rows = _pullback_rows(calculate_pullback_statistics(trades))
+
+    assert rows['Full']['Trades'] == 1
+    assert rows['Full']['Notation'] == '0W – 1L – 0M (0.0%)'
+    # +1 pip: effective SL 4.0, the 4.1 pullback still hits the stop.
+    assert rows['Full']['+1 pip'] == '0W – 1L – 0M (0.0%)'
+    # +2 pips: effective SL 5.0 survives the pullback, TP 10 >= 5.
+    assert rows['Full']['+2 pips'] == '1W – 0L – 0M (100.0%)'
 
 
 def test_pullback_statistics_buffer_grows_target():
@@ -1878,7 +1927,7 @@ def test_pullback_statistics_empty():
     """Test Pullback statistics with empty dataset."""
     empty = get_empty_data()
     result = calculate_pullback_statistics(empty)
-    assert len(result) == 4
+    assert len(result) == 6
     for _, row in result.iterrows():
         assert row['Trades'] == 0
         assert row['Notation'] == '0W – 0L – 0M (0.0%)'
@@ -2109,6 +2158,8 @@ def run_all_tests():
         test_pullback_statistics_columns,
         test_pullback_statistics_levels_present,
         test_pullback_statistics_values,
+        test_pullback_statistics_half_and_full_values,
+        test_pullback_statistics_full_survives_with_buffer,
         test_pullback_statistics_buffer_grows_target,
         test_pullback_statistics_stopped_trade_is_loss_not_win,
         test_pullback_statistics_missed_winner,
