@@ -1873,6 +1873,24 @@ def test_pullback_statistics_missed_winner():
     assert rows[('5 pips', '1 pip')]['Notation'] == '0W – 0L – 1M (0.0%)'
 
 
+def test_pullback_statistics_sortable_columns():
+    """Notation and the +1/+2/+3 pip columns are click-to-sort DESC by win
+    rate; SL Size, Pullback and Trades headers stay plain."""
+    sample = get_sample_data()
+    stats = calculate_pullback_statistics(sample)
+    html = _create_sl_sortable_table(stats, "pullback-analysis")
+
+    columns = list(stats.columns)
+    for col in ['Notation', '+1 pip', '+2 pips', '+3 pips']:
+        idx = columns.index(col)
+        assert f"sortSlRange('pullback-analysis', {idx}, this)" in html
+        assert f"{col} ↓" in html
+    assert ">SL Size</th>" in html
+    assert ">Pullback</th>" in html
+    assert ">Trades</th>" in html
+    assert "return pct(b) - pct(a);" in html
+
+
 def test_pullback_statistics_empty():
     """Test Pullback statistics with empty dataset."""
     empty = get_empty_data()
@@ -2112,6 +2130,7 @@ def run_all_tests():
         test_pullback_statistics_bucket_boundaries,
         test_pullback_statistics_stopped_trade_is_loss_not_win,
         test_pullback_statistics_missed_winner,
+        test_pullback_statistics_sortable_columns,
         test_pullback_statistics_empty,
         test_tp_ranges_constant,
         test_tp_statistics_columns,

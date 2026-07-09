@@ -1509,6 +1509,7 @@ def display_analysis_pullback(df: pd.DataFrame):
     Notation is W - L - M: winners, losers and missed winners (real winners that
     never pulled back far enough for the limit to fill). The +1/+2/+3 pip
     columns re-score the same trades with that buffer added to the SL.
+    Each notation column header is click-to-sort by win rate, descending.
 
     Args:
         df: DataFrame with trading data
@@ -1519,7 +1520,7 @@ def display_analysis_pullback(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_pullback_statistics(df)
-    html_table = create_html_table(stats_df)
+    html_table = _create_sl_sortable_table(stats_df, "pullback-analysis")
     display(HTML(html_table))
 
 
