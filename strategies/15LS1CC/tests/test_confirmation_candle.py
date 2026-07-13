@@ -2042,6 +2042,16 @@ def test_buffer_statistics_filtered_empty():
     assert (result['Trades'] == 0).all()
 
 
+RETURN_STRATEGY_NAMES = [
+    '1H Aligned + Returned',
+    '1H Aligned + Not Returned',
+    '1H Against + Returned',
+    '1H Against + Not Returned',
+    'All Trades + Returned',
+    'All Trades + Not Returned',
+]
+
+
 def get_return_sample_data():
     """Create a sample dataset with a Returned column straddling the cutoff date."""
     return pd.DataFrame({
@@ -2049,7 +2059,7 @@ def get_return_sample_data():
         'Weekday': ['Saturday', 'Monday', 'Tuesday', 'Wednesday', 'Wednesday', 'Thursday'],
         'Trade': ['#1', '#1', '#1', '#1', '#2', '#1'],
         'Direction': ['Buy', 'Buy', 'Sell', 'Buy', 'Sell', 'Buy'],
-        '1H': ['Buy', 'Buy', 'Sell', 'Buy', 'Sell', 'Buy'],
+        '1H': ['Buy', 'Buy', 'Buy', 'Buy', 'Sell', 'Sell'],
         'Returned': [True, True, True, False, False, False],
         'SL': [2.0, 2.0, 2.0, 3.0, 3.0, 2.0],
         'Pullback': [1.0, 1.0, 2.0, 1.0, 1.0, 3.0],
@@ -2059,42 +2069,70 @@ def get_return_sample_data():
 
 
 def test_return_statistics_columns():
-    """Return statistics has Idea, Trades, Notation columns and Yes/No rows."""
+    """Return statistics has Strategy, Buffer, Trades, Notation columns."""
     result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
-    assert list(result.columns) == ['Idea', 'Trades', 'Notation']
-    assert list(result['Idea']) == ['Yes', 'No']
+    assert list(result.columns) == ['Strategy', 'Buffer', 'Trades', 'Notation']
+
+
+def test_return_statistics_strategies_and_buffers():
+    """Each of the 6 strategies has one row per buffer in BUFFER_PIPS."""
+    result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
+    assert len(result) == 6 * len(BUFFER_PIPS)
+    assert list(result['Strategy'].unique()) == RETURN_STRATEGY_NAMES
+    for name in RETURN_STRATEGY_NAMES:
+        assert list(result[result['Strategy'] == name]['Buffer']) == [f"+{b}" for b in BUFFER_PIPS]
 
 
 def test_return_statistics_filters_by_date():
     """Trades before the start date are excluded from the counts."""
     result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
     # 6 sample trades, but the 2026-06-20 one is before the cutoff
-    assert result['Trades'].sum() == 5
+    all_trades = result[result['Strategy'].str.startswith('All Trades')]
+    assert all_trades[all_trades['Buffer'] == '+0']['Trades'].sum() == 5
 
 
 def test_return_statistics_split_counts():
-    """Yes row counts Returned=True trades, No row the rest."""
+    """Strategies split by Returned flag and 1H alignment."""
     result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
-    assert result[result['Idea'] == 'Yes']['Trades'].iloc[0] == 2
-    assert result[result['Idea'] == 'No']['Trades'].iloc[0] == 3
+    counts = result[result['Buffer'] == '+0'].set_index('Strategy')['Trades']
+    assert counts['All Trades + Returned'] == 2
+    assert counts['All Trades + Not Returned'] == 3
+    # Aligned: rows 2 (Buy/Buy, Returned), 4 (Buy/Buy, Not Returned), 5 (Sell/Sell, Not Returned)
+    assert counts['1H Aligned + Returned'] == 1
+    assert counts['1H Aligned + Not Returned'] == 2
+    # Against: rows 3 (Sell/Buy, Returned), 6 (Buy/Sell, Not Returned)
+    assert counts['1H Against + Returned'] == 1
+    assert counts['1H Against + Not Returned'] == 1
 
 
 def test_return_statistics_win_condition():
-    """Win at 1:1 RRR requires Pullback < SL and TP >= SL."""
+    """Win at 1:1 RRR requires Pullback < SL and TP >= SL (buffer +0)."""
     result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
-    # Yes: winner (Pullback 1 < SL 2, TP 10 >= 2) + immediate loss (Pullback = SL)
-    assert result[result['Idea'] == 'Yes']['Notation'].iloc[0] == '1W - 1L (50.0%)'
-    # No: winner (TP 3 >= SL 3), loss (TP 2 < SL 3), loss (Pullback 3 >= SL 2)
-    assert result[result['Idea'] == 'No']['Notation'].iloc[0] == '1W - 2L (33.3%)'
+    notation = result[result['Buffer'] == '+0'].set_index('Strategy')['Notation']
+    # Returned: winner (Pullback 1 < SL 2, TP 10 >= 2) + immediate loss (Pullback = SL)
+    assert notation['All Trades + Returned'] == '1W - 1L (50.0%)'
+    # Not Returned: winner (TP 3 >= SL 3), loss (TP 2 < SL 3), loss (Pullback 3 >= SL 2)
+    assert notation['All Trades + Not Returned'] == '1W - 2L (33.3%)'
+
+
+def test_return_statistics_buffer_widens_sl():
+    """Buffer adds pips to the effective SL, changing wins both ways."""
+    result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
+    notation = result.set_index(['Strategy', 'Buffer'])['Notation']
+    # +1 buffer saves the immediate loss (Pullback 2 < 3, TP 0 < 3 still a loss)
+    # but the winner needs TP >= 3, still fine (TP 10)
+    assert notation[('All Trades + Returned', '+1')] == '1W - 1L (50.0%)'
+    # +1 buffer kills the TP 3 winner (needs TP >= 4) and saves no losses
+    assert notation[('All Trades + Not Returned', '+1')] == '0W - 3L (0.0%)'
 
 
 def test_return_statistics_empty():
-    """Empty dataset produces zero-count Yes/No rows."""
+    """Empty dataset produces zero-count rows for all strategies."""
     df = get_empty_data()
     df['Date'] = df['Date'].astype(str)
     df['Returned'] = pd.Series([], dtype=bool)
     result = calculate_return_statistics(df, '2026-06-29')
-    assert list(result['Idea']) == ['Yes', 'No']
+    assert len(result) == 6 * len(BUFFER_PIPS)
     assert (result['Trades'] == 0).all()
     assert (result['Notation'] == '0W - 0L (0.0%)').all()
 
@@ -2227,9 +2265,11 @@ def run_all_tests():
         test_tp_statistics_empty,
         test_tp_statistics_large_tp,
         test_return_statistics_columns,
+        test_return_statistics_strategies_and_buffers,
         test_return_statistics_filters_by_date,
         test_return_statistics_split_counts,
         test_return_statistics_win_condition,
+        test_return_statistics_buffer_widens_sl,
         test_return_statistics_empty,
         test_buffer_statistics_filtered_all_trades,
         test_buffer_statistics_filtered_1h,

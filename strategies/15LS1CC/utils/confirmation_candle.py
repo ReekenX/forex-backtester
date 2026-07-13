@@ -1532,36 +1532,50 @@ def display_analysis_pullback(df: pd.DataFrame):
 
 def calculate_return_statistics(df: pd.DataFrame, start_date: str) -> pd.DataFrame:
     """
-    Calculate win/loss statistics at 1:1 RRR split by the Returned flag.
+    Calculate win/loss statistics at 1:1 RRR for Returned/Not Returned trades
+    combined with 1H alignment strategies, across SL buffers.
 
     Only trades from start_date onwards are measured, because the Returned
-    column was only tracked from that date.
-    Win condition: Pullback < SL AND TP >= SL.
+    column was only tracked from that date. Each strategy is scored once per
+    buffer in BUFFER_PIPS (effective SL = SL + buffer).
+    Win condition: Pullback < effective SL AND TP >= effective SL.
 
     Args:
         df: DataFrame with trading data
         start_date: First date (YYYY-MM-DD) with Returned data
 
     Returns:
-        DataFrame with columns: Idea, Trades, Notation
+        DataFrame with columns: Strategy, Buffer, Trades, Notation
     """
     measured = df[df['Date'] >= start_date]
-    results = []
 
-    for label, trades in [
-        ('Yes', measured[measured['Returned'] == True]),  # noqa: E712
-        ('No', measured[measured['Returned'] != True]),  # noqa: E712
-    ]:
-        total = len(trades)
-        wins = len(trades[
-            (trades['Pullback'] < trades['SL']) &
-            (trades['TP'] >= trades['SL'])
-        ])
-        results.append({
-            'Idea': label,
-            'Trades': total,
-            'Notation': _format_wl(wins, total - wins, total),
-        })
+    returned_filters = [
+        ('Returned', lambda df: df[df['Returned'] == True]),  # noqa: E712
+        ('Not Returned', lambda df: df[df['Returned'] != True]),  # noqa: E712
+    ]
+    base_filters = [
+        ('1H Aligned', lambda df: df[df['Direction'] == df['1H']]),
+        ('1H Against', lambda df: df[df['Direction'] != df['1H']]),
+        ('All Trades', lambda df: df),
+    ]
+
+    results = []
+    for base_name, base_filter in base_filters:
+        for returned_name, returned_filter in returned_filters:
+            trades = returned_filter(base_filter(measured))
+            total = len(trades)
+            for buffer in BUFFER_PIPS:
+                effective_sl = trades['SL'] + buffer
+                wins = int((
+                    (trades['Pullback'] < effective_sl) &
+                    (trades['TP'] >= effective_sl)
+                ).sum())
+                results.append({
+                    'Strategy': f"{base_name} + {returned_name}",
+                    'Buffer': f"+{buffer}",
+                    'Trades': total,
+                    'Notation': _format_wl(wins, total - wins, total),
+                })
 
     return pd.DataFrame(results)
 
@@ -1569,7 +1583,8 @@ def calculate_return_statistics(df: pd.DataFrame, start_date: str) -> pd.DataFra
 def display_analysis_return(start_date: str, df: pd.DataFrame):
     """
     Display win/loss statistics at 1:1 RRR for trades that returned to the
-    entry level (Returned = TRUE) versus those that did not.
+    entry level (Returned = TRUE) versus those that did not, combined with
+    1H alignment strategies and scored across +0/+1/+2/+3 pip SL buffers.
 
     Args:
         start_date: First date (YYYY-MM-DD) with Returned data
