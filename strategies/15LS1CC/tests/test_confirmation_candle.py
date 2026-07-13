@@ -46,6 +46,7 @@ from utils.confirmation_candle import (
     TP_RANGES,
     calculate_tp_statistics,
     calculate_return_statistics,
+    RETURN_RRR_RATIOS,
 )
 
 
@@ -2069,9 +2070,12 @@ def get_return_sample_data():
 
 
 def test_return_statistics_columns():
-    """Return statistics has Strategy, Buffer, Trades, Notation columns."""
+    """Return statistics has Strategy, Buffer, Trades and per-RRR notation columns."""
     result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
-    assert list(result.columns) == ['Strategy', 'Buffer', 'Trades', 'Notation']
+    assert list(result.columns) == [
+        'Strategy', 'Buffer', 'Trades',
+        'Notation (1:1 RRR)', 'Notation (1:2 RRR)', 'Notation (1:3 RRR)',
+    ]
 
 
 def test_return_statistics_strategies_and_buffers():
@@ -2108,7 +2112,7 @@ def test_return_statistics_split_counts():
 def test_return_statistics_win_condition():
     """Win at 1:1 RRR requires Pullback < SL and TP >= SL (buffer +0)."""
     result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
-    notation = result[result['Buffer'] == '+0'].set_index('Strategy')['Notation']
+    notation = result[result['Buffer'] == '+0'].set_index('Strategy')['Notation (1:1 RRR)']
     # Returned: winner (Pullback 1 < SL 2, TP 10 >= 2) + immediate loss (Pullback = SL)
     assert notation['All Trades + Returned'] == '1W - 1L (50.0%)'
     # Not Returned: winner (TP 3 >= SL 3), loss (TP 2 < SL 3), loss (Pullback 3 >= SL 2)
@@ -2118,12 +2122,25 @@ def test_return_statistics_win_condition():
 def test_return_statistics_buffer_widens_sl():
     """Buffer adds pips to the effective SL, changing wins both ways."""
     result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
-    notation = result.set_index(['Strategy', 'Buffer'])['Notation']
+    notation = result.set_index(['Strategy', 'Buffer'])['Notation (1:1 RRR)']
     # +1 buffer saves the immediate loss (Pullback 2 < 3, TP 0 < 3 still a loss)
     # but the winner needs TP >= 3, still fine (TP 10)
     assert notation[('All Trades + Returned', '+1')] == '1W - 1L (50.0%)'
     # +1 buffer kills the TP 3 winner (needs TP >= 4) and saves no losses
     assert notation[('All Trades + Not Returned', '+1')] == '0W - 3L (0.0%)'
+
+
+def test_return_statistics_higher_rrr_needs_bigger_tp():
+    """Win at 1:N RRR requires TP >= N x effective SL (buffer +0)."""
+    result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
+    row = result[result['Buffer'] == '+0'].set_index('Strategy')
+    # Returned winner has TP 10, SL 2: wins at 1:2 (>= 4) and 1:3 (>= 6)
+    assert row.loc['All Trades + Returned', 'Notation (1:2 RRR)'] == '1W - 1L (50.0%)'
+    assert row.loc['All Trades + Returned', 'Notation (1:3 RRR)'] == '1W - 1L (50.0%)'
+    # Not Returned 1:1 winner has TP 3, SL 3: loses at 1:2 (needs >= 6),
+    # but the Pullback 3 / SL 2 / TP 10 trade still fails on pullback
+    assert row.loc['All Trades + Not Returned', 'Notation (1:2 RRR)'] == '0W - 3L (0.0%)'
+    assert row.loc['All Trades + Not Returned', 'Notation (1:3 RRR)'] == '0W - 3L (0.0%)'
 
 
 def test_return_statistics_empty():
@@ -2134,7 +2151,8 @@ def test_return_statistics_empty():
     result = calculate_return_statistics(df, '2026-06-29')
     assert len(result) == 6 * len(BUFFER_PIPS)
     assert (result['Trades'] == 0).all()
-    assert (result['Notation'] == '0W - 0L (0.0%)').all()
+    for rrr in RETURN_RRR_RATIOS:
+        assert (result[f'Notation (1:{rrr} RRR)'] == '0W - 0L (0.0%)').all()
 
 
 def run_all_tests():
@@ -2270,6 +2288,7 @@ def run_all_tests():
         test_return_statistics_split_counts,
         test_return_statistics_win_condition,
         test_return_statistics_buffer_widens_sl,
+        test_return_statistics_higher_rrr_needs_bigger_tp,
         test_return_statistics_empty,
         test_buffer_statistics_filtered_all_trades,
         test_buffer_statistics_filtered_1h,

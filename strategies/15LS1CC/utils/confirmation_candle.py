@@ -1530,22 +1530,26 @@ def display_analysis_pullback(df: pd.DataFrame):
     display(HTML(html_table))
 
 
+RETURN_RRR_RATIOS = [1, 2, 3]
+
+
 def calculate_return_statistics(df: pd.DataFrame, start_date: str) -> pd.DataFrame:
     """
-    Calculate win/loss statistics at 1:1 RRR for Returned/Not Returned trades
-    combined with 1H alignment strategies, across SL buffers.
+    Calculate win/loss statistics at 1:1, 1:2 and 1:3 RRR for Returned/Not
+    Returned trades combined with 1H alignment strategies, across SL buffers.
 
     Only trades from start_date onwards are measured, because the Returned
     column was only tracked from that date. Each strategy is scored once per
     buffer in BUFFER_PIPS (effective SL = SL + buffer).
-    Win condition: Pullback < effective SL AND TP >= effective SL.
+    Win condition: Pullback < effective SL AND TP >= RRR x effective SL.
 
     Args:
         df: DataFrame with trading data
         start_date: First date (YYYY-MM-DD) with Returned data
 
     Returns:
-        DataFrame with columns: Strategy, Buffer, Trades, Notation
+        DataFrame with columns: Strategy, Buffer, Trades,
+        Notation (1:1 RRR), Notation (1:2 RRR), Notation (1:3 RRR)
     """
     measured = df[df['Date'] >= start_date]
 
@@ -1566,25 +1570,29 @@ def calculate_return_statistics(df: pd.DataFrame, start_date: str) -> pd.DataFra
             total = len(trades)
             for buffer in BUFFER_PIPS:
                 effective_sl = trades['SL'] + buffer
-                wins = int((
-                    (trades['Pullback'] < effective_sl) &
-                    (trades['TP'] >= effective_sl)
-                ).sum())
-                results.append({
+                row = {
                     'Strategy': f"{base_name} + {returned_name}",
                     'Buffer': f"+{buffer}",
                     'Trades': total,
-                    'Notation': _format_wl(wins, total - wins, total),
-                })
+                }
+                for rrr in RETURN_RRR_RATIOS:
+                    wins = int((
+                        (trades['Pullback'] < effective_sl) &
+                        (trades['TP'] >= rrr * effective_sl)
+                    ).sum())
+                    row[f'Notation (1:{rrr} RRR)'] = _format_wl(wins, total - wins, total)
+                results.append(row)
 
     return pd.DataFrame(results)
 
 
 def display_analysis_return(start_date: str, df: pd.DataFrame):
     """
-    Display win/loss statistics at 1:1 RRR for trades that returned to the
-    entry level (Returned = TRUE) versus those that did not, combined with
-    1H alignment strategies and scored across +0/+1/+2/+3 pip SL buffers.
+    Display win/loss statistics at 1:1, 1:2 and 1:3 RRR for trades that
+    returned to the entry level (Returned = TRUE) versus those that did not,
+    combined with 1H alignment strategies and scored across +0/+1/+2/+3 pip
+    SL buffers. Each notation column header is click-to-sort by win rate,
+    descending.
 
     Args:
         start_date: First date (YYYY-MM-DD) with Returned data
@@ -1596,7 +1604,7 @@ def display_analysis_return(start_date: str, df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_return_statistics(df, start_date)
-    html_table = create_html_table(stats_df)
+    html_table = _create_sl_sortable_table(stats_df, "return-analysis")
     display(HTML(html_table))
 
 
