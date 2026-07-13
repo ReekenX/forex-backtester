@@ -45,6 +45,7 @@ from utils.confirmation_candle import (
     calculate_pullback_statistics,
     TP_RANGES,
     calculate_tp_statistics,
+    calculate_return_statistics,
 )
 
 
@@ -2041,6 +2042,63 @@ def test_buffer_statistics_filtered_empty():
     assert (result['Trades'] == 0).all()
 
 
+def get_return_sample_data():
+    """Create a sample dataset with a Returned column straddling the cutoff date."""
+    return pd.DataFrame({
+        'Date': ['2026-06-20', '2026-06-29', '2026-06-30', '2026-07-01', '2026-07-01', '2026-07-02'],
+        'Weekday': ['Saturday', 'Monday', 'Tuesday', 'Wednesday', 'Wednesday', 'Thursday'],
+        'Trade': ['#1', '#1', '#1', '#1', '#2', '#1'],
+        'Direction': ['Buy', 'Buy', 'Sell', 'Buy', 'Sell', 'Buy'],
+        '1H': ['Buy', 'Buy', 'Sell', 'Buy', 'Sell', 'Buy'],
+        'Returned': [True, True, True, False, False, False],
+        'SL': [2.0, 2.0, 2.0, 3.0, 3.0, 2.0],
+        'Pullback': [1.0, 1.0, 2.0, 1.0, 1.0, 3.0],
+        'TP': [10.0, 10.0, 0, 3.0, 2.0, 10.0],
+        'R': [5.0, 5.0, 0, 1.0, 0, 0],
+    })
+
+
+def test_return_statistics_columns():
+    """Return statistics has Idea, Trades, Notation columns and Yes/No rows."""
+    result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
+    assert list(result.columns) == ['Idea', 'Trades', 'Notation']
+    assert list(result['Idea']) == ['Yes', 'No']
+
+
+def test_return_statistics_filters_by_date():
+    """Trades before the start date are excluded from the counts."""
+    result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
+    # 6 sample trades, but the 2026-06-20 one is before the cutoff
+    assert result['Trades'].sum() == 5
+
+
+def test_return_statistics_split_counts():
+    """Yes row counts Returned=True trades, No row the rest."""
+    result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
+    assert result[result['Idea'] == 'Yes']['Trades'].iloc[0] == 2
+    assert result[result['Idea'] == 'No']['Trades'].iloc[0] == 3
+
+
+def test_return_statistics_win_condition():
+    """Win at 1:1 RRR requires Pullback < SL and TP >= SL."""
+    result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
+    # Yes: winner (Pullback 1 < SL 2, TP 10 >= 2) + immediate loss (Pullback = SL)
+    assert result[result['Idea'] == 'Yes']['Notation'].iloc[0] == '1W - 1L (50.0%)'
+    # No: winner (TP 3 >= SL 3), loss (TP 2 < SL 3), loss (Pullback 3 >= SL 2)
+    assert result[result['Idea'] == 'No']['Notation'].iloc[0] == '1W - 2L (33.3%)'
+
+
+def test_return_statistics_empty():
+    """Empty dataset produces zero-count Yes/No rows."""
+    df = get_empty_data()
+    df['Date'] = df['Date'].astype(str)
+    df['Returned'] = pd.Series([], dtype=bool)
+    result = calculate_return_statistics(df, '2026-06-29')
+    assert list(result['Idea']) == ['Yes', 'No']
+    assert (result['Trades'] == 0).all()
+    assert (result['Notation'] == '0W - 0L (0.0%)').all()
+
+
 def run_all_tests():
     """Run all tests and report results."""
     tests = [
@@ -2168,6 +2226,11 @@ def run_all_tests():
         test_tp_statistics_trade_counts,
         test_tp_statistics_empty,
         test_tp_statistics_large_tp,
+        test_return_statistics_columns,
+        test_return_statistics_filters_by_date,
+        test_return_statistics_split_counts,
+        test_return_statistics_win_condition,
+        test_return_statistics_empty,
         test_buffer_statistics_filtered_all_trades,
         test_buffer_statistics_filtered_1h,
         test_buffer_statistics_filtered_excludes_others,

@@ -38,6 +38,9 @@ def load_data(filepath: str = "../strategies/15LS1CC/data.csv") -> pd.DataFrame:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
+    if "Returned" in df.columns:
+        df["Returned"] = df["Returned"] == True  # noqa: E712
+
     return df
 
 
@@ -1524,6 +1527,61 @@ def display_analysis_pullback(df: pd.DataFrame):
 
     stats_df = calculate_pullback_statistics(df)
     html_table = _create_sl_sortable_table(stats_df, "pullback-analysis")
+    display(HTML(html_table))
+
+
+def calculate_return_statistics(df: pd.DataFrame, start_date: str) -> pd.DataFrame:
+    """
+    Calculate win/loss statistics at 1:1 RRR split by the Returned flag.
+
+    Only trades from start_date onwards are measured, because the Returned
+    column was only tracked from that date.
+    Win condition: Pullback < SL AND TP >= SL.
+
+    Args:
+        df: DataFrame with trading data
+        start_date: First date (YYYY-MM-DD) with Returned data
+
+    Returns:
+        DataFrame with columns: Idea, Trades, Notation
+    """
+    measured = df[df['Date'] >= start_date]
+    results = []
+
+    for label, trades in [
+        ('Yes', measured[measured['Returned'] == True]),  # noqa: E712
+        ('No', measured[measured['Returned'] != True]),  # noqa: E712
+    ]:
+        total = len(trades)
+        wins = len(trades[
+            (trades['Pullback'] < trades['SL']) &
+            (trades['TP'] >= trades['SL'])
+        ])
+        results.append({
+            'Idea': label,
+            'Trades': total,
+            'Notation': _format_wl(wins, total - wins, total),
+        })
+
+    return pd.DataFrame(results)
+
+
+def display_analysis_return(start_date: str, df: pd.DataFrame):
+    """
+    Display win/loss statistics at 1:1 RRR for trades that returned to the
+    entry level (Returned = TRUE) versus those that did not.
+
+    Args:
+        start_date: First date (YYYY-MM-DD) with Returned data
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Return Analysis</h2>"
+    display(HTML(title_html))
+
+    stats_df = calculate_return_statistics(df, start_date)
+    html_table = create_html_table(stats_df)
     display(HTML(html_table))
 
 
