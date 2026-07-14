@@ -270,6 +270,67 @@ def analyze_pullback_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     return {"Pullback Analysis": final_table}
 
 
+def analyze_session_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+    """
+    Analyze trade profitability by trading session.
+
+    Hours 10 (including) to 15 (excluding) are the London session.
+    Everything from 15:00 onwards is the New York session.
+
+    Creates a table with one row per session showing trades, wins, losses,
+    and win percentage (win condition at 1:1 RRR).
+
+    Args:
+        df: Trading data with Hour, Pullback, TP, and SL columns
+
+    Returns:
+        Dictionary containing the session analysis DataFrame
+    """
+    # Work with copy of data
+    session_df = df.copy()
+
+    # Check if Hour column exists
+    if 'Hour' not in session_df.columns:
+        raise ValueError("No Hour column found in data")
+
+    sessions = [
+        ("London", lambda hour: (hour >= 10) & (hour < 15)),
+        ("New York", lambda hour: hour >= 15),
+    ]
+
+    session_rows = []
+
+    for session_name, hour_filter in sessions:
+        session_filtered = session_df[hour_filter(session_df['Hour'])]
+
+        total_trades = len(session_filtered)
+
+        if total_trades > 0:
+            profitable = session_filtered[
+                (session_filtered["SL"] != session_filtered["Pullback"])
+                & (session_filtered["Pullback"] < session_filtered["SL"])
+                & (session_filtered["TP"] >= session_filtered["SL"])
+            ]
+            wins = len(profitable)
+            losses = total_trades - wins
+            win_rate = wins / total_trades * 100
+        else:
+            wins = 0
+            losses = 0
+            win_rate = 0.0
+
+        session_rows.append({
+            'Session': session_name,
+            'Trades': total_trades,
+            'Wins': wins,
+            'Losses': losses,
+            'Win %': f"{win_rate:.1f}%"
+        })
+
+    final_table = pd.DataFrame(session_rows)
+    return {"Session Analysis": final_table}
+
+
 def analyze_30m_leg_profitability(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze which 30M Leg values produce the most profitable trades.
@@ -1426,6 +1487,19 @@ def get_top_strategies_by_edge(
 # ============================================================================
 # VISUALIZATION AND DISPLAY FUNCTIONS
 # ============================================================================
+
+
+def display_session_analysis(df: pd.DataFrame):
+    """Display trading session profitability analysis with proper formatting."""
+    from IPython.display import display, HTML
+
+    display(HTML("<h2>Session Analysis</h2>"))
+    session_tables = analyze_session_profitability(df)
+
+    for table_name, table_df in session_tables.items():
+        html_table = create_sortable_table(table_df)
+        display(HTML(html_table))
+        print('')
 
 
 def display_30m_leg_analysis(df: pd.DataFrame):
