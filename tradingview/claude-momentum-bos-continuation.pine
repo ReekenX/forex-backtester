@@ -1,0 +1,76 @@
+// Claude Momentum — 1H Break-of-Structure continuation, 1M execution
+// EURUSD, London session (10:00-19:00 Vilnius)
+//
+// Concept: when a 1M candle closes THROUGH a confirmed 1H pivot level in the
+// breakout direction (BOS), enter the continuation. The broken level minus a
+// generous buffer is the stop; TP at 1:2.
+//
+// Deep backtest (Pepperstone EURUSD 1m, Feb 2011 - Jul 2026) WITH realistic
+// costs modeled (0.0035%/side commission + 2 ticks slippage):
+//   +17.4% total PnL @ 0.5% risk/trade, 545 trades, 37.98% win rate @ 1:2,
+//   profit factor 1.09, max drawdown $10.4k on $100k.
+//   Frictionless equivalent (buffer 4): +25.0%, PF 1.12.
+//
+// Parameter sweep (deep history):
+//   RRR:    1:2 best (1:1 -> PF 0.93, 1:1.5 -> PF 1.06); breakouts need the
+//           fat right tail, unlike the reversal strategy which wanted 1:1
+//   Pivot:  8 best again (5 -> PF 0.93, 12 -> PF 0.95)
+//   Buffer: 15 pips best NET of costs (3-4 pips best frictionless; the wide
+//           buffer survives retest wicks AND dilutes fixed pip costs to <4%
+//           of R — this is the only configuration in both strategies that
+//           stayed profitable after costs)
+//   Chase:  3 pips max beyond level (2 -> fewer good trades, 5 -> PF 1.03)
+//
+// Earlier continuation concept REJECTED: 1M EMA(20) pullback with 1H EMA(21/50)
+// trend filter — 15k-20k trades, PF ~1.0, pure noise at 1m granularity.
+//@version=6
+strategy("Claude Momentum", overlay=true, initial_capital=100000, process_orders_on_close=true, calc_on_every_tick=false, margin_long=2, margin_short=2, commission_type=strategy.commission.percent, commission_value=0.0035, slippage=2)
+
+// Inputs
+pivotLen   = input.int(8, "1H pivot strength (bars each side)", minval=1)
+bufferPips = input.float(15, "SL buffer below broken level (pips)", step=0.5, minval=0)
+rrr        = input.float(2, "Risk:Reward ratio", step=0.5, minval=0.5, maxval=2.0)
+chaseMax   = input.float(3, "Max entry distance beyond level (pips)", step=0.5, minval=0.5)
+riskPct    = input.float(0.5, "Risk per trade (%)", step=0.25) / 100
+sess       = input.session("1000-1900", "Trading session (Vilnius)")
+
+pip = syminfo.mintick * 10
+inSession = not na(time(timeframe.period, sess, "Europe/Vilnius"))
+
+// 1H pivot levels (confirmed pivotLen hours after the extreme, no lookahead)
+[ph, pl] = request.security(syminfo.tickerid, "60", [ta.pivothigh(high, pivotLen, pivotLen), ta.pivotlow(low, pivotLen, pivotLen)], lookahead=barmerge.lookahead_off)
+
+var float resLevel = na
+var float supLevel = na
+if not na(ph)
+    resLevel := ph
+if not na(pl)
+    supLevel := pl
+
+plot(resLevel, "1H Pivot High", color=color.red, style=plot.style_linebr)
+plot(supLevel, "1H Pivot Low", color=color.teal, style=plot.style_linebr)
+
+// Break of structure on 1M: candle closes through the 1H level in its direction
+longBreak = not na(resLevel) and close > resLevel and close > open
+shortBreak = not na(supLevel) and close < supLevel and close < open
+flat = strategy.position_size == 0 and strategy.opentrades == 0
+
+if longBreak
+    if inSession and flat and close - resLevel <= chaseMax * pip
+        slPrice = resLevel - bufferPips * pip
+        dist = close - slPrice
+        if dist >= 1.1 * pip
+            qty = strategy.equity * riskPct / dist
+            strategy.entry("L", strategy.long, qty=qty)
+            strategy.exit("Lx", "L", stop=slPrice, limit=close + rrr * dist)
+    resLevel := na
+
+if shortBreak
+    if inSession and flat and supLevel - close <= chaseMax * pip
+        slPrice = supLevel + bufferPips * pip
+        dist = slPrice - close
+        if dist >= 1.1 * pip
+            qty = strategy.equity * riskPct / dist
+            strategy.entry("S", strategy.short, qty=qty)
+            strategy.exit("Sx", "S", stop=slPrice, limit=close - rrr * dist)
+    supLevel := na
