@@ -48,8 +48,8 @@ plotshape(touchUpper, "Upper band touch", style=shape.xcross, location=location.
 longGo = close[1] < lower[1] and close > lower and close > open
 shortGo = close[1] > upper[1] and close < upper and close < open
 
-plotshape(longGo, "Long entry", style=shape.triangleup, location=location.belowbar, color=signalColor, size=size.small)
-plotshape(shortGo, "Short entry", style=shape.triangledown, location=location.abovebar, color=signalColor, size=size.small)
+plotshape(longGo, "Long entry", style=shape.triangleup, location=location.belowbar, color=signalColor, size=size.tiny)
+plotshape(shortGo, "Short entry", style=shape.triangledown, location=location.abovebar, color=signalColor, size=size.tiny)
 
 // Alerts
 alertcondition(inSession and (touchLower or touchUpper), "BB band touched", "EURUSD 1M: price touched a Bollinger band — prepare a fade trade")
