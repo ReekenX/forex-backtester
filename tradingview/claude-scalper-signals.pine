@@ -1,11 +1,12 @@
 // Claude Scalper Signals — indicator companion to claude-scalper-bb-fade.pine
 //
-// Marks every BB-fade entry (yellow dot) and every Bollinger band touch
+// Marks every BB-fade entry (yellow triangle) and every Bollinger band touch
 // (teal/pink x-cross) so a trade can be prepared before the confirmation
-// candle closes. Signals outside the 10:00-19:00 Vilnius session are shown
-// as faded dots. Five alertconditions are exposed: any-band touch, lower
-// touch (prep LONG), upper touch (prep SHORT), long fade entry, short fade
-// entry — create alerts from the chart's Alert dialog on this indicator.
+// candle closes. Plots are shown around the clock; only the alertconditions
+// are limited to the 10:00-19:00 Vilnius session. Five alertconditions are
+// exposed: any-band touch, lower touch (prep LONG), upper touch (prep SHORT),
+// long fade entry, short fade entry — create alerts from the chart's Alert
+// dialog on this indicator.
 //@version=6
 indicator("Claude Scalper Signals", overlay=true)
 
@@ -40,18 +41,15 @@ fill(pU, pL, color=color.new(grayColor, 95), title="Band fill")
 // Band touches: price action reaches a band — prepare a fade trade
 touchLower = low <= lower
 touchUpper = high >= upper
-plotshape(inSession and touchLower, "Lower band touch", style=shape.xcross, location=location.belowbar, color=greenColor, size=size.tiny)
-plotshape(inSession and touchUpper, "Upper band touch", style=shape.xcross, location=location.abovebar, color=redColor, size=size.tiny)
+plotshape(touchLower, "Lower band touch", style=shape.xcross, location=location.belowbar, color=greenColor, size=size.tiny)
+plotshape(touchUpper, "Upper band touch", style=shape.xcross, location=location.abovebar, color=redColor, size=size.tiny)
 
 // Fade entry signals: poke through the band, then close back inside
 longGo = close[1] < lower[1] and close > lower and close > open
 shortGo = close[1] > upper[1] and close < upper and close < open
 
-plotshape(inSession and longGo, "Long entry", style=shape.circle, location=location.belowbar, color=signalColor, size=size.small)
-plotshape(inSession and shortGo, "Short entry", style=shape.circle, location=location.abovebar, color=signalColor, size=size.small)
-// Signals outside the trading session are shown faded
-plotshape(not inSession and longGo, "Long entry (off session)", style=shape.circle, location=location.belowbar, color=blankSignalColor, size=size.tiny)
-plotshape(not inSession and shortGo, "Short entry (off session)", style=shape.circle, location=location.abovebar, color=blankSignalColor, size=size.tiny)
+plotshape(longGo, "Long entry", style=shape.triangleup, location=location.belowbar, color=signalColor, size=size.small)
+plotshape(shortGo, "Short entry", style=shape.triangledown, location=location.abovebar, color=signalColor, size=size.small)
 
 // Alerts
 alertcondition(inSession and (touchLower or touchUpper), "BB band touched", "EURUSD 1M: price touched a Bollinger band — prepare a fade trade")
