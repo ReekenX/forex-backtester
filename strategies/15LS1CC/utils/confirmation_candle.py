@@ -402,8 +402,8 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str, buffe
     }
 
 
-MIN_SL_VALUES = [0, 1, 2, 3]
-MAX_SL_VALUES = [0, 10, 15, 20]
+MIN_SL_VALUES = [0]
+MAX_SL_VALUES = [0, 5]
 FIXED_SL_STRATEGY_VALUES = list(range(2, 11))
 MAX_SL_STRATEGY_VALUES = list(range(3, 11))
 
@@ -911,21 +911,9 @@ def display_weekday(df: pd.DataFrame):
     display(HTML(html_table))
 
 
-WIN_RULE_SUBTITLE = (
-    "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px; margin: 0;'>Win = Pullback &lt; SL + buffer AND TP &gt;= RRR x (SL + buffer). Same rule as the Strategies table, so win rates are comparable.</p>"
-)
-
-
 SL_RANGES = [
-    (f"0-{x}", 0, x) for x in range(1, 11)
-] + [
-    ("1-10", 1, 10),
-    ("2-10", 2, 10),
-    ("3-10", 3, 10),
-    ("4-10", 4, 10),
-    ("5-10", 5, 10),
+    (f"0-{x}", 0, x) for x in range(5, 11)
 ]
-
 
 SL_STATISTICS_RRR_RATIOS = [1, 2, 3, 4]
 
@@ -1087,7 +1075,7 @@ def display_analysis_sl(df: pd.DataFrame):
     from IPython.display import display, HTML
 
     title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px 10px 0;'>SL Range Statistics</h2>"
-    display(HTML(title_html + WIN_RULE_SUBTITLE))
+    display(HTML(title_html))
 
     stats_df = calculate_sl_statistics(df)
     html_table = _create_sl_sortable_table(stats_df, "sl-range-stats")
@@ -1272,7 +1260,7 @@ def display_analysis_sl_vs_buffer(df: pd.DataFrame):
     from IPython.display import display, HTML
 
     title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px 10px 0;'>Limiting SL vs Adding Buffer (1:1 RRR)</h2>"
-    display(HTML(title_html + WIN_RULE_SUBTITLE))
+    display(HTML(title_html))
 
     stats_df = calculate_sl_vs_buffer_statistics(df)
     html_table = _create_sl_sortable_table(stats_df, "sl-vs-buffer")
