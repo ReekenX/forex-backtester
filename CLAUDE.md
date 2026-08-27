@@ -63,11 +63,10 @@ Each strategy has its own `data.csv` inside its `strategies/<name>/` directory.
 - **Weekday**: Day of the week
 - **Trade**: Trade identifier
 - **Direction**: Trade direction (Buy or Sell)
-- **1H**: Higher timeframe (1-hour) alignment (Buy or Sell)
 - **SL**: Stop Loss in pips
 - **Pullback**: Pullback in pips
 - **TP**: Take Profit in pips (empty = not profitable)
-- **R**: Risk-reward achieved (e.g., 10.0)
+- **R**: Risk-reward achieved, exported with an "R" suffix (e.g. `7R`). Negative when the trade was stopped out before reaching that target (e.g. `-6R` means 6R was available but Pullback exceeded SL). The spreadsheet export labels this column with a computed win-rate cell (e.g. `47.3%`) instead of `R`, so `load_data` renames the trailing column.
 
 ## Trading Data CSV Fields
 

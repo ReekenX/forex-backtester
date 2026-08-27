@@ -11,10 +11,10 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from utils.confirmation_candle import (
+    load_data,
     calculate_statistics,
     calculate_buffer_statistics,
     calculate_fixed_sl_statistics,
-    calculate_fixed_sl_1h_statistics,
     calculate_weekday_statistics,
     _calculate_buffer_statistics_filtered,
     create_html_table,
@@ -23,8 +23,6 @@ from utils.confirmation_candle import (
     _calculate_stats,
     _calculate_stats_with_buffer,
     _calculate_fixed_sl_stats,
-    _calculate_fixed_sl_stats_with_strategy,
-    _get_1h_strategies,
     _breakeven_rate,
     RRR_RATIOS,
     BUFFER_PIPS,
@@ -45,8 +43,6 @@ from utils.confirmation_candle import (
     calculate_pullback_statistics,
     TP_RANGES,
     calculate_tp_statistics,
-    calculate_return_statistics,
-    RETURN_RRR_RATIOS,
 )
 
 
@@ -61,8 +57,6 @@ def get_sample_data():
                   '#1', '#2', '#1', '#2', '#1'],
         'Direction': ['Buy', 'Buy', 'Sell', 'Buy', 'Sell',
                       'Sell', 'Buy', 'Buy', 'Sell', 'Sell'],
-        '1H': ['Buy', 'Buy', 'Buy', 'Sell', 'Sell',
-               'Sell', 'Sell', 'Buy', 'Buy', 'Sell'],
         'SL': [3.5, 1.1, 2.0, 4.0, 3.0,
                5.0, 2.5, 6.0, 8.0, 1.5],
         'Pullback': [3.5, 0.8, 2.1, 1.5, 3.0,
@@ -78,8 +72,68 @@ def get_empty_data():
     """Create an empty dataset."""
     return pd.DataFrame({
         'Date': [], 'Weekday': [], 'Trade': [], 'Direction': [],
-        '1H': [], 'SL': [], 'Pullback': [], 'TP': [], 'R': [],
+        'SL': [], 'Pullback': [], 'TP': [], 'R': [],
     })
+
+
+CSV_SAMPLE = """Date,Weekday,Trade,Direction,SL,Pullback,TP,47.3%
+2026-07-27,Monday,#1,Sell,4.4,0.7,34,7R
+2026-07-27,Monday,#2,Sell,7.1,7.1,,
+2026-07-28,Tuesday,#1,Buy,2.6,2.7,31,-10R
+"""
+
+
+def write_sample_csv(tmp_path):
+    """Write the sample CSV (spreadsheet-shaped header and R suffixes) to disk."""
+    path = tmp_path / "data.csv"
+    path.write_text(CSV_SAMPLE)
+    return str(path)
+
+
+def test_load_data_columns(tmp_path):
+    """The trailing win-rate header cell is recovered as the R column."""
+    df = load_data(write_sample_csv(tmp_path))
+    assert list(df.columns) == [
+        'Date', 'Weekday', 'Trade', 'Direction', 'SL', 'Pullback', 'TP', 'R',
+    ]
+
+
+def test_load_data_strips_r_suffix(tmp_path):
+    """R values exported as "7R" / "-10R" become numbers."""
+    df = load_data(write_sample_csv(tmp_path))
+    assert df['R'].tolist() == [7.0, 0.0, -10.0]
+
+
+def test_load_data_numeric_columns(tmp_path):
+    """SL, Pullback and TP are numeric with blanks filled as 0."""
+    df = load_data(write_sample_csv(tmp_path))
+    assert df['SL'].tolist() == [4.4, 7.1, 2.6]
+    assert df['Pullback'].tolist() == [0.7, 7.1, 2.7]
+    assert df['TP'].tolist() == [34.0, 0.0, 31.0]
+
+
+def test_load_data_keeps_named_r_column(tmp_path):
+    """A CSV that already names the column R is loaded unchanged."""
+    path = tmp_path / "named.csv"
+    path.write_text("Date,Weekday,Trade,Direction,SL,Pullback,TP,R\n"
+                    "2026-07-27,Monday,#1,Sell,4.4,0.7,34,7\n")
+    df = load_data(str(path))
+    assert list(df.columns)[-1] == 'R'
+    assert df['R'].tolist() == [7.0]
+
+
+def test_load_data_real_csv():
+    """The project CSV loads with the expected columns and numeric types."""
+    import os
+    csv_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), '..', 'data.csv')
+    df = load_data(csv_path)
+    assert list(df.columns) == [
+        'Date', 'Weekday', 'Trade', 'Direction', 'SL', 'Pullback', 'TP', 'R',
+    ]
+    assert len(df) > 0
+    for col in ['SL', 'Pullback', 'TP', 'R']:
+        assert df[col].notna().all()
 
 
 def test_get_strategies():
@@ -96,16 +150,14 @@ def test_strategy_names_include_base():
     strategies = get_strategies()
     names = [name for name, _ in strategies]
     assert 'All Trades' in names
-    assert '1H Aligned' in names
-    assert '1H Against' in names
 
 
 def test_strategy_names_include_sl_combos():
     """Test that SL combination strategies are present."""
     strategies = get_strategies()
     names = [name for name, _ in strategies]
-    assert '1H Aligned + SL < 5' in names
-    assert '1H Against + SL > 3' in names
+    assert 'All Trades + SL < 5' in names
+    assert 'All Trades + SL > 3' in names
     assert 'All Trades + SL < 3' in names
 
 
@@ -236,50 +288,14 @@ def test_trades_required_negative_outcome():
     assert stats['Trades Required'] == 'N/A'
 
 
-def test_1h_aligned_filter():
-    """Test 1H Aligned filter."""
-    sample = get_sample_data()
-    strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == '1H Aligned'][0]
-    filtered = strategy(sample)
-
-    for _, row in filtered.iterrows():
-        assert row['Direction'] == row['1H']
-
-
-def test_1h_against_filter():
-    """Test 1H Against filter."""
-    sample = get_sample_data()
-    strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == '1H Against'][0]
-    filtered = strategy(sample)
-
-    for _, row in filtered.iterrows():
-        assert row['Direction'] != row['1H']
-
-
-def test_1h_aligned_plus_against_equals_all():
-    """Test that 1H Aligned + 1H Against = All Trades."""
-    sample = get_sample_data()
-    strategies = get_strategies()
-    aligned_func = [func for name, func in strategies if name == '1H Aligned'][0]
-    against_func = [func for name, func in strategies if name == '1H Against'][0]
-
-    aligned = aligned_func(sample)
-    against = against_func(sample)
-
-    assert len(aligned) + len(against) == len(sample)
-
-
 def test_sl_filter_combination():
     """Test SL filter in combination strategy."""
     sample = get_sample_data()
     strategies = get_strategies()
-    strategy = [func for name, func in strategies if name == '1H Aligned + SL > 3'][0]
+    strategy = [func for name, func in strategies if name == 'All Trades + SL > 3'][0]
     filtered = strategy(sample)
 
     for _, row in filtered.iterrows():
-        assert row['Direction'] == row['1H']
         assert row['SL'] > 3
 
 
@@ -442,43 +458,8 @@ def test_get_buffer_strategies():
     names = [name for name, _ in strategies]
 
     assert 'All Trades' in names
-    assert '1H Aligned' in names
-    assert '1H Against' in names
-
-
-# def test_get_buffer_strategies_includes_sl_caps():
-#     """Test that buffer strategies include SL cap variations."""
-#     strategies = get_buffer_strategies()
-#     names = [name for name, _ in strategies]
-#
-#     assert 'All Trades + SL < 3' in names
-#     assert 'All Trades + SL < 4' in names
-#     assert 'All Trades + SL < 5' in names
-#     assert '1H Aligned + SL < 3' in names
-#     assert '1H Against + SL < 5' in names
-#
-#
-# def test_buffer_sl_cap_filter():
-#     """Test that SL cap filter correctly excludes trades with SL >= cap."""
-#     sample = get_sample_data()
-#     strategies = get_buffer_strategies()
-#     strategy = [func for name, func in strategies if name == 'All Trades + SL < 3'][0]
-#     filtered = strategy(sample)
-#
-#     for _, row in filtered.iterrows():
-#         assert row['SL'] < 3
-#
-#
-# def test_buffer_sl_cap_with_1h_filter():
-#     """Test SL cap combined with 1H filter."""
-#     sample = get_sample_data()
-#     strategies = get_buffer_strategies()
-#     strategy = [func for name, func in strategies if name == '1H Aligned + SL < 4'][0]
-#     filtered = strategy(sample)
-#
-#     for _, row in filtered.iterrows():
-#         assert row['SL'] < 4
-#         assert row['Direction'] == row['1H']
+    assert 'Fixed SL 2' in names
+    assert 'Max SL 3' in names
 
 
 def test_calculate_buffer_statistics():
@@ -947,120 +928,6 @@ def test_calculate_fixed_sl_statistics_columns():
     assert columns[2].startswith('Trades (')
 
 
-def test_fixed_sl_with_strategy_has_strategy_column():
-    """Test that fixed SL with strategy includes the Strategy column."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'SL': [5.0],
-        'Pullback': [2.0],
-        'TP': [10.0],
-    })
-
-    stats = _calculate_fixed_sl_stats_with_strategy(trades, 'Test Strategy', 3.0)
-    assert stats['Strategy'] == 'Test Strategy'
-    assert stats['Fixed SL'] == '3.0'
-
-
-def test_fixed_sl_with_strategy_empty():
-    """Test fixed SL with strategy on empty data."""
-    empty = get_empty_data()
-    stats = _calculate_fixed_sl_stats_with_strategy(empty, 'Empty', 2.0)
-    assert stats['Trades'] == 0
-    assert stats['Strategy'] == 'Empty'
-
-
-def test_get_1h_strategies():
-    """Test 1H strategy list."""
-    strategies = _get_1h_strategies()
-    names = [name for name, _ in strategies]
-    assert 'All Trades' in names
-    assert '1H Aligned' in names
-    assert '1H Against' in names
-    assert len(strategies) == 3
-
-
-def test_1h_strategy_filters_correctly():
-    """Test that 1H strategy filters produce correct subsets."""
-    sample = get_sample_data()
-    strategies = _get_1h_strategies()
-
-    aligned_func = [func for name, func in strategies if name == '1H Aligned'][0]
-    against_func = [func for name, func in strategies if name == '1H Against'][0]
-
-    aligned = aligned_func(sample)
-    against = against_func(sample)
-
-    for _, row in aligned.iterrows():
-        assert row['Direction'] == row['1H']
-
-    for _, row in against.iterrows():
-        assert row['Direction'] != row['1H']
-
-    assert len(aligned) + len(against) == len(sample)
-
-
-def test_calculate_fixed_sl_1h_statistics():
-    """Test that 1H fixed SL statistics returns a DataFrame."""
-    sample = get_sample_data()
-    result = calculate_fixed_sl_1h_statistics(sample)
-    assert isinstance(result, pd.DataFrame)
-    assert len(result) > 0
-
-
-def test_fixed_sl_1h_total_rows():
-    """Test that only positive edge rows are returned."""
-    sample = get_sample_data()
-    result = calculate_fixed_sl_1h_statistics(sample)
-    for _, row in result.iterrows():
-        edge_val = float(str(row['Edge']).replace('%', ''))
-        assert edge_val > 0, f"Non-positive edge found: {row['Edge']}"
-
-
-def test_fixed_sl_1h_has_strategy_column():
-    """Test that 1H fixed SL result has Strategy column."""
-    sample = get_sample_data()
-    result = calculate_fixed_sl_1h_statistics(sample)
-    columns = list(result.columns)
-    assert columns[0] == 'Strategy'
-    assert columns[1] == 'Fixed SL'
-    assert columns[2] == 'RRR'
-
-
-def test_fixed_sl_1h_strategies_present():
-    """Test that only strategies with positive edge appear in results."""
-    sample = get_sample_data()
-    result = calculate_fixed_sl_1h_statistics(sample)
-    strategies = result['Strategy'].unique()
-    for s in strategies:
-        assert s in ['All Trades', '1H Aligned', '1H Against'], f"Unexpected strategy: {s}"
-
-
-def test_fixed_sl_1h_aligned_wins_more():
-    """Test fixed SL with 1H alignment on controlled data.
-
-    All trades are Buy with 1H=Buy, so Aligned = all trades, Against = 0 trades.
-    """
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01', '2026-01-02'],
-        'Direction': ['Buy', 'Buy'],
-        '1H': ['Buy', 'Buy'],
-        'SL': [5.0, 5.0],
-        'Pullback': [1.0, 1.0],
-        'TP': [10.0, 10.0],
-    })
-
-    result = calculate_fixed_sl_1h_statistics(trades)
-
-    # 1H Aligned at fixed SL=2.0, 1:1 should have 2 trades (positive edge)
-    aligned_rows = result[(result['Strategy'] == '1H Aligned') & (result['Fixed SL'] == '2.0') & (result['RRR'] == '1:1')]
-    assert len(aligned_rows) == 1
-    assert aligned_rows.iloc[0]['Notation'] == '2W – 0L'
-
-    # 1H Against with 0 trades has negative edge, so it's filtered out
-    against_rows = result[(result['Strategy'] == '1H Against') & (result['Fixed SL'] == '2.0') & (result['RRR'] == '1:1')]
-    assert len(against_rows) == 0
-
-
 def test_buffer_stats_has_trades_column():
     """Test that _calculate_stats_with_buffer returns Trades count."""
     trades = pd.DataFrame({
@@ -1199,7 +1066,6 @@ def test_weekday_statistics_buffer_saves_trade():
         'Weekday': ['Monday'],
         'Trade': ['#1'],
         'Direction': ['Buy'],
-        '1H': ['Buy'],
         'SL': [3.0],
         'Pullback': [4.0],
         'TP': [10.0],
@@ -1231,7 +1097,6 @@ def test_weekday_statistics_single_day():
         'Weekday': ['Monday', 'Monday'],
         'Trade': ['#1', '#2'],
         'Direction': ['Buy', 'Buy'],
-        '1H': ['Buy', 'Buy'],
         'SL': [3.0, 3.0],
         'Pullback': [1.0, 4.0],
         'TP': [5.0, 5.0],
@@ -1362,7 +1227,6 @@ def test_sl_statistics_ignores_pullback():
         'Weekday': ['Monday'],
         'Trade': ['#1'],
         'Direction': ['Buy'],
-        '1H': ['Buy'],
         'SL': [2.0],
         'Pullback': [5.0],  # Pullback > SL, would be a loss if that were checked
         'TP': [10.0],
@@ -1394,7 +1258,6 @@ def test_sl_statistics_large_sl():
         'Weekday': ['Monday', 'Monday'],
         'Trade': ['#1', '#2'],
         'Direction': ['Buy', 'Buy'],
-        '1H': ['Buy', 'Buy'],
         'SL': [12.0, 15.0],
         'Pullback': [5.0, 16.0],
         'TP': [20.0, 20.0],
@@ -1413,7 +1276,6 @@ def test_sl_statistics_no_tp_is_loss():
         'Weekday': ['Monday'],
         'Trade': ['#1'],
         'Direction': ['Buy'],
-        '1H': ['Buy'],
         'SL': [2.0],
         'Pullback': [1.0],
         'TP': [0],
@@ -1535,7 +1397,6 @@ def test_sl_buffer_impact_requires_surviving_stop():
         'Weekday': ['Monday'],
         'Trade': ['#1'],
         'Direction': ['Buy'],
-        '1H': ['Buy'],
         'SL': [3.0],
         'Pullback': [5.0],
         'TP': [10.0],
@@ -1559,7 +1420,6 @@ def test_sl_buffer_impact_erosion():
         'Weekday': ['Monday'],
         'Trade': ['#1'],
         'Direction': ['Buy'],
-        '1H': ['Buy'],
         'SL': [2.0],
         'Pullback': [1.0],
         'TP': [4.0],
@@ -1697,7 +1557,6 @@ def test_sl_vs_buffer_buffer_uses_all_trades():
         'Weekday': ['Monday', 'Tuesday'],
         'Trade': ['#1', '#2'],
         'Direction': ['Buy', 'Buy'],
-        '1H': ['Buy', 'Buy'],
         'SL': [3.0, 12.0],
         'Pullback': [1.0, 1.0],
         'TP': [5.0, 20.0],
@@ -1832,7 +1691,6 @@ def test_pullback_statistics_full_survives_with_buffer():
         'Weekday': ['Monday'],
         'Trade': ['#1'],
         'Direction': ['Buy'],
-        '1H': ['Buy'],
         'SL': [3.0],
         'Pullback': [4.1],
         'TP': [10.0],
@@ -1867,7 +1725,6 @@ def test_pullback_statistics_stopped_trade_is_loss_not_win():
         'Weekday': ['Monday'],
         'Trade': ['#1'],
         'Direction': ['Buy'],
-        '1H': ['Buy'],
         'SL': [2.0],
         'Pullback': [3.0],  # >= SL -> stopped out at the safe stop
         'TP': [10.0],       # reached target only in hindsight
@@ -1892,7 +1749,6 @@ def test_pullback_statistics_missed_winner():
         'Weekday': ['Monday'],
         'Trade': ['#1'],
         'Direction': ['Buy'],
-        '1H': ['Buy'],
         'SL': [5.0],
         'Pullback': [0.5],  # never pulls back 1 pip
         'TP': [10.0],       # survives stop and TP >= SL -> 1:1 winner
@@ -1989,7 +1845,6 @@ def test_tp_statistics_large_tp():
         'Weekday': ['Monday', 'Monday'],
         'Trade': ['#1', '#2'],
         'Direction': ['Buy', 'Buy'],
-        '1H': ['Buy', 'Buy'],
         'SL': [3.0, 3.0],
         'Pullback': [1.0, 4.0],
         'TP': [60.0, 55.0],
@@ -2013,26 +1868,15 @@ def test_buffer_statistics_filtered_all_trades():
             assert s == 'All Trades', f"Unexpected strategy: {s}"
 
 
-def test_buffer_statistics_filtered_1h():
-    """Test _calculate_buffer_statistics_filtered with 1H strategies only."""
-    sample = get_sample_data()
-    result = _calculate_buffer_statistics_filtered(sample, ["1H Aligned", "1H Against"])
-    assert isinstance(result, pd.DataFrame)
-    if len(result) > 0:
-        strategies = result['Strategy'].unique()
-        for s in strategies:
-            assert s in ['1H Aligned', '1H Against'], f"Unexpected strategy: {s}"
-
-
 def test_buffer_statistics_filtered_excludes_others():
     """Test that filtered results don't include strategies not in the list."""
     sample = get_sample_data()
     result_all = _calculate_buffer_statistics_filtered(sample, ["All Trades"])
-    result_1h = _calculate_buffer_statistics_filtered(sample, ["1H Aligned", "1H Against"])
+    result_fixed = _calculate_buffer_statistics_filtered(sample, ["Fixed SL 2", "Fixed SL 3"])
     if len(result_all) > 0:
-        assert '1H Aligned' not in result_all['Strategy'].values
-    if len(result_1h) > 0:
-        assert 'All Trades' not in result_1h['Strategy'].values
+        assert 'Fixed SL 2' not in result_all['Strategy'].values
+    if len(result_fixed) > 0:
+        assert 'All Trades' not in result_fixed['Strategy'].values
 
 
 def test_buffer_statistics_filtered_empty():
@@ -2043,121 +1887,10 @@ def test_buffer_statistics_filtered_empty():
     assert (result['Trades'] == 0).all()
 
 
-RETURN_STRATEGY_NAMES = [
-    '1H Aligned + Returned',
-    '1H Aligned + Not Returned',
-    '1H Against + Returned',
-    '1H Against + Not Returned',
-    'All Trades + Returned',
-    'All Trades + Not Returned',
-]
-
-
-def get_return_sample_data():
-    """Create a sample dataset with a Returned column straddling the cutoff date."""
-    return pd.DataFrame({
-        'Date': ['2026-06-20', '2026-06-29', '2026-06-30', '2026-07-01', '2026-07-01', '2026-07-02'],
-        'Weekday': ['Saturday', 'Monday', 'Tuesday', 'Wednesday', 'Wednesday', 'Thursday'],
-        'Trade': ['#1', '#1', '#1', '#1', '#2', '#1'],
-        'Direction': ['Buy', 'Buy', 'Sell', 'Buy', 'Sell', 'Buy'],
-        '1H': ['Buy', 'Buy', 'Buy', 'Buy', 'Sell', 'Sell'],
-        'Returned': [True, True, True, False, False, False],
-        'SL': [2.0, 2.0, 2.0, 3.0, 3.0, 2.0],
-        'Pullback': [1.0, 1.0, 2.0, 1.0, 1.0, 3.0],
-        'TP': [10.0, 10.0, 0, 3.0, 2.0, 10.0],
-        'R': [5.0, 5.0, 0, 1.0, 0, 0],
-    })
-
-
-def test_return_statistics_columns():
-    """Return statistics has Strategy, Buffer, Trades and per-RRR notation columns."""
-    result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
-    assert list(result.columns) == [
-        'Strategy', 'Buffer', 'Trades',
-        'Notation (1:1 RRR)', 'Notation (1:2 RRR)', 'Notation (1:3 RRR)',
-    ]
-
-
-def test_return_statistics_strategies_and_buffers():
-    """Each of the 6 strategies has one row per buffer in BUFFER_PIPS."""
-    result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
-    assert len(result) == 6 * len(BUFFER_PIPS)
-    assert list(result['Strategy'].unique()) == RETURN_STRATEGY_NAMES
-    for name in RETURN_STRATEGY_NAMES:
-        assert list(result[result['Strategy'] == name]['Buffer']) == [f"+{b}" for b in BUFFER_PIPS]
-
-
-def test_return_statistics_filters_by_date():
-    """Trades before the start date are excluded from the counts."""
-    result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
-    # 6 sample trades, but the 2026-06-20 one is before the cutoff
-    all_trades = result[result['Strategy'].str.startswith('All Trades')]
-    assert all_trades[all_trades['Buffer'] == '+0']['Trades'].sum() == 5
-
-
-def test_return_statistics_split_counts():
-    """Strategies split by Returned flag and 1H alignment."""
-    result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
-    counts = result[result['Buffer'] == '+0'].set_index('Strategy')['Trades']
-    assert counts['All Trades + Returned'] == 2
-    assert counts['All Trades + Not Returned'] == 3
-    # Aligned: rows 2 (Buy/Buy, Returned), 4 (Buy/Buy, Not Returned), 5 (Sell/Sell, Not Returned)
-    assert counts['1H Aligned + Returned'] == 1
-    assert counts['1H Aligned + Not Returned'] == 2
-    # Against: rows 3 (Sell/Buy, Returned), 6 (Buy/Sell, Not Returned)
-    assert counts['1H Against + Returned'] == 1
-    assert counts['1H Against + Not Returned'] == 1
-
-
-def test_return_statistics_win_condition():
-    """Win at 1:1 RRR requires Pullback < SL and TP >= SL (buffer +0)."""
-    result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
-    notation = result[result['Buffer'] == '+0'].set_index('Strategy')['Notation (1:1 RRR)']
-    # Returned: winner (Pullback 1 < SL 2, TP 10 >= 2) + immediate loss (Pullback = SL)
-    assert notation['All Trades + Returned'] == '1W - 1L (50.0%)'
-    # Not Returned: winner (TP 3 >= SL 3), loss (TP 2 < SL 3), loss (Pullback 3 >= SL 2)
-    assert notation['All Trades + Not Returned'] == '1W - 2L (33.3%)'
-
-
-def test_return_statistics_buffer_widens_sl():
-    """Buffer adds pips to the effective SL, changing wins both ways."""
-    result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
-    notation = result.set_index(['Strategy', 'Buffer'])['Notation (1:1 RRR)']
-    # +1 buffer saves the immediate loss (Pullback 2 < 3, TP 0 < 3 still a loss)
-    # but the winner needs TP >= 3, still fine (TP 10)
-    assert notation[('All Trades + Returned', '+1')] == '1W - 1L (50.0%)'
-    # +1 buffer kills the TP 3 winner (needs TP >= 4) and saves no losses
-    assert notation[('All Trades + Not Returned', '+1')] == '0W - 3L (0.0%)'
-
-
-def test_return_statistics_higher_rrr_needs_bigger_tp():
-    """Win at 1:N RRR requires TP >= N x effective SL (buffer +0)."""
-    result = calculate_return_statistics(get_return_sample_data(), '2026-06-29')
-    row = result[result['Buffer'] == '+0'].set_index('Strategy')
-    # Returned winner has TP 10, SL 2: wins at 1:2 (>= 4) and 1:3 (>= 6)
-    assert row.loc['All Trades + Returned', 'Notation (1:2 RRR)'] == '1W - 1L (50.0%)'
-    assert row.loc['All Trades + Returned', 'Notation (1:3 RRR)'] == '1W - 1L (50.0%)'
-    # Not Returned 1:1 winner has TP 3, SL 3: loses at 1:2 (needs >= 6),
-    # but the Pullback 3 / SL 2 / TP 10 trade still fails on pullback
-    assert row.loc['All Trades + Not Returned', 'Notation (1:2 RRR)'] == '0W - 3L (0.0%)'
-    assert row.loc['All Trades + Not Returned', 'Notation (1:3 RRR)'] == '0W - 3L (0.0%)'
-
-
-def test_return_statistics_empty():
-    """Empty dataset produces zero-count rows for all strategies."""
-    df = get_empty_data()
-    df['Date'] = df['Date'].astype(str)
-    df['Returned'] = pd.Series([], dtype=bool)
-    result = calculate_return_statistics(df, '2026-06-29')
-    assert len(result) == 6 * len(BUFFER_PIPS)
-    assert (result['Trades'] == 0).all()
-    for rrr in RETURN_RRR_RATIOS:
-        assert (result[f'Notation (1:{rrr} RRR)'] == '0W - 0L (0.0%)').all()
-
-
 def run_all_tests():
     """Run all tests and report results."""
     tests = [
+        test_load_data_real_csv,
         test_get_strategies,
         test_strategy_names_include_base,
         test_strategy_names_include_sl_combos,
@@ -2170,9 +1903,6 @@ def run_all_tests():
         test_days_calculation,
         test_trades_required,
         test_trades_required_negative_outcome,
-        test_1h_aligned_filter,
-        test_1h_against_filter,
-        test_1h_aligned_plus_against_equals_all,
         test_sl_filter_combination,
         test_calculate_statistics_returns_positive_edge_only,
         test_calculate_statistics_sorted_by_edge,
@@ -2186,9 +1916,6 @@ def run_all_tests():
         test_buffer_stats_has_buffer_column,
         test_buffer_stats_empty,
         test_get_buffer_strategies,
-        # test_get_buffer_strategies_includes_sl_caps,
-        # test_buffer_sl_cap_filter,
-        # test_buffer_sl_cap_with_1h_filter,
         test_calculate_buffer_statistics,
         test_buffer_pips_constant,
         test_rrr_ratios_constant,
@@ -2211,15 +1938,6 @@ def run_all_tests():
         test_calculate_fixed_sl_statistics_has_both_rrr,
         test_calculate_fixed_sl_statistics_total_rows,
         test_calculate_fixed_sl_statistics_columns,
-        test_fixed_sl_with_strategy_has_strategy_column,
-        test_fixed_sl_with_strategy_empty,
-        test_get_1h_strategies,
-        test_1h_strategy_filters_correctly,
-        test_calculate_fixed_sl_1h_statistics,
-        test_fixed_sl_1h_total_rows,
-        test_fixed_sl_1h_has_strategy_column,
-        test_fixed_sl_1h_strategies_present,
-        test_fixed_sl_1h_aligned_wins_more,
         test_buffer_stats_has_trades_column,
         test_buffer_stats_empty_has_trades_zero,
         test_buffer_stats_with_float_rrr,
@@ -2282,16 +2000,7 @@ def run_all_tests():
         test_tp_statistics_trade_counts,
         test_tp_statistics_empty,
         test_tp_statistics_large_tp,
-        test_return_statistics_columns,
-        test_return_statistics_strategies_and_buffers,
-        test_return_statistics_filters_by_date,
-        test_return_statistics_split_counts,
-        test_return_statistics_win_condition,
-        test_return_statistics_buffer_widens_sl,
-        test_return_statistics_higher_rrr_needs_bigger_tp,
-        test_return_statistics_empty,
         test_buffer_statistics_filtered_all_trades,
-        test_buffer_statistics_filtered_1h,
         test_buffer_statistics_filtered_excludes_others,
         test_buffer_statistics_filtered_empty,
     ]

@@ -1,14 +1,16 @@
 """
 1M Confirmation Candle Analysis Module
 
-Analyzes trading strategies based on 1H (higher timeframe) alignment.
+Analyzes trading strategies based on stop loss sizing and SL buffers.
 All strategies are evaluated at 1:1 and 1:2 RRR.
 
-CSV columns: Date, Weekday, Trade, Direction, 1H, SL, Pullback, TP, R
+CSV columns: Date, Weekday, Trade, Direction, SL, Pullback, TP, R
 
-1H column represents higher timeframe alignment:
-- Buy: trade idea is above High or bounced from Low
-- Sell: trade idea is below Low or bounced from High
+The R column is exported from the spreadsheet with an "R" suffix (e.g. "7R")
+and is negative when the trade was stopped out before reaching that target
+(e.g. "-6R" means 6R was available but Pullback exceeded SL). Its header cell
+holds a computed win-rate value instead of the name "R", so load_data renames
+the trailing column.
 """
 
 import pandas as pd
@@ -34,12 +36,17 @@ def load_data(filepath: str = "../strategies/15LS1CC/data.csv") -> pd.DataFrame:
     """
     df = pd.read_csv(filepath)
 
+    # The spreadsheet export labels the R column with a computed win-rate cell
+    # (e.g. "47.3%") instead of "R", so recover it from the trailing column.
+    if "R" not in df.columns and len(df.columns) > 0:
+        df = df.rename(columns={df.columns[-1]: "R"})
+
+    if "R" in df.columns:
+        df["R"] = df["R"].astype(str).str.replace("R", "", regex=False).str.strip()
+
     for col in ["SL", "TP", "Pullback", "R"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-
-    if "Returned" in df.columns:
-        df["Returned"] = df["Returned"] == True  # noqa: E712
 
     return df
 
@@ -58,12 +65,6 @@ def get_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]
         ("All Trades", lambda df: df),
     ])
 
-    # === 1H alignment strategies ===
-    strategies.extend([
-        ("1H Aligned", lambda df: df[df["Direction"] == df["1H"]]),
-        ("1H Against", lambda df: df[df["Direction"] != df["1H"]]),
-    ])
-
     # === SL filter strategies ===
     sl_filters = [
         ("SL < 3", lambda df: df[df["SL"] < 3]),
@@ -78,20 +79,6 @@ def get_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]
         strategies.append((
             f"All Trades + {sl_name}",
             lambda df, f=sl_func: f(df)
-        ))
-
-    # === 1H Aligned + SL filters ===
-    for sl_name, sl_func in sl_filters:
-        strategies.append((
-            f"1H Aligned + {sl_name}",
-            lambda df, f=sl_func: f(df[df["Direction"] == df["1H"]])
-        ))
-
-    # === 1H Against + SL filters ===
-    for sl_name, sl_func in sl_filters:
-        strategies.append((
-            f"1H Against + {sl_name}",
-            lambda df, f=sl_func: f(df[df["Direction"] != df["1H"]])
         ))
 
     return strategies
@@ -463,8 +450,6 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
     """
     strategies: List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]] = [
         ("All Trades", lambda df: df),
-        ("1H Aligned", lambda df: df[df["Direction"] == df["1H"]]),
-        ("1H Against", lambda df: df[df["Direction"] != df["1H"]]),
     ]
     strategies.extend(
         (f"Fixed SL {x}", _fixed_sl_filter(x)) for x in FIXED_SL_STRATEGY_VALUES
@@ -747,156 +732,6 @@ def display_fixed_sl(df: pd.DataFrame):
     display(HTML(title_html + subtitle_html))
 
     stats_df = calculate_fixed_sl_statistics(df)
-
-    if stats_df.empty:
-        display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
-    else:
-        html_table = create_html_table(stats_df)
-        display(HTML(html_table))
-
-
-def _calculate_fixed_sl_stats_with_strategy(trades: pd.DataFrame, strategy_name: str, fixed_sl: float, rrr_ratio: int = 1) -> Dict:
-    """
-    Calculate fixed SL statistics for a named strategy filter.
-
-    Same logic as _calculate_fixed_sl_stats but includes a Strategy column.
-
-    Args:
-        trades: DataFrame containing filtered trades
-        strategy_name: Name of the strategy filter applied
-        fixed_sl: Fixed stop loss in pips
-        rrr_ratio: Risk-reward ratio (1 for 1:1, 2 for 1:2)
-
-    Returns:
-        Dictionary with calculated statistics including Strategy column
-    """
-    breakeven = _breakeven_rate(rrr_ratio)
-    rrr_label = f"1:{rrr_ratio}"
-    total_trades = len(trades)
-
-    if total_trades == 0:
-        return {
-            "Strategy": strategy_name,
-            "Fixed SL": f"{fixed_sl}",
-            "RRR": rrr_label,
-            "Trades": 0,
-            "Notation": "0W – 0L",
-            "Win Rate": "0.0%",
-            "Outcome": "0R",
-            "Edge": f"{-breakeven:.1f}%",
-            "Days": 0,
-            "Days %": "0%",
-            "Trades Required": "N/A",
-            "edge_value": -breakeven,
-        }
-
-    winning_trades = trades[
-        (trades["Pullback"] < fixed_sl) &
-        (trades["TP"] >= rrr_ratio * fixed_sl)
-    ]
-
-    wins = len(winning_trades)
-    losses = total_trades - wins
-    win_rate = (wins / total_trades) * 100
-    edge = win_rate - breakeven
-    outcome = (wins * rrr_ratio) - losses
-
-    days_with_wins = winning_trades["Date"].nunique() if "Date" in winning_trades.columns and len(winning_trades) > 0 else 0
-    total_days = trades["Date"].nunique() if "Date" in trades.columns else 0
-    days_pct = (days_with_wins / total_days * 100) if total_days > 0 else 0.0
-    trades_required = (total_trades / outcome) if outcome > 0 else float("inf")
-
-    return {
-        "Strategy": strategy_name,
-        "Fixed SL": f"{fixed_sl}",
-        "RRR": rrr_label,
-        "Trades": total_trades,
-        "Notation": f"{wins}W – {losses}L",
-        "Win Rate": f"{win_rate:.1f}%",
-        "Outcome": f"{outcome}R",
-        "Edge": f"{edge:.1f}%",
-        "Days": days_with_wins,
-        "Days %": f"{days_pct:.0f}%",
-        "Trades Required": f"{trades_required:.1f}" if outcome > 0 else "N/A",
-        "edge_value": edge,
-    }
-
-
-def _get_1h_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]:
-    """
-    Get 1H-based strategy filters.
-
-    Returns:
-        List of tuples (strategy_name, filter_function)
-    """
-    return [
-        ("All Trades", lambda df: df),
-        ("1H Aligned", lambda df: df[df["Direction"] == df["1H"]]),
-        ("1H Against", lambda df: df[df["Direction"] != df["1H"]]),
-    ]
-
-
-def calculate_fixed_sl_1h_statistics(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculate fixed SL statistics filtered by 1H alignment.
-
-    For each 1H strategy (All, Aligned, Against), tests all fixed SL sizes
-    at each RRR ratio.
-
-    Args:
-        df: DataFrame with trading data
-
-    Returns:
-        DataFrame with fixed SL + 1H statistics, sorted by edge descending
-    """
-    strategies = _get_1h_strategies()
-    results = []
-    total_trades = len(df)
-
-    for strategy_name, filter_func in strategies:
-        filtered_df = filter_func(df)
-        for fixed_sl in FIXED_SL_SIZES:
-            for rrr in RRR_RATIOS:
-                stats = _calculate_fixed_sl_stats_with_strategy(filtered_df, strategy_name, fixed_sl, rrr)
-                results.append(stats)
-
-    result_df = pd.DataFrame(results)
-
-    # Filter to only show strategies with positive edge
-    result_df = result_df[result_df["edge_value"] > 0].copy()
-
-    # Sort by edge descending
-    result_df = result_df.sort_values("edge_value", ascending=False)
-
-    # Drop sorting column
-    result_df = result_df.drop("edge_value", axis=1)
-
-    # Rename columns to include totals
-    total_days = df["Date"].nunique() if "Date" in df.columns else 0
-    result_df = result_df.rename(columns={
-        "Trades": f"Trades ({total_trades})",
-        "Days": f"Days ({total_days})",
-    })
-
-    result_df = result_df.reset_index(drop=True)
-
-    return result_df
-
-
-def display_fixed_sl_1h(df: pd.DataFrame):
-    """
-    Display fixed SL analysis filtered by 1H alignment.
-
-    Args:
-        df: DataFrame with trading data
-    """
-    from IPython.display import display, HTML
-
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Fixed SL + 1H Alignment Analysis</h2>"
-    subtitle_html = "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px;'>Fixed SL (1.5-5.0 pips) combined with 1H higher timeframe direction filter.</p>"
-    display(HTML(title_html + subtitle_html))
-
-    stats_df = calculate_fixed_sl_1h_statistics(df)
 
     if stats_df.empty:
         display(HTML("<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data available</p>"))
@@ -1527,84 +1362,6 @@ def display_analysis_pullback(df: pd.DataFrame):
 
     stats_df = calculate_pullback_statistics(df)
     html_table = _create_sl_sortable_table(stats_df, "pullback-analysis")
-    display(HTML(html_table))
-
-
-RETURN_RRR_RATIOS = [1, 2, 3]
-
-
-def calculate_return_statistics(df: pd.DataFrame, start_date: str) -> pd.DataFrame:
-    """
-    Calculate win/loss statistics at 1:1, 1:2 and 1:3 RRR for Returned/Not
-    Returned trades combined with 1H alignment strategies, across SL buffers.
-
-    Only trades from start_date onwards are measured, because the Returned
-    column was only tracked from that date. Each strategy is scored once per
-    buffer in BUFFER_PIPS (effective SL = SL + buffer).
-    Win condition: Pullback < effective SL AND TP >= RRR x effective SL.
-
-    Args:
-        df: DataFrame with trading data
-        start_date: First date (YYYY-MM-DD) with Returned data
-
-    Returns:
-        DataFrame with columns: Strategy, Buffer, Trades,
-        Notation (1:1 RRR), Notation (1:2 RRR), Notation (1:3 RRR)
-    """
-    measured = df[df['Date'] >= start_date]
-
-    returned_filters = [
-        ('Returned', lambda df: df[df['Returned'] == True]),  # noqa: E712
-        ('Not Returned', lambda df: df[df['Returned'] != True]),  # noqa: E712
-    ]
-    base_filters = [
-        ('1H Aligned', lambda df: df[df['Direction'] == df['1H']]),
-        ('1H Against', lambda df: df[df['Direction'] != df['1H']]),
-        ('All Trades', lambda df: df),
-    ]
-
-    results = []
-    for base_name, base_filter in base_filters:
-        for returned_name, returned_filter in returned_filters:
-            trades = returned_filter(base_filter(measured))
-            total = len(trades)
-            for buffer in BUFFER_PIPS:
-                effective_sl = trades['SL'] + buffer
-                row = {
-                    'Strategy': f"{base_name} + {returned_name}",
-                    'Buffer': f"+{buffer}",
-                    'Trades': total,
-                }
-                for rrr in RETURN_RRR_RATIOS:
-                    wins = int((
-                        (trades['Pullback'] < effective_sl) &
-                        (trades['TP'] >= rrr * effective_sl)
-                    ).sum())
-                    row[f'Notation (1:{rrr} RRR)'] = _format_wl(wins, total - wins, total)
-                results.append(row)
-
-    return pd.DataFrame(results)
-
-
-def display_analysis_return(start_date: str, df: pd.DataFrame):
-    """
-    Display win/loss statistics at 1:1, 1:2 and 1:3 RRR for trades that
-    returned to the entry level (Returned = TRUE) versus those that did not,
-    combined with 1H alignment strategies and scored across +0/+1/+2/+3 pip
-    SL buffers. Each notation column header is click-to-sort by win rate,
-    descending.
-
-    Args:
-        start_date: First date (YYYY-MM-DD) with Returned data
-        df: DataFrame with trading data
-    """
-    from IPython.display import display, HTML
-
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Return Analysis</h2>"
-    display(HTML(title_html))
-
-    stats_df = calculate_return_statistics(df, start_date)
-    html_table = _create_sl_sortable_table(stats_df, "return-analysis")
     display(HTML(html_table))
 
 
