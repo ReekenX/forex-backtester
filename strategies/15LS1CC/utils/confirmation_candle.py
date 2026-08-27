@@ -911,6 +911,11 @@ def display_weekday(df: pd.DataFrame):
     display(HTML(html_table))
 
 
+WIN_RULE_SUBTITLE = (
+    "<p style='color: #a0a0a0; background-color: #1e1e1e; padding: 0 10px 10px; margin: 0;'>Win = Pullback &lt; SL + buffer AND TP &gt;= RRR x (SL + buffer). Same rule as the Strategies table, so win rates are comparable.</p>"
+)
+
+
 SL_RANGES = [
     (f"0-{x}", 0, x) for x in range(1, 11)
 ] + [
@@ -922,22 +927,25 @@ SL_RANGES = [
 ]
 
 
+SL_STATISTICS_RRR_RATIOS = [1, 2, 3, 4]
+
+
 def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate win/loss statistics for SL pip ranges.
 
-    Win (Notation): TP > 0.
-    Win (Notation 1:2 RRR): TP >= 2 * SL.
-    Win (Notation 1:3 RRR): TP >= 3 * SL.
-    Win (Notation 1:4 RRR): TP >= 4 * SL.
-    The Pullback < SL condition is intentionally not checked in any column.
+    A trade wins at 1:N RRR only if it BOTH survives its stop and reaches the
+    target: Pullback < SL AND TP >= N * SL. Skipping the survival check would
+    score trades that were stopped out before running to target as wins - the
+    data marks those with a negative R - and inflate every win rate. This
+    matches _calculate_stats and calculate_sl_buffer_impact_statistics.
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: SL Range, Trades, Notation,
-        Notation (1:2 RRR), Notation (1:3 RRR), Notation (1:4 RRR)
+        DataFrame with columns: SL Range, Trades, and one
+        "Notation (1:N RRR)" column per ratio in SL_STATISTICS_RRR_RATIOS
     """
     results = []
 
@@ -945,30 +953,18 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
         range_trades = df[(df['SL'] >= low) & (df['SL'] < high)]
         total = len(range_trades)
 
-        if total == 0:
-            results.append({
-                'SL Range': label,
-                'Trades': 0,
-                'Notation': _format_wl(0, 0, 0),
-                'Notation (1:2 RRR)': _format_wl(0, 0, 0),
-                'Notation (1:3 RRR)': _format_wl(0, 0, 0),
-                'Notation (1:4 RRR)': _format_wl(0, 0, 0),
-            })
-            continue
+        row = {'SL Range': label, 'Trades': total}
+        for rrr in SL_STATISTICS_RRR_RATIOS:
+            if total == 0:
+                row[f'Notation (1:{rrr} RRR)'] = _format_wl(0, 0, 0)
+                continue
+            wins = len(range_trades[
+                (range_trades['Pullback'] < range_trades['SL'])
+                & (range_trades['TP'] >= rrr * range_trades['SL'])
+            ])
+            row[f'Notation (1:{rrr} RRR)'] = _format_wl(wins, total - wins, total)
 
-        wins = len(range_trades[range_trades['TP'] > 0])
-        wins_2r = len(range_trades[range_trades['TP'] >= 2 * range_trades['SL']])
-        wins_3r = len(range_trades[range_trades['TP'] >= 3 * range_trades['SL']])
-        wins_4r = len(range_trades[range_trades['TP'] >= 4 * range_trades['SL']])
-
-        results.append({
-            'SL Range': label,
-            'Trades': total,
-            'Notation': _format_wl(wins, total - wins, total),
-            'Notation (1:2 RRR)': _format_wl(wins_2r, total - wins_2r, total),
-            'Notation (1:3 RRR)': _format_wl(wins_3r, total - wins_3r, total),
-            'Notation (1:4 RRR)': _format_wl(wins_4r, total - wins_4r, total),
-        })
+        results.append(row)
 
     return pd.DataFrame(results)
 
@@ -1090,8 +1086,8 @@ def display_analysis_sl(df: pd.DataFrame):
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>SL Range Statistics</h2>"
-    display(HTML(title_html))
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px 10px 0;'>SL Range Statistics</h2>"
+    display(HTML(title_html + WIN_RULE_SUBTITLE))
 
     stats_df = calculate_sl_statistics(df)
     html_table = _create_sl_sortable_table(stats_df, "sl-range-stats")
@@ -1195,15 +1191,17 @@ def calculate_sl_vs_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Compare 1:1 RRR levers: each alone, then the SL floors combined with a buffer.
 
-    * Limiting SL ("0-X SL" caps and "X-10 SL" floors): take only trades whose
-      SL is inside the range, with no buffer. Win: TP >= SL.
-    * Adding buffer ("N pip buffer"): take every trade, padding the stop by
-      N pips. Win: TP >= SL + N.
-    * Combined ("X-10 SL and N pip buffer"): take only floored-SL trades AND
-      pad the stop by N pips. Win: TP >= SL + N.
+    Every hypothesis scores a win the same way: the trade must BOTH survive its
+    (possibly padded) stop and reach the target, i.e.
+        Pullback < SL + buffer   AND   TP >= SL + buffer
+    so the numbers are directly comparable with the Strategies table.
 
-    The Pullback < SL condition is intentionally not checked (matching the
-    other SL tables).
+    * Limiting SL ("0-X SL" caps and "X-10 SL" floors): take only trades whose
+      SL is inside the range, with no buffer.
+    * Adding buffer ("N pip buffer"): take every trade, padding the stop by
+      N pips.
+    * Combined ("X-10 SL and N pip buffer"): take only floored-SL trades AND
+      pad the stop by N pips.
 
     Args:
         df: DataFrame with trading data
@@ -1211,39 +1209,47 @@ def calculate_sl_vs_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with columns: Hypothesis, Trades, Notation
     """
+    def _wins(trades: pd.DataFrame, buffer: float) -> int:
+        """Trades that survive SL + buffer and reach it as a 1:1 target."""
+        if trades.empty:
+            return 0
+        effective_sl = trades['SL'] + buffer
+        return len(trades[
+            (trades['Pullback'] < effective_sl) & (trades['TP'] >= effective_sl)
+        ])
+
     results = []
 
-    # Limiting SL: cumulative 0-X caps then X-10 floors (no buffer),
-    # 1:1 win = TP >= SL.
+    # Limiting SL: cumulative 0-X caps then X-10 floors (no buffer).
     for label, low, high in SL_RANGES:
         range_trades = df[(df['SL'] >= low) & (df['SL'] < high)]
         total = len(range_trades)
-        wins = len(range_trades[range_trades['TP'] >= range_trades['SL']]) if total else 0
+        wins = _wins(range_trades, 0.0)
         results.append({
             'Hypothesis': f'{label} SL',
             'Trades': total,
             'Notation': _format_wl(wins, total - wins, total),
         })
 
-    # Adding buffer: every trade (no SL cap), 1:1 win = TP >= SL + buffer.
+    # Adding buffer: every trade (no SL cap).
     all_trades = df[df['SL'].notna()]
     total = len(all_trades)
     for col, buffer in SL_BUFFER_COLS:
-        wins = len(all_trades[all_trades['TP'] >= all_trades['SL'] + buffer]) if total else 0
+        wins = _wins(all_trades, buffer)
         results.append({
             'Hypothesis': f'{col} buffer',
             'Trades': total,
             'Notation': _format_wl(wins, total - wins, total),
         })
 
-    # Combined: SL floor AND buffer, 1:1 win = TP >= SL + buffer.
+    # Combined: SL floor AND buffer.
     for label, low, high in SL_RANGES:
         if low == 0:  # only the X-10 floors
             continue
         range_trades = df[(df['SL'] >= low) & (df['SL'] < high)]
         total = len(range_trades)
         for col, buffer in SL_BUFFER_COLS:
-            wins = len(range_trades[range_trades['TP'] >= range_trades['SL'] + buffer]) if total else 0
+            wins = _wins(range_trades, buffer)
             results.append({
                 'Hypothesis': f'{label} SL and {col} buffer',
                 'Trades': total,
@@ -1265,8 +1271,8 @@ def display_analysis_sl_vs_buffer(df: pd.DataFrame):
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Limiting SL vs Adding Buffer (1:1 RRR)</h2>"
-    display(HTML(title_html))
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px 10px 0;'>Limiting SL vs Adding Buffer (1:1 RRR)</h2>"
+    display(HTML(title_html + WIN_RULE_SUBTITLE))
 
     stats_df = calculate_sl_vs_buffer_statistics(df)
     html_table = _create_sl_sortable_table(stats_df, "sl-vs-buffer")
