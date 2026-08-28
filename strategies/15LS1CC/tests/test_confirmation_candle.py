@@ -1315,16 +1315,23 @@ def test_sl_sortable_table_can_be_turned_off():
 
 
 def test_sl_sortable_table_still_sorts_combined_notation_columns():
-    """Tables that keep the "12W - 3L (80.0%)" form stay sortable too."""
-    sample = get_sample_data()
-    stats = calculate_pullback_statistics(sample)
-    html = _create_sl_sortable_table(stats, "pullback-analysis")
+    """The win-rate detector accepts a bare "80.0%" and a wrapped
+    "12W - 3L (80.0%)" alike. No table ships the wrapped form today, so this
+    guards the regex against a future one that does."""
+    stats = pd.DataFrame({
+        'Label': ['a', 'b'],
+        'Trades': [10, 10],
+        'Wrapped': ['8W - 2L (80.0%)', '5W - 5L (50.0%)'],
+        'Bare': ['80.0%', '50.0%'],
+        'Plain': ['8W - 2L', '5W - 5L'],
+    })
+    html = _create_sl_sortable_table(stats, "combined")
 
     for idx, col in enumerate(stats.columns):
-        if col in ("Pullback", "Trades"):
-            assert f"sortSlRange('pullback-analysis', {idx}, this)" not in html
+        if col in ('Wrapped', 'Bare'):
+            assert f"sortSlRange('combined', {idx}, this)" in html
         else:
-            assert f"sortSlRange('pullback-analysis', {idx}, this)" in html
+            assert f"sortSlRange('combined', {idx}, this)" not in html
 
 
 def test_sl_sortable_table_uses_given_id():
@@ -1811,20 +1818,19 @@ def test_pullback_entry_pips_constant():
 
 
 def test_pullback_statistics_columns():
-    """Test that Pullback statistics has expected columns."""
+    """Same column shape as the other stop tables."""
     sample = get_sample_data()
     result = calculate_pullback_statistics(sample)
-    assert list(result.columns) == [
-        'Pullback', 'Trades', 'Notation', '+1 pip', '+2 pips', '+3 pips',
-    ]
+    assert list(result.columns) == ['Pullback', 'Trades', 'Notation', 'Win Rate']
 
 
 def test_pullback_statistics_levels_present():
-    """All fixed and SL-relative pullback entry levels appear in results."""
+    """All fixed and SL-relative pullback entry levels appear, Default first."""
     sample = get_sample_data()
     result = calculate_pullback_statistics(sample)
     assert len(result) == 6
-    assert list(result['Pullback']) == ['0 pips', '1 pip', '2 pips', '3 pips', 'Half', 'Full']
+    assert list(result['Pullback']) == [
+        'Default', '1 pip', '2 pips', '3 pips', 'Half', 'Full']
 
 
 def test_pullback_statistics_values():
@@ -1832,62 +1838,59 @@ def test_pullback_statistics_values():
     3.5/3.5/0, 1.1/0.8/12, 2.0/2.1/0, 4.0/1.5/10, 3.0/3.0/0, 5.0/2.0/8,
     2.5/2.5/0, 6.0/3.0/15, 8.0/7.0/10, 1.5/0.5/5.
 
-    1:1 winners at buffer 0 (PB < SL AND TP >= SL): idx 1,3,5,7,8,9 = 6;
-    their pullbacks are 0.8, 1.5, 2.0, 3.0, 7.0, 0.5. The same 6 win at
-    +1 and +2; at +3 the SL 8 trade fails (TP 10 < 11) leaving 5.
+    1:1 winners (PB < SL AND TP >= SL): idx 1,3,5,7,8,9 = 6; their pullbacks
+    are 0.8, 1.5, 2.0, 3.0, 7.0, 0.5.
 
-    PB 0: all 10 entered, nothing missed.
-    PB 1: 8 entered; winners with PB < 1 (0.8, 0.5) are missed.
-    PB 2: 7 entered; missed winners: 0.8, 1.5, 0.5.
-    PB 3: 4 entered; missed winners: 0.8, 1.5, 2.0, 0.5.
+    Default: all 10 entered, nothing missed.
+    1 pip: 8 entered; winners with PB < 1 (0.8, 0.5) are missed.
+    2 pips: 7 entered; missed winners: 0.8, 1.5, 0.5.
+    3 pips: 4 entered; missed winners: 0.8, 1.5, 2.0, 0.5.
     """
     sample = get_sample_data()
     rows = _pullback_rows(calculate_pullback_statistics(sample))
 
-    assert rows['0 pips']['Trades'] == 10
-    assert rows['0 pips']['Notation'] == '6W – 4L – 0M (60.0%)'
-    assert rows['0 pips']['+3 pips'] == '5W – 5L – 0M (50.0%)'
+    assert rows['Default']['Trades'] == 10
+    assert rows['Default']['Notation'] == '6W - 4L - 0M'
+    assert rows['Default']['Win Rate'] == '60.0%'
 
     assert rows['1 pip']['Trades'] == 8
-    assert rows['1 pip']['Notation'] == '4W – 4L – 2M (50.0%)'
-    assert rows['1 pip']['+3 pips'] == '3W – 5L – 2M (37.5%)'
+    assert rows['1 pip']['Notation'] == '4W - 4L - 2M'
+    assert rows['1 pip']['Win Rate'] == '50.0%'
 
     assert rows['2 pips']['Trades'] == 7
-    assert rows['2 pips']['Notation'] == '3W – 4L – 3M (42.9%)'
-    assert rows['2 pips']['+3 pips'] == '2W – 5L – 3M (28.6%)'
+    assert rows['2 pips']['Notation'] == '3W - 4L - 3M'
+    assert rows['2 pips']['Win Rate'] == '42.9%'
 
     assert rows['3 pips']['Trades'] == 4
-    assert rows['3 pips']['Notation'] == '2W – 2L – 4M (50.0%)'
-    assert rows['3 pips']['+3 pips'] == '1W – 3L – 4M (25.0%)'
+    assert rows['3 pips']['Notation'] == '2W - 2L - 4M'
+    assert rows['3 pips']['Win Rate'] == '50.0%'
 
 
 def test_pullback_statistics_half_and_full_values():
     """Half fills when Pullback >= SL/2; Full when Pullback >= SL.
 
-    Half entered: PB >= SL/2 at idx 0,1,2,4,6,7,8 -> 7 trades; buffer-0
-    winners among them are 1.1/0.8/12, 6.0/3.0/15, 8.0/7.0/10 -> 3W, 4L,
-    missed winners 4.0/1.5/10, 5.0/2.0/8, 1.5/0.5/5 -> 3M. At +3 the SL 8
-    trade fails its higher target -> 2W.
+    Half entered: PB >= SL/2 at idx 0,1,2,4,6,7,8 -> 7 trades; winners among
+    them are 1.1/0.8/12, 6.0/3.0/15, 8.0/7.0/10 -> 3W, 4L, missed winners
+    4.0/1.5/10, 5.0/2.0/8, 1.5/0.5/5 -> 3M.
 
-    Full entered: PB >= SL at idx 0,2,4,6 -> 4 trades, all TP=0, so they
-    lose at every buffer; every winner pulled back less than its SL -> 6M
-    (5M at +3 where the SL 8 trade is no longer a winner).
+    Full entered: PB >= SL at idx 0,2,4,6 -> 4 trades, all TP=0, so they lose;
+    every winner pulled back less than its SL -> 6M.
     """
     sample = get_sample_data()
     rows = _pullback_rows(calculate_pullback_statistics(sample))
 
     assert rows['Half']['Trades'] == 7
-    assert rows['Half']['Notation'] == '3W – 4L – 3M (42.9%)'
-    assert rows['Half']['+3 pips'] == '2W – 5L – 3M (28.6%)'
+    assert rows['Half']['Notation'] == '3W - 4L - 3M'
+    assert rows['Half']['Win Rate'] == '42.9%'
 
     assert rows['Full']['Trades'] == 4
-    assert rows['Full']['Notation'] == '0W – 4L – 6M (0.0%)'
-    assert rows['Full']['+3 pips'] == '0W – 4L – 5M (0.0%)'
+    assert rows['Full']['Notation'] == '0W - 4L - 6M'
+    assert rows['Full']['Win Rate'] == '0.0%'
 
 
-def test_pullback_statistics_full_survives_with_buffer():
-    """A Full-pullback trade (SL 3.0, Pullback 4.1, TP 10) is stopped at the
-    safe stop but survives and wins once a 2-pip buffer widens the stop."""
+def test_pullback_statistics_full_entry_is_always_a_loss():
+    """A Full-pullback fill means the pullback reached the stop, so the trade
+    was stopped out - it can never be a winner at this level."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
         'Weekday': ['Monday'],
@@ -1896,32 +1899,33 @@ def test_pullback_statistics_full_survives_with_buffer():
         'SL': [3.0],
         'Pullback': [4.1],
         'TP': [10.0],
-        'R': [0],
+        'R': [-3.0],
     })
 
     rows = _pullback_rows(calculate_pullback_statistics(trades))
 
     assert rows['Full']['Trades'] == 1
-    assert rows['Full']['Notation'] == '0W – 1L – 0M (0.0%)'
-    # +1 pip: effective SL 4.0, the 4.1 pullback still hits the stop.
-    assert rows['Full']['+1 pip'] == '0W – 1L – 0M (0.0%)'
-    # +2 pips: effective SL 5.0 survives the pullback, TP 10 >= 5.
-    assert rows['Full']['+2 pips'] == '1W – 0L – 0M (100.0%)'
+    assert rows['Full']['Notation'] == '0W - 1L - 0M'
+    assert rows['Full']['Win Rate'] == '0.0%'
 
 
-def test_pullback_statistics_buffer_grows_target():
-    """A buffer widens the stop but also raises the 1:1 target: the SL 8 trade
-    (8.0/7.0/10) wins up to +2 pips (TP 10 >= 10) but loses at +3 (TP 10 < 11)."""
+def test_pullback_statistics_deeper_entry_misses_more_winners():
+    """Every step deeper into the pullback fills fewer trades and strands more
+    winners as missed."""
     sample = get_sample_data()
     rows = _pullback_rows(calculate_pullback_statistics(sample))
 
-    assert rows['0 pips']['+2 pips'] == '6W – 4L – 0M (60.0%)'
-    assert rows['0 pips']['+3 pips'] == '5W – 5L – 0M (50.0%)'
+    trades = [rows[k]['Trades'] for k in ['Default', '1 pip', '2 pips', '3 pips']]
+    assert trades == sorted(trades, reverse=True)
+
+    missed = [int(rows[k]['Notation'].split('- ')[-1].rstrip('M'))
+              for k in ['Default', '1 pip', '2 pips', '3 pips']]
+    assert missed == sorted(missed)
 
 
 def test_pullback_statistics_stopped_trade_is_loss_not_win():
-    """A trade that reaches TP but pulls back past its SL is a filled LOSS at
-    buffer 0, but a buffer wide enough to survive the pullback makes it a win."""
+    """A trade that reaches TP but pulls back past its SL is a filled LOSS,
+    never a win, however deep the entry."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
         'Weekday': ['Monday'],
@@ -1930,22 +1934,19 @@ def test_pullback_statistics_stopped_trade_is_loss_not_win():
         'SL': [2.0],
         'Pullback': [3.0],  # >= SL -> stopped out at the safe stop
         'TP': [10.0],       # reached target only in hindsight
-        'R': [0],
+        'R': [-5.0],
     })
 
     rows = _pullback_rows(calculate_pullback_statistics(trades))
 
     assert rows['1 pip']['Trades'] == 1
-    assert rows['1 pip']['Notation'] == '0W – 1L – 0M (0.0%)'
-    # +1 pip: effective SL 3.0, Pullback 3.0 still hits the stop.
-    assert rows['1 pip']['+1 pip'] == '0W – 1L – 0M (0.0%)'
-    # +2 pips: effective SL 4.0 survives the 3-pip pullback, TP 10 >= 4.
-    assert rows['1 pip']['+2 pips'] == '1W – 0L – 0M (100.0%)'
+    assert rows['1 pip']['Notation'] == '0W - 1L - 0M'
+    assert rows['1 pip']['Win Rate'] == '0.0%'
 
 
 def test_pullback_statistics_missed_winner():
     """A real winner whose pullback is too shallow to fill the limit is a
-    missed winner (M), not entered (Trades excludes it)."""
+    missed winner (M), not entered (Trades and Win Rate exclude it)."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
         'Weekday': ['Monday'],
@@ -1959,28 +1960,26 @@ def test_pullback_statistics_missed_winner():
 
     rows = _pullback_rows(calculate_pullback_statistics(trades))
 
-    # At 0 pips the trade is simply taken and wins.
-    assert rows['0 pips']['Trades'] == 1
-    assert rows['0 pips']['Notation'] == '1W – 0L – 0M (100.0%)'
+    assert rows['Default']['Trades'] == 1
+    assert rows['Default']['Notation'] == '1W - 0L - 0M'
+    assert rows['Default']['Win Rate'] == '100.0%'
     assert rows['1 pip']['Trades'] == 0
-    assert rows['1 pip']['Notation'] == '0W – 0L – 1M (0.0%)'
+    assert rows['1 pip']['Notation'] == '0W - 0L - 1M'
+    assert rows['1 pip']['Win Rate'] == '0.0%'
 
 
 def test_pullback_statistics_sortable_columns():
-    """Notation and the +1/+2/+3 pip columns are click-to-sort DESC by win
-    rate; Pullback and Trades headers stay plain."""
+    """Win Rate is the one click-to-sort column now; the rest stay plain."""
     sample = get_sample_data()
     stats = calculate_pullback_statistics(sample)
     html = _create_sl_sortable_table(stats, "pullback-analysis")
 
-    columns = list(stats.columns)
-    for col in ['Notation', '+1 pip', '+2 pips', '+3 pips']:
-        idx = columns.index(col)
-        assert f"sortSlRange('pullback-analysis', {idx}, this)" in html
-        assert f"{col} ↓" in html
-    assert ">Pullback</th>" in html
-    assert ">Trades</th>" in html
-    assert "return pct(b) - pct(a);" in html
+    for idx, col in enumerate(stats.columns):
+        if col == 'Win Rate':
+            assert f"sortSlRange('pullback-analysis', {idx}, this)" in html
+        else:
+            assert f"sortSlRange('pullback-analysis', {idx}, this)" not in html
+            assert f">{col}</th>" in html
 
 
 def test_pullback_statistics_empty():
@@ -1990,8 +1989,8 @@ def test_pullback_statistics_empty():
     assert len(result) == 6
     for _, row in result.iterrows():
         assert row['Trades'] == 0
-        assert row['Notation'] == '0W – 0L – 0M (0.0%)'
-        assert row['Notation'] == '0W – 0L – 0M (0.0%)'
+        assert row['Notation'] == '0W - 0L - 0M'
+        assert row['Win Rate'] == '0.0%'
 
 
 def test_tp_ranges_constant():
@@ -2216,8 +2215,8 @@ def run_all_tests():
         test_pullback_statistics_levels_present,
         test_pullback_statistics_values,
         test_pullback_statistics_half_and_full_values,
-        test_pullback_statistics_full_survives_with_buffer,
-        test_pullback_statistics_buffer_grows_target,
+        test_pullback_statistics_full_entry_is_always_a_loss,
+        test_pullback_statistics_deeper_entry_misses_more_winners,
         test_pullback_statistics_stopped_trade_is_loss_not_win,
         test_pullback_statistics_missed_winner,
         test_pullback_statistics_sortable_columns,

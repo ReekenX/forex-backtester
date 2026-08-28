@@ -1348,19 +1348,17 @@ def display_analysis_sl_fixed(df: pd.DataFrame):
 
 
 PULLBACK_ENTRY_PIPS = [0, 1, 2, 3]
-PULLBACK_BUFFER_COLS = [("Notation", 0), ("+1 pip", 1), ("+2 pips", 2), ("+3 pips", 3)]
 
 
 def _format_wlm(wins: int, losses: int, missed: int) -> str:
-    """
-    Format winners/losers/missed-winners into '1W – 2L – 3M (50.0%)'.
+    """Format winners/losers/missed-winners into '1W - 2L - 3M'."""
+    return f"{wins}W - {losses}L - {missed}M"
 
-    Win rate is over ENTERED trades only (W / (W + L)); missed winners never
-    filled so they are excluded from the rate.
-    """
+
+def _entered_win_rate(wins: int, losses: int) -> str:
+    """Win rate over ENTERED trades only; missed winners never filled."""
     entered = wins + losses
-    win_rate = (wins / entered * 100) if entered > 0 else 0.0
-    return f"{wins}W – {losses}L – {missed}M ({win_rate:.1f}%)"
+    return f"{(wins / entered * 100) if entered > 0 else 0.0:.1f}%"
 
 
 def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
@@ -1368,50 +1366,52 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
     Calculate limit-order pullback-entry statistics at 1:1 RRR across all trades.
 
     A limit order placed N pips into the pullback fills only if price pulled
-    back at least N pips (Pullback >= N). The 0-pip level means every trade is
-    taken at the signal (no limit order, nothing missed). Two extra levels
-    scale the fill threshold to each trade's own stop: "Half" fills when the
-    pullback reached at least half the SL, "Full" when it reached the SL itself
-    (such a trade only survives if a buffer widens the stop past the pullback).
+    back at least N pips (Pullback >= N). Two extra levels scale the fill
+    threshold to each trade's own stop: "Half" fills when the pullback reached
+    at least half the SL, "Full" when it reached the SL itself.
 
-    Each notation column re-scores the same entered trades with an SL buffer
-    (effective SL = SL + buffer, same semantics as the buffer strategies):
-        winner = Pullback < effective SL AND TP >= effective SL   (1:1 RRR)
+    The first row, "Default", is the 0-pip level: no limit order, every trade
+    taken at the signal, so nothing is missed. It matches the Default row of
+    the other stop tables.
+
+    A trade wins at 1:1 when it survives its stop and reaches the target:
+        winner = Pullback < SL AND TP >= SL
         W = entered winners; L = entered - W; M = missed winners (winners whose
         pullback never reached the fill threshold, so the limit never filled)
-    "Notation" is buffer 0; "+1 pip" / "+2 pips" / "+3 pips" add that buffer.
 
-    Missed winners are excluded from Trades because those trades were never entered.
+    Missed winners are excluded from Trades because those trades were never
+    entered, and from Win Rate for the same reason.
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: Pullback, Trades, Notation, +1 pip, +2 pips, +3 pips
+        DataFrame with columns: Pullback, Trades, Notation, Win Rate
     """
     results = []
 
     levels = [
-        (f"{n} pip" if n == 1 else f"{n} pips", df['Pullback'] >= n)
+        ('Default' if n == 0 else (f"{n} pip" if n == 1 else f"{n} pips"),
+         df['Pullback'] >= n)
         for n in PULLBACK_ENTRY_PIPS
     ]
     levels.append(('Half', df['Pullback'] >= df['SL'] / 2))
     levels.append(('Full', df['Pullback'] >= df['SL']))
 
+    winner = (df['Pullback'] < df['SL']) & (df['TP'] >= df['SL'])
+
     for label, entered in levels:
         entered_total = int(entered.sum())
-        row = {
+        wins = int((entered & winner).sum())
+        losses = entered_total - wins
+        missed = int((~entered & winner).sum())
+
+        results.append({
             'Pullback': label,
             'Trades': entered_total,
-        }
-        for col, buffer in PULLBACK_BUFFER_COLS:
-            effective_sl = df['SL'] + buffer
-            winner = (df['Pullback'] < effective_sl) & (df['TP'] >= effective_sl)
-            wins = int((entered & winner).sum())
-            losses = entered_total - wins
-            missed = int((~entered & winner).sum())
-            row[col] = _format_wlm(wins, losses, missed)
-        results.append(row)
+            'Notation': _format_wlm(wins, losses, missed),
+            'Win Rate': _entered_win_rate(wins, losses),
+        })
 
     return pd.DataFrame(results)
 
