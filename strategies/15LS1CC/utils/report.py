@@ -127,7 +127,7 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "weekday",
         "Weekday",
         "Weekday Statistics",
-        "Win rate per day of week, with and without a 2 pip stop buffer.",
+        "Win = Pullback &lt; SL AND TP &gt; 0, i.e. the trade survived its stop and finished profitable at any distance.",
         _weekday_section,
     ),
     (

@@ -983,7 +983,7 @@ def test_weekday_statistics_columns():
     """Test that weekday statistics has expected columns."""
     sample = get_sample_data()
     result = calculate_weekday_statistics(sample)
-    assert list(result.columns) == ['Day', 'Trades', 'Regular', 'With 2 pips buffer']
+    assert list(result.columns) == ['Day', 'Trades', 'Notation', 'Win Rate']
 
 
 def test_weekday_statistics_all_days_present():
@@ -1007,10 +1007,9 @@ def test_weekday_statistics_trade_counts():
     assert counts['Friday'] == 1
 
 
-def test_weekday_statistics_regular():
-    """Test Regular column from sample data.
+def test_weekday_statistics_notation_and_win_rate():
+    """Win condition: Pullback < SL AND TP > 0.
 
-    Win condition: Pullback < SL AND TP > 0.
     Monday: #1 PB=3.5 SL=3.5 TP=0 => L, #2 PB=0.8 SL=1.1 TP=12 => W, #3 PB=2.1 SL=2.0 TP=0 => L
     Tuesday: #1 PB=1.5 SL=4.0 TP=10 => W, #2 PB=3.0 SL=3.0 TP=0 => L
     Thursday: #1 PB=3.0 SL=6.0 TP=15 => W, #2 PB=7.0 SL=8.0 TP=10 => W
@@ -1020,39 +1019,18 @@ def test_weekday_statistics_regular():
     result = calculate_weekday_statistics(sample)
     rows = {row['Day']: row for _, row in result.iterrows()}
 
-    assert rows['Monday']['Regular'] == '1W - 2L (33.3%)'
-    assert rows['Tuesday']['Regular'] == '1W - 1L (50.0%)'
-    assert rows['Thursday']['Regular'] == '2W - 0L (100.0%)'
-    assert rows['Friday']['Regular'] == '1W - 0L (100.0%)'
+    assert rows['Monday']['Notation'] == '1W - 2L'
+    assert rows['Monday']['Win Rate'] == '33.3%'
+    assert rows['Tuesday']['Notation'] == '1W - 1L'
+    assert rows['Tuesday']['Win Rate'] == '50.0%'
+    assert rows['Thursday']['Notation'] == '2W - 0L'
+    assert rows['Thursday']['Win Rate'] == '100.0%'
+    assert rows['Friday']['Notation'] == '1W - 0L'
+    assert rows['Friday']['Win Rate'] == '100.0%'
 
 
-def test_weekday_statistics_buffer():
-    """Test With 2 pips buffer column from sample data.
-
-    Buffer win: Pullback < SL + 2 AND TP > 0.
-    Monday: #1 PB=3.5 SL=3.5 TP=0 => L (TP=0), #2 PB=0.8 SL=1.1 TP=12 => W (0.8<3.1),
-            #3 PB=2.1 SL=2.0 TP=0 => L (TP=0)
-    Tuesday: #1 PB=1.5 SL=4.0 TP=10 => W, #2 PB=3.0 SL=3.0 TP=0 => L (TP=0)
-    Wednesday: #1 PB=2.0 SL=5.0 TP=8 => W, #2 PB=2.5 SL=2.5 TP=0 => L (TP=0)
-    Thursday: #1 PB=3.0 SL=6.0 TP=15 => W, #2 PB=7.0 SL=8.0 TP=10 => W
-    Friday: #1 PB=0.5 SL=1.5 TP=5 => W
-    """
-    sample = get_sample_data()
-    result = calculate_weekday_statistics(sample)
-    rows = {row['Day']: row for _, row in result.iterrows()}
-
-    # Monday: same as regular since losses are due to TP=0, not pullback
-    assert rows['Monday']['With 2 pips buffer'] == '1W - 2L (33.3%)'
-    assert rows['Thursday']['With 2 pips buffer'] == '2W - 0L (100.0%)'
-
-
-def test_weekday_statistics_buffer_saves_trade():
-    """Test that buffer can save a trade that would otherwise lose.
-
-    SL=3.0, Pullback=4.0, TP=10.0.
-    Regular: PB(4) >= SL(3) => L.
-    Buffer: PB(4) < SL+2(5) AND TP(10) > 0 => W.
-    """
+def test_weekday_statistics_stopped_out_is_a_loss():
+    """A trade whose Pullback reaches its SL is a loss regardless of TP."""
     trades = pd.DataFrame({
         'Date': ['2026-01-12'],
         'Weekday': ['Monday'],
@@ -1061,14 +1039,30 @@ def test_weekday_statistics_buffer_saves_trade():
         'SL': [3.0],
         'Pullback': [4.0],
         'TP': [10.0],
+        'R': [-3.0],
+    })
+
+    rows = {r['Day']: r for _, r in calculate_weekday_statistics(trades).iterrows()}
+    assert rows['Monday']['Notation'] == '0W - 1L'
+    assert rows['Monday']['Win Rate'] == '0.0%'
+
+
+def test_weekday_statistics_no_tp_is_a_loss():
+    """A trade that survived its stop but never went profitable is a loss."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-12'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        'Direction': ['Buy'],
+        'SL': [3.0],
+        'Pullback': [1.0],
+        'TP': [0.0],
         'R': [0],
     })
 
-    result = calculate_weekday_statistics(trades)
-    rows = {row['Day']: row for _, row in result.iterrows()}
-
-    assert rows['Monday']['Regular'] == '0W - 1L (0.0%)'
-    assert rows['Monday']['With 2 pips buffer'] == '1W - 0L (100.0%)'
+    rows = {r['Day']: r for _, r in calculate_weekday_statistics(trades).iterrows()}
+    assert rows['Monday']['Notation'] == '0W - 1L'
+    assert rows['Monday']['Win Rate'] == '0.0%'
 
 
 def test_weekday_statistics_empty():
@@ -1078,8 +1072,8 @@ def test_weekday_statistics_empty():
     assert len(result) == 5
     for _, row in result.iterrows():
         assert row['Trades'] == 0
-        assert row['Regular'] == '0W - 0L (0.0%)'
-        assert row['With 2 pips buffer'] == '0W - 0L (0.0%)'
+        assert row['Notation'] == '0W - 0L'
+        assert row['Win Rate'] == '0.0%'
 
 
 def test_weekday_statistics_single_day():
@@ -1099,10 +1093,10 @@ def test_weekday_statistics_single_day():
     rows = {row['Day']: row for _, row in result.iterrows()}
 
     assert rows['Monday']['Trades'] == 2
-    assert rows['Monday']['Regular'] == '1W - 1L (50.0%)'
-    # PB=4 < SL+2=5 => buffer saves it
-    assert rows['Monday']['With 2 pips buffer'] == '2W - 0L (100.0%)'
+    assert rows['Monday']['Notation'] == '1W - 1L'
+    assert rows['Monday']['Win Rate'] == '50.0%'
     assert rows['Tuesday']['Trades'] == 0
+    assert rows['Tuesday']['Notation'] == '0W - 0L'
 
 
 def test_sl_ranges_constant():
@@ -1998,9 +1992,9 @@ def run_all_tests():
         test_weekday_statistics_columns,
         test_weekday_statistics_all_days_present,
         test_weekday_statistics_trade_counts,
-        test_weekday_statistics_regular,
-        test_weekday_statistics_buffer,
-        test_weekday_statistics_buffer_saves_trade,
+        test_weekday_statistics_notation_and_win_rate,
+        test_weekday_statistics_stopped_out_is_a_loss,
+        test_weekday_statistics_no_tp_is_a_loss,
         test_weekday_statistics_empty,
         test_weekday_statistics_single_day,
         test_sl_ranges_constant,
