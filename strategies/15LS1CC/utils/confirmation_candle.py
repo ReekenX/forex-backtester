@@ -916,8 +916,9 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: SL Range, Trades, and one
-        "Notation (1:N RRR)" column per ratio in SL_STATISTICS_RRR_RATIOS
+        DataFrame with columns: SL Range, Trades, and a
+        "Notation (1:N RRR)" / "Win Rate (1:N RRR)" pair per ratio in
+        SL_STATISTICS_RRR_RATIOS
     """
     results = []
 
@@ -927,14 +928,13 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
         row = {'SL Range': label, 'Trades': total}
         for rrr in SL_STATISTICS_RRR_RATIOS:
-            if total == 0:
-                row[f'Notation (1:{rrr} RRR)'] = _format_wl(0, 0, 0)
-                continue
             wins = len(range_trades[
                 (range_trades['Pullback'] < range_trades['SL'])
                 & (range_trades['TP'] >= rrr * range_trades['SL'])
-            ])
-            row[f'Notation (1:{rrr} RRR)'] = _format_wl(wins, total - wins, total)
+            ]) if total else 0
+            win_rate = (wins / total * 100) if total > 0 else 0.0
+            row[f'Notation (1:{rrr} RRR)'] = f"{wins}W - {total - wins}L"
+            row[f'Win Rate (1:{rrr} RRR)'] = f"{win_rate:.1f}%"
 
         results.append(row)
 
@@ -963,7 +963,8 @@ def _create_sl_sortable_table(df: pd.DataFrame, table_id: str) -> str:
         return "<p style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>No data</p>"
 
     columns = list(df.columns)
-    win_rate_re = re.compile(r"\(\d+(?:\.\d+)?%\)")
+    # Matches a bare "48.6%" and a wrapped "18W - 19L (48.6%)" alike.
+    win_rate_re = re.compile(r"\d+(?:\.\d+)?%")
     sortable_cols = {
         col for col in columns
         if any(win_rate_re.search(str(v)) for v in df[col])
@@ -1011,7 +1012,7 @@ def _create_sl_sortable_table(df: pd.DataFrame, table_id: str) -> str:
             var tbody = table.tBodies[0];
             var rows = Array.prototype.slice.call(tbody.rows);
             function pct(row) {
-                var m = row.cells[colIndex].textContent.match(/\\(([\\d.]+)%\\)/);
+                var m = row.cells[colIndex].textContent.match(/([\\d.]+)%/);
                 return m ? parseFloat(m[1]) : -1;
             }
             rows.sort(function(a, b) { return pct(b) - pct(a); });

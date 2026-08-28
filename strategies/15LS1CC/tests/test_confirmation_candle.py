@@ -1108,10 +1108,10 @@ def test_sl_ranges_constant():
 def test_sl_statistics_columns():
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
-    assert list(result.columns) == [
-        'SL Range', 'Trades', 'Notation (1:1 RRR)',
-        'Notation (1:2 RRR)', 'Notation (1:3 RRR)', 'Notation (1:4 RRR)',
-    ]
+    expected = ['SL Range', 'Trades']
+    for rrr in SL_STATISTICS_RRR_RATIOS:
+        expected += [f'Notation (1:{rrr} RRR)', f'Win Rate (1:{rrr} RRR)']
+    assert list(result.columns) == expected
 
 
 def test_sl_statistics_rrr_notation():
@@ -1127,14 +1127,17 @@ def test_sl_statistics_rrr_notation():
     result = calculate_sl_statistics(sample)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-10']['Notation (1:2 RRR)'] == '4W - 6L (40.0%)'
-    assert rows['0-10']['Notation (1:3 RRR)'] == '2W - 8L (20.0%)'
-    assert rows['0-10']['Notation (1:4 RRR)'] == '1W - 9L (10.0%)'
-    # Narrower 0-5 band (SL 3.5,1.1,2.0,4.0,3.0,2.5,1.5) drops the 6.0 winner:
-    # 1:2 wins idx1,3,9 -> 3; 1:3 wins idx1,9 -> 2; 1:4 wins idx1 -> 1.
-    assert rows['0-5']['Notation (1:2 RRR)'] == '3W - 4L (42.9%)'
-    assert rows['0-5']['Notation (1:3 RRR)'] == '2W - 5L (28.6%)'
-    assert rows['0-5']['Notation (1:4 RRR)'] == '1W - 6L (14.3%)'
+    assert rows['0-10']['Notation (1:2 RRR)'] == '4W - 6L'
+    assert rows['0-10']['Win Rate (1:2 RRR)'] == '40.0%'
+    assert rows['0-10']['Notation (1:3 RRR)'] == '2W - 8L'
+    assert rows['0-10']['Win Rate (1:3 RRR)'] == '20.0%'
+    assert rows['0-10']['Notation (1:4 RRR)'] == '1W - 9L'
+    assert rows['0-10']['Win Rate (1:4 RRR)'] == '10.0%'
+    # Narrower 0-5 band (SL 3.5,1.1,2.0,4.0,3.0,2.5,1.5) drops the 6.0 winner.
+    assert rows['0-5']['Notation (1:2 RRR)'] == '3W - 4L'
+    assert rows['0-5']['Win Rate (1:2 RRR)'] == '42.9%'
+    assert rows['0-5']['Notation (1:3 RRR)'] == '2W - 5L'
+    assert rows['0-5']['Notation (1:4 RRR)'] == '1W - 6L'
 
 
 def test_sl_statistics_all_ranges_present():
@@ -1172,11 +1175,14 @@ def test_sl_statistics_notation():
     result = calculate_sl_statistics(sample)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-5']['Notation (1:1 RRR)'] == '3W - 4L (42.9%)'
-    assert rows['0-6']['Notation (1:1 RRR)'] == '4W - 4L (50.0%)'
-    assert rows['0-7']['Notation (1:1 RRR)'] == '5W - 4L (55.6%)'
-    assert rows['0-9']['Notation (1:1 RRR)'] == '6W - 4L (60.0%)'
-    assert rows['0-10']['Notation (1:1 RRR)'] == '6W - 4L (60.0%)'
+    assert rows['0-5']['Notation (1:1 RRR)'] == '3W - 4L'
+    assert rows['0-5']['Win Rate (1:1 RRR)'] == '42.9%'
+    assert rows['0-6']['Notation (1:1 RRR)'] == '4W - 4L'
+    assert rows['0-6']['Win Rate (1:1 RRR)'] == '50.0%'
+    assert rows['0-7']['Notation (1:1 RRR)'] == '5W - 4L'
+    assert rows['0-7']['Win Rate (1:1 RRR)'] == '55.6%'
+    assert rows['0-10']['Notation (1:1 RRR)'] == '6W - 4L'
+    assert rows['0-10']['Win Rate (1:1 RRR)'] == '60.0%'
 
 
 def test_sl_statistics_cumulative_bands():
@@ -1215,7 +1221,8 @@ def test_sl_statistics_requires_surviving_stop():
 
     assert rows['0-5']['Trades'] == 1
     for rrr in SL_STATISTICS_RRR_RATIOS:
-        assert rows['0-5'][f'Notation (1:{rrr} RRR)'] == '0W - 1L (0.0%)'
+        assert rows['0-5'][f'Notation (1:{rrr} RRR)'] == '0W - 1L'
+        assert rows['0-5'][f'Win Rate (1:{rrr} RRR)'] == '0.0%'
 
 
 def test_sl_statistics_survivor_wins():
@@ -1235,7 +1242,8 @@ def test_sl_statistics_survivor_wins():
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
     for rrr in SL_STATISTICS_RRR_RATIOS:
-        assert rows['0-5'][f'Notation (1:{rrr} RRR)'] == '1W - 0L (100.0%)'
+        assert rows['0-5'][f'Notation (1:{rrr} RRR)'] == '1W - 0L'
+        assert rows['0-5'][f'Win Rate (1:{rrr} RRR)'] == '100.0%'
 
 
 def test_sl_statistics_empty():
@@ -1244,10 +1252,9 @@ def test_sl_statistics_empty():
     assert len(result) == len(SL_RANGES)
     for _, row in result.iterrows():
         assert row['Trades'] == 0
-        assert row['Notation (1:1 RRR)'] == '0W - 0L (0.0%)'
-        assert row['Notation (1:2 RRR)'] == '0W - 0L (0.0%)'
-        assert row['Notation (1:3 RRR)'] == '0W - 0L (0.0%)'
-        assert row['Notation (1:4 RRR)'] == '0W - 0L (0.0%)'
+        for rrr in SL_STATISTICS_RRR_RATIOS:
+            assert row[f'Notation (1:{rrr} RRR)'] == '0W - 0L'
+            assert row[f'Win Rate (1:{rrr} RRR)'] == '0.0%'
 
 
 def test_sl_statistics_large_sl():
@@ -1269,7 +1276,7 @@ def test_sl_statistics_large_sl():
 
 
 def test_sl_statistics_no_tp_is_loss():
-    """TP=0 is a loss regardless of Pullback. Trade is in every 0-X with X >= 3."""
+    """TP=0 is a loss regardless of Pullback."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
         'Weekday': ['Monday'],
@@ -1284,26 +1291,38 @@ def test_sl_statistics_no_tp_is_loss():
     result = calculate_sl_statistics(trades)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-5']['Notation (1:1 RRR)'] == '0W - 1L (0.0%)'
-    assert rows['0-10']['Notation (1:1 RRR)'] == '0W - 1L (0.0%)'
+    assert rows['0-5']['Notation (1:1 RRR)'] == '0W - 1L'
+    assert rows['0-5']['Win Rate (1:1 RRR)'] == '0.0%'
+    assert rows['0-10']['Notation (1:1 RRR)'] == '0W - 1L'
 
 
 def test_sl_sortable_table_notation_headers_clickable():
-    """Every win-rate (Notation*) column header is click-to-sort; SL Range and
-    Trades are not."""
+    """Only the win-rate columns are click-to-sort. With Notation and Win Rate
+    split apart, the Notation columns carry no percentage and stay plain."""
     sample = get_sample_data()
     stats = calculate_sl_statistics(sample)
     html = _create_sl_sortable_table(stats, "sl-range-stats")
 
-    notation_cols = [c for c in stats.columns if c.startswith("Notation")]
-    assert len(notation_cols) >= 1
     for idx, col in enumerate(stats.columns):
-        if col.startswith("Notation"):
+        if col.startswith("Win Rate"):
             assert f"sortSlRange('sl-range-stats', {idx}, this)" in html
             assert f"{col} ↓" in html
         else:
-            # SL Range / Trades headers are plain, no onclick.
             assert f">{col}</th>" in html
+            assert f"sortSlRange('sl-range-stats', {idx}, this)" not in html
+
+
+def test_sl_sortable_table_still_sorts_combined_notation_columns():
+    """Tables that keep the "12W - 3L (80.0%)" form stay sortable too."""
+    sample = get_sample_data()
+    stats = calculate_sl_buffer_impact_statistics(sample)
+    html = _create_sl_sortable_table(stats, "buffer-impact")
+
+    for idx, col in enumerate(stats.columns):
+        if col in ("SL Range", "Trades"):
+            assert f"sortSlRange('buffer-impact', {idx}, this)" not in html
+        else:
+            assert f"sortSlRange('buffer-impact', {idx}, this)" in html
 
 
 def test_sl_sortable_table_buffer_impact_columns_clickable():
@@ -1334,8 +1353,8 @@ def test_sl_sortable_table_sorts_descending():
     assert "function sortSlRange" in html
     # DESC: comparator is pct(b) - pct(a).
     assert "return pct(b) - pct(a);" in html
-    # Parses the "(NN.N%)" win rate out of the cell text.
-    assert "%)" in html and "match(" in html
+    # Parses a percentage whether or not it is wrapped in parentheses.
+    assert r"match(/([\d.]+)%/)" in html
 
 
 def test_sl_sortable_table_empty():
@@ -2010,6 +2029,7 @@ def run_all_tests():
         test_sl_statistics_large_sl,
         test_sl_statistics_no_tp_is_loss,
         test_sl_sortable_table_notation_headers_clickable,
+        test_sl_sortable_table_still_sorts_combined_notation_columns,
         test_sl_sortable_table_buffer_impact_columns_clickable,
         test_sl_sortable_table_uses_given_id,
         test_sl_sortable_table_sorts_descending,
