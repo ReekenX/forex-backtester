@@ -1065,16 +1065,62 @@ def display_analysis_sl(df: pd.DataFrame):
 # Pips to shave off the safe stop. 0 means the stop is left as recorded.
 SL_REDUCTION_PIPS = [0, 1, 2, 3, 4]
 
+# Pips to pad the safe stop with. 0 means the stop is left as recorded.
+SL_BUFFER_PIPS = [0, 1, 2, 3, 4, 5]
+
+
+def _pip_label(pips: int) -> str:
+    """Render a pip count for a table cell: '0 pips', '1 pip', '2 pips'."""
+    return f"{pips} pip" if pips == 1 else f"{pips} pips"
+
+
+def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float],
+                         column: str) -> pd.DataFrame:
+    """
+    Score every trade at 1:1 with each stop adjustment applied.
+
+    A negative shift tightens the stop, a positive one pads it:
+        effective SL = SL + shift
+    A trade wins when it survives that stop and reaches a 1:1 target on it:
+        Pullback < effective SL   AND   TP >= effective SL
+
+    Both the reduction and the buffer table go through here so the two can
+    never drift apart on the win rule.
+
+    Args:
+        df: DataFrame with trading data
+        shifts: Pip adjustments to apply to every trade's SL
+        column: Name for the leading column (e.g. 'SL Reduction')
+
+    Returns:
+        DataFrame with columns: <column>, Trades, Notation, Win Rate
+    """
+    total = len(df)
+    results = []
+
+    for shift in shifts:
+        effective_sl = df['SL'] + shift
+        wins = int((
+            (df['Pullback'] < effective_sl) & (df['TP'] >= effective_sl)
+        ).sum()) if total else 0
+        win_rate = (wins / total * 100) if total > 0 else 0.0
+
+        results.append({
+            column: _pip_label(abs(int(shift))),
+            'Trades': total,
+            'Notation': f"{wins}W - {total - wins}L",
+            'Win Rate': f"{win_rate:.1f}%",
+        })
+
+    return pd.DataFrame(results)
+
 
 def calculate_sl_reduction_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate 1:1 win/loss statistics for progressively tighter stops.
 
-    Each row shaves N pips off every trade's safe stop:
-        effective SL = SL - N
-    A trade wins when it survives that tighter stop and still reaches a 1:1
-    target on it:
-        Pullback < effective SL   AND   TP >= effective SL
+    Each row shaves N pips off every trade's safe stop, so a trade wins only if
+    it survives the tighter stop and still reaches a 1:1 target on it.
 
     Example: SL 3.6, Pullback 1.2. At -1 the stop is 2.6 and the trade
     survives; at -3 the stop is 0.6, which the 1.2 pullback takes out, so it
@@ -1092,27 +1138,30 @@ def calculate_sl_reduction_statistics(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with columns: SL Reduction, Trades, Notation, Win Rate
     """
-    total = len(df)
-    results = []
+    return _sl_shift_statistics(
+        df, [-pips for pips in SL_REDUCTION_PIPS], 'SL Reduction')
 
-    for reduction in SL_REDUCTION_PIPS:
-        effective_sl = df['SL'] - reduction
-        wins = int((
-            (df['Pullback'] < effective_sl) & (df['TP'] >= effective_sl)
-        ).sum()) if total else 0
-        win_rate = (wins / total * 100) if total > 0 else 0.0
 
-        label = "0 pips" if reduction == 0 else (
-            "1 pip" if reduction == 1 else f"{reduction} pips")
+def calculate_sl_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate 1:1 win/loss statistics for progressively wider stops.
 
-        results.append({
-            'SL Reduction': label,
-            'Trades': total,
-            'Notation': f"{wins}W - {total - wins}L",
-            'Win Rate': f"{win_rate:.1f}%",
-        })
+    The mirror of calculate_sl_reduction_statistics: each row pads every
+    trade's safe stop by N pips. A wider stop survives deeper pullbacks, but
+    the 1:1 target moves out by the same amount, so a trade whose TP was only
+    just enough can drop out.
 
-    return pd.DataFrame(results)
+    Example: SL 3.0, Pullback 3.5, TP 6. At +0 the 3.5 pullback takes out the
+    stop; at +1 the stop is 4.0 and the trade survives with TP 6 clearing the
+    4.0 target; at +3 the target is 6.0 and it only just still wins.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with columns: SL Buffer, Trades, Notation, Win Rate
+    """
+    return _sl_shift_statistics(df, SL_BUFFER_PIPS, 'SL Buffer')
 
 
 def display_analysis_sl_reduction(df: pd.DataFrame):
@@ -1131,8 +1180,26 @@ def display_analysis_sl_reduction(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_reduction_statistics(df)
-    html_table = _create_sl_sortable_table(stats_df, "sl-reduction-table")
-    display(HTML(html_table))
+    display(HTML(_create_sl_sortable_table(stats_df, "sl-reduction-table")))
+
+
+def display_analysis_sl_buffer(df: pd.DataFrame):
+    """
+    Display 1:1 win/loss statistics as the safe stop is padded.
+
+    The Win Rate column header is click-to-sort, descending.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = ("<h2 style='color: #e0e0e0; background-color: #1e1e1e; "
+                  "padding: 10px;'>Adding Buffer To SL Statistics</h2>")
+    display(HTML(title_html))
+
+    stats_df = calculate_sl_buffer_statistics(df)
+    display(HTML(_create_sl_sortable_table(stats_df, "sl-buffer-table")))
 
 
 PULLBACK_ENTRY_PIPS = [0, 1, 2, 3]
