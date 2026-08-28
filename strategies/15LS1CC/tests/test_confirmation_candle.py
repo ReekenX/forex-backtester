@@ -38,7 +38,6 @@ from utils.confirmation_candle import (
     SL_BUFFER_COLS,
     calculate_sl_statistics,
     _create_sl_sortable_table,
-    calculate_sl_buffer_impact_statistics,
     calculate_sl_vs_buffer_statistics,
     PULLBACK_ENTRY_PIPS,
     calculate_pullback_statistics,
@@ -1295,28 +1294,14 @@ def test_sl_sortable_table_notation_headers_clickable():
 def test_sl_sortable_table_still_sorts_combined_notation_columns():
     """Tables that keep the "12W - 3L (80.0%)" form stay sortable too."""
     sample = get_sample_data()
-    stats = calculate_sl_buffer_impact_statistics(sample)
-    html = _create_sl_sortable_table(stats, "buffer-impact")
+    stats = calculate_pullback_statistics(sample)
+    html = _create_sl_sortable_table(stats, "pullback-analysis")
 
     for idx, col in enumerate(stats.columns):
-        if col in ("SL Range", "Trades"):
-            assert f"sortSlRange('buffer-impact', {idx}, this)" not in html
+        if col in ("Pullback", "Trades"):
+            assert f"sortSlRange('pullback-analysis', {idx}, this)" not in html
         else:
-            assert f"sortSlRange('buffer-impact', {idx}, this)" in html
-
-
-def test_sl_sortable_table_buffer_impact_columns_clickable():
-    """The buffer columns (1 pip, 2 pips, 3 pips) are sortable win-rate columns."""
-    sample = get_sample_data()
-    stats = calculate_sl_buffer_impact_statistics(sample)
-    html = _create_sl_sortable_table(stats, "sl-buffer-impact")
-
-    for idx, col in enumerate(stats.columns):
-        if col in ("Notation", "1 pip", "2 pips", "3 pips"):
-            assert f"sortSlRange('sl-buffer-impact', {idx}, this)" in html
-            assert f"{col} ↓" in html
-        else:  # SL Range, Trades
-            assert f">{col}</th>" in html
+            assert f"sortSlRange('pullback-analysis', {idx}, this)" in html
 
 
 def test_sl_sortable_table_uses_given_id():
@@ -1341,141 +1326,6 @@ def test_sl_sortable_table_empty():
     html = _create_sl_sortable_table(pd.DataFrame(), "sl-range-stats")
     assert "No data" in html
     assert "sortSlRange" not in html
-
-
-def test_sl_buffer_impact_columns():
-    sample = get_sample_data()
-    result = calculate_sl_buffer_impact_statistics(sample)
-    assert list(result.columns) == [
-        'SL Range', 'Trades', 'Notation', '1 pip', '2 pips', '3 pips',
-    ]
-
-
-def test_sl_buffer_impact_all_ranges_present():
-    sample = get_sample_data()
-    result = calculate_sl_buffer_impact_statistics(sample)
-    assert len(result) == len(SL_RANGES)
-    assert list(result['SL Range']) == [f"0-{x}" for x in range(5, 11)]
-
-
-def test_sl_buffer_impact_values():
-    """1:1 win = Pullback < SL+buffer AND TP >= SL+buffer. Sample SL/PB/TP:
-    3.5/3.5/0, 1.1/0.8/12, 2.0/2.1/0, 4.0/1.5/10, 3.0/3.0/0, 5.0/2.0/8,
-    2.5/2.5/0, 6.0/3.0/15, 8.0/7.0/10, 1.5/0.5/5.
-
-    0-10 (all 10) - every TP-reaching trade also survives its pullback here:
-      Notation:  idx 1,3,5,7,8,9 -> 6W
-      1 pip:     same 6 -> 6W
-      2 pips:    same 6 -> 6W
-      3 pips:    idx8 (TP 10 < 11) drops -> 5W
-    """
-    sample = get_sample_data()
-    result = calculate_sl_buffer_impact_statistics(sample)
-    rows = {row['SL Range']: row for _, row in result.iterrows()}
-
-    assert rows['0-10']['Notation'] == '6W - 4L (60.0%)'
-    assert rows['0-10']['1 pip'] == '6W - 4L (60.0%)'
-    assert rows['0-10']['2 pips'] == '6W - 4L (60.0%)'
-    assert rows['0-10']['3 pips'] == '5W - 5L (50.0%)'
-
-
-def test_sl_buffer_impact_requires_surviving_stop():
-    """A trade that reaches the target in hindsight but was stopped out first
-    (Pullback >= SL) is NOT a win until the buffer is wide enough to survive it.
-
-    SL=3, Pullback=5, TP=10 at 1:1:
-      Notation (stop 3):  PB 5 >= 3  -> stopped out -> loss
-      1 pip   (stop 4):   PB 5 >= 4  -> stopped out -> loss
-      2 pips  (stop 5):   PB 5 >= 5  -> stopped out -> loss
-      3 pips  (stop 6):   PB 5 < 6 and TP 10 >= 6 -> win
-    """
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'Weekday': ['Monday'],
-        'Trade': ['#1'],
-        'Direction': ['Buy'],
-        'SL': [3.0],
-        'Pullback': [5.0],
-        'TP': [10.0],
-        'R': [0],
-    })
-
-    result = calculate_sl_buffer_impact_statistics(trades)
-    rows = {row['SL Range']: row for _, row in result.iterrows()}
-
-    assert rows['0-10']['Notation'] == '0W - 1L (0.0%)'
-    assert rows['0-10']['1 pip'] == '0W - 1L (0.0%)'
-    assert rows['0-10']['2 pips'] == '0W - 1L (0.0%)'
-    assert rows['0-10']['3 pips'] == '1W - 0L (100.0%)'
-
-
-def test_sl_buffer_impact_erosion():
-    """Single trade SL=2, Pullback=1, TP=4. Survives the stop at every buffer.
-    1:1 win at 0/1/2 pip buffer (TP>=SL+buffer); 3 pip buffer needs TP>=5 -> loss."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'Weekday': ['Monday'],
-        'Trade': ['#1'],
-        'Direction': ['Buy'],
-        'SL': [2.0],
-        'Pullback': [1.0],
-        'TP': [4.0],
-        'R': [1.0],
-    })
-
-    result = calculate_sl_buffer_impact_statistics(trades)
-    rows = {row['SL Range']: row for _, row in result.iterrows()}
-
-    assert rows['0-5']['Notation'] == '1W - 0L (100.0%)'
-    assert rows['0-5']['1 pip'] == '1W - 0L (100.0%)'
-    assert rows['0-5']['2 pips'] == '1W - 0L (100.0%)'
-    assert rows['0-5']['3 pips'] == '0W - 1L (0.0%)'
-
-
-def test_sl_buffer_impact_empty():
-    empty = get_empty_data()
-    result = calculate_sl_buffer_impact_statistics(empty)
-    assert len(result) == len(SL_RANGES)
-    for _, row in result.iterrows():
-        assert row['Trades'] == 0
-        assert row['Notation'] == '0W - 0L (0.0%)'
-        assert row['1 pip'] == '0W - 0L (0.0%)'
-        assert row['2 pips'] == '0W - 0L (0.0%)'
-        assert row['3 pips'] == '0W - 0L (0.0%)'
-
-
-def test_sl_buffer_impact_default_rrr_is_1():
-    """Omitting rrr matches rrr=1 explicitly."""
-    sample = get_sample_data()
-    default = calculate_sl_buffer_impact_statistics(sample)
-    explicit = calculate_sl_buffer_impact_statistics(sample, rrr=1)
-    assert default.equals(explicit)
-
-
-def test_sl_buffer_impact_rrr_2_values():
-    """1:2 win = Pullback < SL+buffer AND TP >= 2*(SL+buffer). In this sample the
-    target-reaching trades all survive their pullback, so counts are unchanged.
-
-    0-10 (all 10):
-      Notation (TP>=2*SL):        idx 1,3,7,9 -> 4W
-      3 pips  (TP>=2*(SL+3)):     only idx1 (12>=8.2) -> 1W
-    """
-    sample = get_sample_data()
-    result = calculate_sl_buffer_impact_statistics(sample, rrr=2)
-    rows = {row['SL Range']: row for _, row in result.iterrows()}
-
-    assert rows['0-10']['Notation'] == '4W - 6L (40.0%)'
-    assert rows['0-10']['1 pip'] == '4W - 6L (40.0%)'
-    assert rows['0-10']['3 pips'] == '1W - 9L (10.0%)'
-
-
-def test_sl_buffer_impact_rrr_3_values():
-    """1:3 win = TP >= 3*(SL+buffer). 0-10 Notation (TP>=3*SL): idx 1,9 -> 2W."""
-    sample = get_sample_data()
-    result = calculate_sl_buffer_impact_statistics(sample, rrr=3)
-    rows = {row['SL Range']: row for _, row in result.iterrows()}
-
-    assert rows['0-10']['Notation'] == '2W - 8L (20.0%)'
 
 
 def test_sl_vs_buffer_columns():
@@ -2010,19 +1860,9 @@ def run_all_tests():
         test_sl_statistics_no_tp_is_loss,
         test_sl_sortable_table_notation_headers_clickable,
         test_sl_sortable_table_still_sorts_combined_notation_columns,
-        test_sl_sortable_table_buffer_impact_columns_clickable,
         test_sl_sortable_table_uses_given_id,
         test_sl_sortable_table_sorts_descending,
         test_sl_sortable_table_empty,
-        test_sl_buffer_impact_columns,
-        test_sl_buffer_impact_all_ranges_present,
-        test_sl_buffer_impact_values,
-        test_sl_buffer_impact_requires_surviving_stop,
-        test_sl_buffer_impact_erosion,
-        test_sl_buffer_impact_empty,
-        test_sl_buffer_impact_default_rrr_is_1,
-        test_sl_buffer_impact_rrr_2_values,
-        test_sl_buffer_impact_rrr_3_values,
         test_sl_vs_buffer_columns,
         test_sl_vs_buffer_hypotheses,
         test_sl_vs_buffer_values,

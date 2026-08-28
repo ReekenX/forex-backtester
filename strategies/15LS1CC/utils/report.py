@@ -26,7 +26,6 @@ from utils.confirmation_candle import (
     _calculate_stats_with_buffer,
     _create_sl_sortable_table,
     calculate_pullback_statistics,
-    calculate_sl_buffer_impact_statistics,
     calculate_sl_statistics,
     calculate_sl_vs_buffer_statistics,
     calculate_tp_statistics,
@@ -64,12 +63,6 @@ def _weekday_section(df: pd.DataFrame) -> str:
 
 def _sl_section(df: pd.DataFrame) -> str:
     return _create_sl_sortable_table(calculate_sl_statistics(df), "sl-range-stats")
-
-
-def _sl_buffer_impact_section(df: pd.DataFrame) -> str:
-    return _create_sl_sortable_table(
-        calculate_sl_buffer_impact_statistics(df), "sl-buffer-impact"
-    )
 
 
 def _sl_vs_buffer_section(df: pd.DataFrame) -> str:
@@ -136,13 +129,6 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "SL Range Statistics",
         "Win rate per safe-stop band at 1:1. Win = Pullback &lt; SL AND TP &gt;= SL.",
         _sl_section,
-    ),
-    (
-        "buffer-impact",
-        "Buffer Impact",
-        "SL Range Buffer Impact (1:1 RRR)",
-        "How many winners survive as the stop is padded +1 / +2 / +3 pips.",
-        _sl_buffer_impact_section,
     ),
     (
         "sl-vs-buffer",
