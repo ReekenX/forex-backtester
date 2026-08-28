@@ -911,13 +911,22 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
     Args:
         df: DataFrame with trading data
 
+    The first row, "Default", covers every trade with no band filter.
+
     Returns:
         DataFrame with columns: SL Range, Trades, Notation, Win Rate
     """
     results = []
 
-    for label, low, high in SL_RANGES:
-        range_trades = df[(df['SL'] >= low) & (df['SL'] < high)]
+    # "Default" is every trade, with no band filter, so the bands below can be
+    # read against the whole set.
+    bands = [('Default', None, None)] + list(SL_RANGES)
+
+    for label, low, high in bands:
+        range_trades = (
+            df if low is None
+            else df[(df['SL'] >= low) & (df['SL'] < high)]
+        )
         total = len(range_trades)
 
         wins = len(range_trades[
@@ -1146,7 +1155,8 @@ def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float], column: str,
             shifted if apply_below is None
             else df['SL'].where(df['SL'] >= apply_below, shifted)
         )
-        scenarios.append((_pip_label(abs(int(shift))), effective_sl))
+        label = "Default" if shift == 0 else _pip_label(abs(int(shift)))
+        scenarios.append((label, effective_sl))
 
     return _sl_scenario_statistics(df, scenarios, column)
 
