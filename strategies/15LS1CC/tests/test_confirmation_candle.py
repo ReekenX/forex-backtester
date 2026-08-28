@@ -35,6 +35,7 @@ from utils.confirmation_candle import (
     WEEKDAY_ORDER,
     _format_wl,
     SL_RANGES,
+    SL_BUFFER_COLS,
     SL_STATISTICS_RRR_RATIOS,
     calculate_sl_statistics,
     _create_sl_sortable_table,
@@ -478,7 +479,7 @@ def test_buffer_pips_constant():
 
 def test_min_sl_values_constant():
     """Min SL gating is tested at 0 (no filter), 1, 2, 3 pips."""
-    assert MIN_SL_VALUES == [0, 1, 2, 3]
+    assert MIN_SL_VALUES == [0]
 
 
 def test_buffer_statistics_has_min_sl_column():
@@ -501,31 +502,23 @@ def test_buffer_statistics_covers_every_min_sl_per_strategy():
 
 
 def test_buffer_statistics_min_sl_filters_trades():
-    """Min SL > 0 keeps only trades whose original SL is strictly greater than Min SL.
-
-    Sample SL values are 3.5, 1.1, 2.0, 4.0, 3.0, 5.0, 2.5, 6.0, 8.0, 1.5:
-      Min SL 0 → 10
-      Min SL 1 → 10 (every SL > 1)
-      Min SL 2 → 7 (drops 1.1, 2.0, 1.5)
-      Min SL 3 → 5 (drops 1.1, 2.0, 3.0, 2.5, 1.5)
-    """
+    """MIN_SL_VALUES is [0] for the v5 CSV, so no Min SL gate is applied and
+    every strategy sees the full trade set."""
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
-    all_buffer_zero_1_1 = result[
+    rows = result[
         (result["Strategy"] == "All Trades")
         & (result["Buffer"] == "+0")
         & (result["Max SL"] == 0)
         & (result["RRR"] == "1:1")
     ].set_index("Min SL")
-    assert all_buffer_zero_1_1.loc[0, "Trades"] == 10
-    assert all_buffer_zero_1_1.loc[1, "Trades"] == 10
-    assert all_buffer_zero_1_1.loc[2, "Trades"] == 7
-    assert all_buffer_zero_1_1.loc[3, "Trades"] == 5
+    assert list(rows.index) == MIN_SL_VALUES
+    assert rows.loc[0, "Trades"] == 10
 
 
 def test_max_sl_values_constant():
     """Max SL gating values: 0 (disabled) plus 10, 15, 20 pip caps."""
-    assert MAX_SL_VALUES == [0, 10, 15, 20]
+    assert MAX_SL_VALUES == [0, 5]
 
 
 def test_buffer_statistics_has_max_sl_column():
@@ -550,10 +543,8 @@ def test_buffer_statistics_max_sl_filters_trades():
     """Max SL > 0 drops trades whose original SL exceeds it.
 
     Sample SL values are 3.5, 1.1, 2.0, 4.0, 3.0, 5.0, 2.5, 6.0, 8.0, 1.5:
-      Max SL 0  → 10 (no cap)
-      Max SL 10 → 10
-      Max SL 15 → 10
-      Max SL 20 → 10
+      Max SL 0 -> 10 (no cap)
+      Max SL 5 -> 8 (drops 6.0 and 8.0; 5.0 is kept since the gate is SL <= 5)
     """
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
@@ -563,26 +554,25 @@ def test_buffer_statistics_max_sl_filters_trades():
         & (result["Min SL"] == 0)
         & (result["RRR"] == "1:1")
     ].set_index("Max SL")
+    assert list(rows.index) == MAX_SL_VALUES
     assert rows.loc[0, "Trades"] == 10
-    assert rows.loc[10, "Trades"] == 10
-    assert rows.loc[15, "Trades"] == 10
-    assert rows.loc[20, "Trades"] == 10
+    assert rows.loc[5, "Trades"] == 8
 
 
 def test_buffer_statistics_min_and_max_sl_compose():
-    """Min SL and Max SL filters apply together on the original SL."""
+    """Every (Min SL, Max SL) pair in the configured grid produces one row."""
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
-    row = result[
-        (result["Strategy"] == "All Trades")
-        & (result["Buffer"] == "+0")
-        & (result["Min SL"] == 2)
-        & (result["Max SL"] == 10)
-        & (result["RRR"] == "1:1")
-    ]
-    assert len(row) == 1
-    # SL > 2 AND SL <= 10: 3.5, 4.0, 3.0, 5.0, 2.5, 6.0, 8.0 = 7.
-    assert row.iloc[0]["Trades"] == 7
+    for min_sl in MIN_SL_VALUES:
+        for max_sl in MAX_SL_VALUES:
+            row = result[
+                (result["Strategy"] == "All Trades")
+                & (result["Buffer"] == "+0")
+                & (result["Min SL"] == min_sl)
+                & (result["Max SL"] == max_sl)
+                & (result["RRR"] == "1:1")
+            ]
+            assert len(row) == 1, f"missing row for Min {min_sl} / Max {max_sl}"
 
 
 def test_max_sl_strategy_values_constant():
@@ -646,18 +636,17 @@ def test_max_sl_strategy_buffer_zero_only():
 
 
 def test_buffer_statistics_min_sl_filter_applies_before_fixed_sl():
-    """Fixed-SL strategies first filter by original SL, then replace SL with the fixed value."""
+    """Fixed-SL strategies gate on the original SL, then replace SL with the
+    fixed value. Max SL 5 drops the 6.0 and 8.0 trades before Fixed SL 2 applies."""
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
     fixed_2 = result[
         (result["Strategy"] == "Fixed SL 2")
         & (result["RRR"] == "1:1")
-        & (result["Max SL"] == 0)
-    ].set_index("Min SL")
-    # Min SL 0 should include all 10 trades (Fixed SL replaces SL with 2 afterwards).
+        & (result["Min SL"] == 0)
+    ].set_index("Max SL")
     assert fixed_2.loc[0, "Trades"] == 10
-    # Min SL 3 should drop everything with original SL <= 3, leaving 5 trades.
-    assert fixed_2.loc[3, "Trades"] == 5
+    assert fixed_2.loc[5, "Trades"] == 8
 
 
 def test_rrr_ratios_constant():
@@ -1115,16 +1104,9 @@ def test_weekday_statistics_single_day():
 
 
 def test_sl_ranges_constant():
-    """SL_RANGES are cumulative 0-1..0-10, then floored bands 1-10..5-10."""
-    assert len(SL_RANGES) == 15
-    assert SL_RANGES[0] == ("0-1", 0, 1)
-    assert SL_RANGES[1] == ("0-2", 0, 2)
-    assert SL_RANGES[9] == ("0-10", 0, 10)
-    assert SL_RANGES[10] == ("1-10", 1, 10)
-    assert SL_RANGES[11] == ("2-10", 2, 10)
-    assert SL_RANGES[12] == ("3-10", 3, 10)
-    assert SL_RANGES[13] == ("4-10", 4, 10)
-    assert SL_RANGES[14] == ("5-10", 5, 10)
+    """SL_RANGES covers the cumulative 0-5 .. 0-10 bands."""
+    assert SL_RANGES == [(f"0-{x}", 0, x) for x in range(5, 11)]
+    assert len(SL_RANGES) == 6
 
 
 def test_sl_statistics_columns():
@@ -1140,9 +1122,10 @@ def test_sl_statistics_rrr_notation():
     """RRR win: Pullback < SL AND TP >= ratio * SL. Sample SL/TP:
     3.5/0, 1.1/12, 2.0/0, 4.0/10, 3.0/0, 5.0/8, 2.5/0, 6.0/15, 8.0/10, 1.5/5.
 
-    1:2 wins (TP>=2*SL): idx 1,3,7,9 -> 4 of 10.
-    1:3 wins (TP>=3*SL): idx 1,9 -> 2 of 10.
-    1:4 wins (TP>=4*SL): idx 1 -> 1 of 10.
+    Over the full 0-10 band:
+      1:2 wins (TP>=2*SL): idx 1,3,7,9 -> 4 of 10.
+      1:3 wins (TP>=3*SL): idx 1,9 -> 2 of 10.
+      1:4 wins (TP>=4*SL): idx 1 -> 1 of 10.
     """
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
@@ -1151,35 +1134,28 @@ def test_sl_statistics_rrr_notation():
     assert rows['0-10']['Notation (1:2 RRR)'] == '4W - 6L (40.0%)'
     assert rows['0-10']['Notation (1:3 RRR)'] == '2W - 8L (20.0%)'
     assert rows['0-10']['Notation (1:4 RRR)'] == '1W - 9L (10.0%)'
-    # Floored band 2-10 (SL 3.5,2.0,4.0,3.0,5.0,2.5,6.0,8.0):
-    # 1:2 wins idx3,idx7 -> 2; 1:3 and 1:4 wins none (idx1 is SL 1.1, excluded).
-    assert rows['2-10']['Notation (1:2 RRR)'] == '2W - 6L (25.0%)'
-    assert rows['2-10']['Notation (1:3 RRR)'] == '0W - 8L (0.0%)'
-    assert rows['2-10']['Notation (1:4 RRR)'] == '0W - 8L (0.0%)'
+    # Narrower 0-5 band (SL 3.5,1.1,2.0,4.0,3.0,2.5,1.5) drops the 6.0 winner:
+    # 1:2 wins idx1,3,9 -> 3; 1:3 wins idx1,9 -> 2; 1:4 wins idx1 -> 1.
+    assert rows['0-5']['Notation (1:2 RRR)'] == '3W - 4L (42.9%)'
+    assert rows['0-5']['Notation (1:3 RRR)'] == '2W - 5L (28.6%)'
+    assert rows['0-5']['Notation (1:4 RRR)'] == '1W - 6L (14.3%)'
 
 
 def test_sl_statistics_all_ranges_present():
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
-    assert len(result) == 15
-    expected = [f"0-{x}" for x in range(1, 11)] + ["1-10", "2-10", "3-10", "4-10", "5-10"]
-    assert list(result['SL Range']) == expected
+    assert len(result) == len(SL_RANGES)
+    assert list(result['SL Range']) == [f"0-{x}" for x in range(5, 11)]
 
 
 def test_sl_statistics_trade_counts():
     """Sample SL values: 3.5, 1.1, 2.0, 4.0, 3.0, 5.0, 2.5, 6.0, 8.0, 1.5.
 
-    Cumulative SL < X (each range is 0..X):
-      0-1: 0, 0-2: 2, 0-3: 4, 0-4: 6, 0-5: 7, 0-6: 8,
-      0-7: 9, 0-8: 9, 0-9: 10, 0-10: 10
+    Cumulative SL < X: 0-5: 7, 0-6: 8, 0-7: 9, 0-8: 9, 0-9: 10, 0-10: 10.
     """
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
     counts = dict(zip(result['SL Range'], result['Trades']))
-    assert counts['0-1'] == 0
-    assert counts['0-2'] == 2
-    assert counts['0-3'] == 4
-    assert counts['0-4'] == 6
     assert counts['0-5'] == 7
     assert counts['0-6'] == 8
     assert counts['0-7'] == 9
@@ -1194,34 +1170,33 @@ def test_sl_statistics_notation():
     2.5/2.5/0, 6.0/3.0/15, 8.0/7.0/10, 1.5/0.5/5.
 
     Stopped out (Pullback >= SL): idx 0, 2, 4, 6 - all have TP 0 anyway.
-    Winners: idx 1, 3, 5, 7, 8, 9.
+    Winners: idx 1, 3, 5, 7, 8, 9, entering the bands as the cap widens.
     """
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-1']['Notation (1:1 RRR)'] == '0W - 0L (0.0%)'
-    assert rows['0-2']['Notation (1:1 RRR)'] == '2W - 0L (100.0%)'
-    assert rows['0-3']['Notation (1:1 RRR)'] == '2W - 2L (50.0%)'
     assert rows['0-5']['Notation (1:1 RRR)'] == '3W - 4L (42.9%)'
+    assert rows['0-6']['Notation (1:1 RRR)'] == '4W - 4L (50.0%)'
+    assert rows['0-7']['Notation (1:1 RRR)'] == '5W - 4L (55.6%)'
+    assert rows['0-9']['Notation (1:1 RRR)'] == '6W - 4L (60.0%)'
     assert rows['0-10']['Notation (1:1 RRR)'] == '6W - 4L (60.0%)'
 
 
-def test_sl_statistics_floored_bands():
-    """Floored bands apply a lower SL bound. Sample SL/TP:
-    3.5/0, 1.1/12, 2.0/0, 4.0/10, 3.0/0, 5.0/8, 2.5/0, 6.0/15, 8.0/10, 1.5/5.
-
-    2-10 (2<=SL<10): 3.5,2.0,4.0,3.0,5.0,2.5,6.0,8.0 -> 8 trades, wins 4.0/5.0/6.0/8.0.
-    5-10 (5<=SL<10): 5.0,6.0,8.0 -> 3 trades, all wins.
-    """
+def test_sl_statistics_cumulative_bands():
+    """Each band is cumulative (0 <= SL < X), so trade counts never shrink as
+    the cap widens. Sample SL: 3.5,1.1,2.0,4.0,3.0,5.0,2.5,6.0,8.0,1.5."""
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
-    rows = {row['SL Range']: row for _, row in result.iterrows()}
+    counts = dict(zip(result['SL Range'], result['Trades']))
 
-    assert rows['2-10']['Trades'] == 8
-    assert rows['2-10']['Notation (1:1 RRR)'] == '4W - 4L (50.0%)'
-    assert rows['5-10']['Trades'] == 3
-    assert rows['5-10']['Notation (1:1 RRR)'] == '3W - 0L (100.0%)'
+    assert counts['0-5'] == 7   # excludes 5.0, 6.0, 8.0
+    assert counts['0-6'] == 8   # 5.0 joins
+    assert counts['0-7'] == 9   # 6.0 joins
+    assert counts['0-10'] == 10  # 8.0 joins
+
+    widths = [counts[label] for label, _, _ in SL_RANGES]
+    assert widths == sorted(widths)
 
 
 def test_sl_statistics_requires_surviving_stop():
@@ -1242,9 +1217,9 @@ def test_sl_statistics_requires_surviving_stop():
     result = calculate_sl_statistics(trades)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-3']['Trades'] == 1
+    assert rows['0-5']['Trades'] == 1
     for rrr in SL_STATISTICS_RRR_RATIOS:
-        assert rows['0-3'][f'Notation (1:{rrr} RRR)'] == '0W - 1L (0.0%)'
+        assert rows['0-5'][f'Notation (1:{rrr} RRR)'] == '0W - 1L (0.0%)'
 
 
 def test_sl_statistics_survivor_wins():
@@ -1264,13 +1239,13 @@ def test_sl_statistics_survivor_wins():
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
     for rrr in SL_STATISTICS_RRR_RATIOS:
-        assert rows['0-3'][f'Notation (1:{rrr} RRR)'] == '1W - 0L (100.0%)'
+        assert rows['0-5'][f'Notation (1:{rrr} RRR)'] == '1W - 0L (100.0%)'
 
 
 def test_sl_statistics_empty():
     empty = get_empty_data()
     result = calculate_sl_statistics(empty)
-    assert len(result) == 15
+    assert len(result) == len(SL_RANGES)
     for _, row in result.iterrows():
         assert row['Trades'] == 0
         assert row['Notation (1:1 RRR)'] == '0W - 0L (0.0%)'
@@ -1313,7 +1288,7 @@ def test_sl_statistics_no_tp_is_loss():
     result = calculate_sl_statistics(trades)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-3']['Notation (1:1 RRR)'] == '0W - 1L (0.0%)'
+    assert rows['0-5']['Notation (1:1 RRR)'] == '0W - 1L (0.0%)'
     assert rows['0-10']['Notation (1:1 RRR)'] == '0W - 1L (0.0%)'
 
 
@@ -1384,9 +1359,8 @@ def test_sl_buffer_impact_columns():
 def test_sl_buffer_impact_all_ranges_present():
     sample = get_sample_data()
     result = calculate_sl_buffer_impact_statistics(sample)
-    assert len(result) == 15
-    expected = [f"0-{x}" for x in range(1, 11)] + ["1-10", "2-10", "3-10", "4-10", "5-10"]
-    assert list(result['SL Range']) == expected
+    assert len(result) == len(SL_RANGES)
+    assert list(result['SL Range']) == [f"0-{x}" for x in range(5, 11)]
 
 
 def test_sl_buffer_impact_values():
@@ -1457,16 +1431,16 @@ def test_sl_buffer_impact_erosion():
     result = calculate_sl_buffer_impact_statistics(trades)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-3']['Notation'] == '1W - 0L (100.0%)'
-    assert rows['0-3']['1 pip'] == '1W - 0L (100.0%)'
-    assert rows['0-3']['2 pips'] == '1W - 0L (100.0%)'
-    assert rows['0-3']['3 pips'] == '0W - 1L (0.0%)'
+    assert rows['0-5']['Notation'] == '1W - 0L (100.0%)'
+    assert rows['0-5']['1 pip'] == '1W - 0L (100.0%)'
+    assert rows['0-5']['2 pips'] == '1W - 0L (100.0%)'
+    assert rows['0-5']['3 pips'] == '0W - 1L (0.0%)'
 
 
 def test_sl_buffer_impact_empty():
     empty = get_empty_data()
     result = calculate_sl_buffer_impact_statistics(empty)
-    assert len(result) == 15
+    assert len(result) == len(SL_RANGES)
     for _, row in result.iterrows():
         assert row['Trades'] == 0
         assert row['Notation'] == '0W - 0L (0.0%)'
@@ -1516,33 +1490,26 @@ def test_sl_vs_buffer_columns():
 
 
 def test_sl_vs_buffer_hypotheses():
-    """10 SL caps, 5 SL floors, 3 buffer rows, then 5x3 combined floor+buffer rows."""
+    """6 cumulative SL caps then 3 buffer rows. SL_RANGES has no floored bands
+    for the v5 CSV, so there are no combined floor+buffer rows."""
     sample = get_sample_data()
     result = calculate_sl_vs_buffer_statistics(sample)
-    floors = ['1-10', '2-10', '3-10', '4-10', '5-10']
-    combined = [
-        f'{floor} SL and {buf} buffer'
-        for floor in floors
-        for buf in ['1 pip', '2 pips', '3 pips']
-    ]
     expected = (
-        [f'0-{x} SL' for x in range(1, 11)]
-        + [f'{floor} SL' for floor in floors]
+        [f'0-{x} SL' for x in range(5, 11)]
         + ['1 pip buffer', '2 pips buffer', '3 pips buffer']
-        + combined
     )
     assert list(result['Hypothesis']) == expected
 
 
 def test_sl_vs_buffer_values():
-    """Sample SL/TP: 3.5/0, 1.1/12, 2.0/0, 4.0/10, 3.0/0, 5.0/8, 2.5/0,
-    6.0/15, 8.0/10, 1.5/5. All 10 have SL < 10.
+    """Sample SL/Pullback/TP: 3.5/3.5/0, 1.1/0.8/12, 2.0/2.1/0, 4.0/1.5/10,
+    3.0/3.0/0, 5.0/2.0/8, 2.5/2.5/0, 6.0/3.0/15, 8.0/7.0/10, 1.5/0.5/5.
 
-    All 10 survive their stop where they have a TP, so the Pullback check
-    does not change these counts (see test_sl_vs_buffer_requires_surviving_stop).
+    Every trade with a TP survives its stop, so the Pullback check does not
+    change these counts (see test_sl_vs_buffer_requires_surviving_stop).
 
     Limiting SL (win Pullback<SL AND TP>=SL, no buffer):
-      0-2 SL: idx1,idx9 -> 2 trades, 2W.
+      0-5 SL: 7 trades (excludes 5.0, 6.0, 8.0), wins idx1,3,9 -> 3W.
       0-10 SL: all 10, wins idx1,3,5,7,8,9 -> 6W.
     Adding buffer over all 10 trades (win TP>=SL+buffer):
       1 pip -> 6W, 2 pips -> 6W, 3 pips -> 5W (idx8 10>=11 drops).
@@ -1551,33 +1518,18 @@ def test_sl_vs_buffer_values():
     result = calculate_sl_vs_buffer_statistics(sample)
     rows = {row['Hypothesis']: row for _, row in result.iterrows()}
 
-    assert rows['0-2 SL']['Trades'] == 2
-    assert rows['0-2 SL']['Notation'] == '2W - 0L (100.0%)'
+    assert rows['0-5 SL']['Trades'] == 7
+    assert rows['0-5 SL']['Notation'] == '3W - 4L (42.9%)'
+    assert rows['0-6 SL']['Trades'] == 8
+    assert rows['0-6 SL']['Notation'] == '4W - 4L (50.0%)'
     assert rows['0-10 SL']['Trades'] == 10
     assert rows['0-10 SL']['Notation'] == '6W - 4L (60.0%)'
-
-    # SL floors (win Pullback<SL AND TP>=SL, no buffer):
-    #   2-10 SL: idx0,2,3,4,5,6,7,8 -> 8 trades, wins idx3,5,7,8 -> 4W.
-    #   5-10 SL: idx5,7,8 -> 3 trades, all wins.
-    assert rows['2-10 SL']['Trades'] == 8
-    assert rows['2-10 SL']['Notation'] == '4W - 4L (50.0%)'
-    assert rows['5-10 SL']['Trades'] == 3
-    assert rows['5-10 SL']['Notation'] == '3W - 0L (100.0%)'
 
     # Buffer rows take every trade (10), regardless of SL size.
     assert rows['1 pip buffer']['Trades'] == 10
     assert rows['1 pip buffer']['Notation'] == '6W - 4L (60.0%)'
     assert rows['2 pips buffer']['Notation'] == '6W - 4L (60.0%)'
     assert rows['3 pips buffer']['Notation'] == '5W - 5L (50.0%)'
-
-    # Combined floor + buffer (win Pullback<SL+buf AND TP>=SL+buf):
-    #   2-10 SL (8 trades): +1 -> idx3,5,7,8 = 4W; +3 -> idx3,5,7 = 3W.
-    #   5-10 SL (3 trades): +1 -> all 3 win.
-    assert rows['2-10 SL and 1 pip buffer']['Trades'] == 8
-    assert rows['2-10 SL and 1 pip buffer']['Notation'] == '4W - 4L (50.0%)'
-    assert rows['2-10 SL and 3 pips buffer']['Notation'] == '3W - 5L (37.5%)'
-    assert rows['5-10 SL and 1 pip buffer']['Trades'] == 3
-    assert rows['5-10 SL and 1 pip buffer']['Notation'] == '3W - 0L (100.0%)'
 
 
 def test_sl_vs_buffer_buffer_uses_all_trades():
@@ -1660,7 +1612,7 @@ def test_sl_vs_buffer_matches_strategies_win_rule():
         for _, row in calculate_sl_vs_buffer_statistics(sample).iterrows()
     }
 
-    for low, high in [(0, x) for x in range(1, 11)]:
+    for low, high in [(0, x) for x in range(5, 11)]:
         subset = sample[(sample['SL'] >= low) & (sample['SL'] < high)]
         expected = _calculate_stats_with_buffer(subset, 'x', 0, 1)
         wins = int(expected['Win Rate'].rstrip('%').split('.')[0])
@@ -1674,7 +1626,7 @@ def test_sl_vs_buffer_matches_strategies_win_rule():
 def test_sl_vs_buffer_empty():
     empty = get_empty_data()
     result = calculate_sl_vs_buffer_statistics(empty)
-    assert len(result) == 33
+    assert len(result) == len(SL_RANGES) + len(SL_BUFFER_COLS)
     for _, row in result.iterrows():
         assert row['Trades'] == 0
         assert row['Notation'] == '0W - 0L (0.0%)'
@@ -2055,7 +2007,7 @@ def run_all_tests():
         test_sl_statistics_all_ranges_present,
         test_sl_statistics_trade_counts,
         test_sl_statistics_notation,
-        test_sl_statistics_floored_bands,
+        test_sl_statistics_cumulative_bands,
         test_sl_statistics_requires_surviving_stop,
         test_sl_statistics_survivor_wins,
         test_sl_statistics_empty,
