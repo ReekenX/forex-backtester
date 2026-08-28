@@ -1366,9 +1366,9 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
     Calculate limit-order pullback-entry statistics at 1:1 RRR across all trades.
 
     A limit order placed N pips into the pullback fills only if price pulled
-    back at least N pips (Pullback >= N). Two extra levels scale the fill
+    back at least N pips (Pullback >= N). One extra level scales the fill
     threshold to each trade's own stop: "Half" fills when the pullback reached
-    at least half the SL, "Full" when it reached the SL itself.
+    at least half the SL.
 
     The first row, "Default", is the 0-pip level: no limit order, every trade
     taken at the signal, so nothing is missed. It matches the Default row of
@@ -1396,7 +1396,6 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
         for n in PULLBACK_ENTRY_PIPS
     ]
     levels.append(('Half', df['Pullback'] >= df['SL'] / 2))
-    levels.append(('Full', df['Pullback'] >= df['SL']))
 
     winner = (df['Pullback'] < df['SL']) & (df['TP'] >= df['SL'])
 

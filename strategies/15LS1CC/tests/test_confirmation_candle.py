@@ -1828,9 +1828,10 @@ def test_pullback_statistics_levels_present():
     """All fixed and SL-relative pullback entry levels appear, Default first."""
     sample = get_sample_data()
     result = calculate_pullback_statistics(sample)
-    assert len(result) == 6
+    assert len(result) == 5
     assert list(result['Pullback']) == [
-        'Default', '1 pip', '2 pips', '3 pips', 'Half', 'Full']
+        'Default', '1 pip', '2 pips', '3 pips', 'Half']
+    assert 'Full' not in list(result['Pullback'])
 
 
 def test_pullback_statistics_values():
@@ -1866,15 +1867,12 @@ def test_pullback_statistics_values():
     assert rows['3 pips']['Win Rate'] == '50.0%'
 
 
-def test_pullback_statistics_half_and_full_values():
-    """Half fills when Pullback >= SL/2; Full when Pullback >= SL.
+def test_pullback_statistics_half_values():
+    """Half fills when Pullback >= SL/2.
 
     Half entered: PB >= SL/2 at idx 0,1,2,4,6,7,8 -> 7 trades; winners among
     them are 1.1/0.8/12, 6.0/3.0/15, 8.0/7.0/10 -> 3W, 4L, missed winners
     4.0/1.5/10, 5.0/2.0/8, 1.5/0.5/5 -> 3M.
-
-    Full entered: PB >= SL at idx 0,2,4,6 -> 4 trades, all TP=0, so they lose;
-    every winner pulled back less than its SL -> 6M.
     """
     sample = get_sample_data()
     rows = _pullback_rows(calculate_pullback_statistics(sample))
@@ -1883,30 +1881,26 @@ def test_pullback_statistics_half_and_full_values():
     assert rows['Half']['Notation'] == '3W - 4L - 3M'
     assert rows['Half']['Win Rate'] == '42.9%'
 
-    assert rows['Full']['Trades'] == 4
-    assert rows['Full']['Notation'] == '0W - 4L - 6M'
-    assert rows['Full']['Win Rate'] == '0.0%'
 
-
-def test_pullback_statistics_full_entry_is_always_a_loss():
-    """A Full-pullback fill means the pullback reached the stop, so the trade
-    was stopped out - it can never be a winner at this level."""
+def test_pullback_statistics_half_entry_can_still_win():
+    """A Half fill only needs the pullback to reach half the stop, so the trade
+    can still survive and win."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
         'Weekday': ['Monday'],
         'Trade': ['#1'],
         'Direction': ['Buy'],
-        'SL': [3.0],
-        'Pullback': [4.1],
+        'SL': [4.0],
+        'Pullback': [2.5],  # >= SL/2 fills, < SL survives
         'TP': [10.0],
-        'R': [-3.0],
+        'R': [2.5],
     })
 
     rows = _pullback_rows(calculate_pullback_statistics(trades))
 
-    assert rows['Full']['Trades'] == 1
-    assert rows['Full']['Notation'] == '0W - 1L - 0M'
-    assert rows['Full']['Win Rate'] == '0.0%'
+    assert rows['Half']['Trades'] == 1
+    assert rows['Half']['Notation'] == '1W - 0L - 0M'
+    assert rows['Half']['Win Rate'] == '100.0%'
 
 
 def test_pullback_statistics_deeper_entry_misses_more_winners():
@@ -1986,7 +1980,7 @@ def test_pullback_statistics_empty():
     """Test Pullback statistics with empty dataset."""
     empty = get_empty_data()
     result = calculate_pullback_statistics(empty)
-    assert len(result) == 6
+    assert len(result) == 5
     for _, row in result.iterrows():
         assert row['Trades'] == 0
         assert row['Notation'] == '0W - 0L - 0M'
@@ -2214,8 +2208,8 @@ def run_all_tests():
         test_pullback_statistics_columns,
         test_pullback_statistics_levels_present,
         test_pullback_statistics_values,
-        test_pullback_statistics_half_and_full_values,
-        test_pullback_statistics_full_entry_is_always_a_loss,
+        test_pullback_statistics_half_values,
+        test_pullback_statistics_half_entry_can_still_win,
         test_pullback_statistics_deeper_entry_misses_more_winners,
         test_pullback_statistics_stopped_trade_is_loss_not_win,
         test_pullback_statistics_missed_winner,
