@@ -37,10 +37,12 @@ from utils.confirmation_candle import (
     SL_RANGES,
     SL_BUFFER_PIPS,
     SL_BUFFER_SMALL_SL_THRESHOLD,
+    SL_FIXED_PIPS,
     SL_REDUCTION_PIPS,
     calculate_sl_statistics,
     _create_sl_sortable_table,
     calculate_sl_buffer_small_sl_statistics,
+    calculate_sl_fixed_statistics,
     calculate_sl_buffer_statistics,
     calculate_sl_reduction_statistics,
     PULLBACK_ENTRY_PIPS,
@@ -1654,6 +1656,94 @@ def test_sl_buffer_small_sl_sortable_win_rate_only():
             assert f"sortSlRange('sl-buffer-small-table', {idx}, this)" not in html
 
 
+def test_sl_fixed_pips_constant():
+    """3 to 7 pips, incremented by 1."""
+    assert SL_FIXED_PIPS == [3, 4, 5, 6, 7]
+
+
+def test_sl_fixed_columns_and_rows():
+    result = calculate_sl_fixed_statistics(get_sample_data())
+    assert list(result.columns) == ['Fixed SL', 'Trades', 'Notation', 'Win Rate']
+    assert list(result['Fixed SL']) == [
+        'Default', '3 pips', '4 pips', '5 pips', '6 pips', '7 pips']
+    assert (result['Trades'] == 10).all()
+
+
+def test_sl_fixed_default_row_matches_the_other_tables():
+    """Default keeps the recorded stops, so it must equal the 0-shift rows."""
+    sample = get_sample_data()
+    default = calculate_sl_fixed_statistics(sample).iloc[0]
+    assert default['Fixed SL'] == 'Default'
+    assert default['Notation'] == calculate_sl_buffer_statistics(sample).iloc[0]['Notation']
+    assert default['Notation'] == calculate_sl_reduction_statistics(sample).iloc[0]['Notation']
+
+
+def test_sl_fixed_discards_the_recorded_stop():
+    """A wide recorded stop is replaced, not adjusted. SL 20 / Pullback 4 / TP 6
+    wins on its own stop only at Default; at a fixed 3 the 4-pip pullback takes
+    it out, and at a fixed 5 it survives and TP 6 clears the 5 target."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        'Direction': ['Buy'],
+        'SL': [20.0],
+        'Pullback': [4.0],
+        'TP': [6.0],
+        'R': [0.3],
+    })
+
+    rows = {r['Fixed SL']: r for _, r in calculate_sl_fixed_statistics(trades).iterrows()}
+    assert rows['Default']['Notation'] == '0W - 1L'  # TP 6 < SL 20
+    assert rows['3 pips']['Notation'] == '0W - 1L'   # pullback 4 >= stop 3
+    assert rows['5 pips']['Notation'] == '1W - 0L'   # survives, TP 6 >= 5
+    assert rows['7 pips']['Notation'] == '0W - 1L'   # TP 6 < target 7
+
+
+def test_sl_fixed_is_the_same_stop_for_every_trade():
+    """Two trades with very different recorded stops are judged identically
+    once the stop is fixed."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02'],
+        'Weekday': ['Monday', 'Tuesday'],
+        'Trade': ['#1', '#1'],
+        'Direction': ['Buy', 'Buy'],
+        'SL': [2.0, 12.0],
+        'Pullback': [1.0, 1.0],
+        'TP': [10.0, 10.0],
+        'R': [5.0, 0.8],
+    })
+
+    rows = {r['Fixed SL']: r for _, r in calculate_sl_fixed_statistics(trades).iterrows()}
+    assert rows['Default']['Notation'] == '1W - 1L'  # 10>=2 wins, 10<12 loses
+    assert rows['5 pips']['Notation'] == '2W - 0L'   # both survive and clear 5
+
+
+def test_sl_fixed_win_rate_matches_notation():
+    result = calculate_sl_fixed_statistics(get_sample_data())
+    for _, row in result.iterrows():
+        wins = int(row['Notation'].split('W')[0])
+        assert row['Win Rate'] == f"{wins / row['Trades'] * 100:.1f}%"
+
+
+def test_sl_fixed_empty():
+    result = calculate_sl_fixed_statistics(get_empty_data())
+    assert len(result) == len(SL_FIXED_PIPS) + 1
+    for _, row in result.iterrows():
+        assert row['Trades'] == 0
+        assert row['Notation'] == '0W - 0L'
+
+
+def test_sl_fixed_sortable_win_rate_only():
+    stats = calculate_sl_fixed_statistics(get_sample_data())
+    html = _create_sl_sortable_table(stats, "sl-fixed-table")
+    for idx, col in enumerate(stats.columns):
+        if col == 'Win Rate':
+            assert f"sortSlRange('sl-fixed-table', {idx}, this)" in html
+        else:
+            assert f"sortSlRange('sl-fixed-table', {idx}, this)" not in html
+
+
 def test_pullback_entry_pips_constant():
     """Pullback entry levels are 0, 1, 2 and 3 pips."""
     assert PULLBACK_ENTRY_PIPS == [0, 1, 2, 3]
@@ -2047,6 +2137,14 @@ def run_all_tests():
         test_sl_buffer_small_sl_win_rate_matches_notation,
         test_sl_buffer_small_sl_empty,
         test_sl_buffer_small_sl_sortable_win_rate_only,
+        test_sl_fixed_pips_constant,
+        test_sl_fixed_columns_and_rows,
+        test_sl_fixed_default_row_matches_the_other_tables,
+        test_sl_fixed_discards_the_recorded_stop,
+        test_sl_fixed_is_the_same_stop_for_every_trade,
+        test_sl_fixed_win_rate_matches_notation,
+        test_sl_fixed_empty,
+        test_sl_fixed_sortable_win_rate_only,
         test_pullback_entry_pips_constant,
         test_pullback_statistics_columns,
         test_pullback_statistics_levels_present,

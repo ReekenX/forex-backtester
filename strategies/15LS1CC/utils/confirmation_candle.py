@@ -1071,10 +1071,53 @@ SL_BUFFER_PIPS = [0, 1, 2, 3, 4, 5]
 # Only stops strictly below this get padded in the small-SL buffer table.
 SL_BUFFER_SMALL_SL_THRESHOLD = 5.0
 
+# Stop sizes to substitute for every trade's recorded SL.
+SL_FIXED_PIPS = [3, 4, 5, 6, 7]
+
 
 def _pip_label(pips: int) -> str:
     """Render a pip count for a table cell: '0 pips', '1 pip', '2 pips'."""
     return f"{pips} pip" if pips == 1 else f"{pips} pips"
+
+
+def _sl_scenario_statistics(df: pd.DataFrame, scenarios: List[Tuple[str, object]],
+                            column: str) -> pd.DataFrame:
+    """
+    Score every trade at 1:1 under each stop scenario.
+
+    A trade wins when it survives the scenario's stop and reaches a 1:1 target
+    on it:
+        Pullback < effective SL   AND   TP >= effective SL
+
+    Every stop table goes through here so they cannot drift apart on the win
+    rule.
+
+    Args:
+        df: DataFrame with trading data
+        scenarios: (label, effective SL) pairs. The effective SL is either a
+            per-trade Series or a single number applied to every trade.
+        column: Name for the leading column (e.g. 'SL Reduction')
+
+    Returns:
+        DataFrame with columns: <column>, Trades, Notation, Win Rate
+    """
+    total = len(df)
+    results = []
+
+    for label, effective_sl in scenarios:
+        wins = int((
+            (df['Pullback'] < effective_sl) & (df['TP'] >= effective_sl)
+        ).sum()) if total else 0
+        win_rate = (wins / total * 100) if total > 0 else 0.0
+
+        results.append({
+            column: label,
+            'Trades': total,
+            'Notation': f"{wins}W - {total - wins}L",
+            'Win Rate': f"{win_rate:.1f}%",
+        })
+
+    return pd.DataFrame(results)
 
 
 def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float], column: str,
@@ -1084,11 +1127,6 @@ def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float], column: str,
 
     A negative shift tightens the stop, a positive one pads it:
         effective SL = SL + shift
-    A trade wins when it survives that stop and reaches a 1:1 target on it:
-        Pullback < effective SL   AND   TP >= effective SL
-
-    Every shift table goes through here so they cannot drift apart on the win
-    rule.
 
     Args:
         df: DataFrame with trading data
@@ -1101,28 +1139,16 @@ def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float], column: str,
     Returns:
         DataFrame with columns: <column>, Trades, Notation, Win Rate
     """
-    total = len(df)
-    results = []
-
+    scenarios = []
     for shift in shifts:
         shifted = df['SL'] + shift
         effective_sl = (
             shifted if apply_below is None
             else df['SL'].where(df['SL'] >= apply_below, shifted)
         )
-        wins = int((
-            (df['Pullback'] < effective_sl) & (df['TP'] >= effective_sl)
-        ).sum()) if total else 0
-        win_rate = (wins / total * 100) if total > 0 else 0.0
+        scenarios.append((_pip_label(abs(int(shift))), effective_sl))
 
-        results.append({
-            column: _pip_label(abs(int(shift))),
-            'Trades': total,
-            'Notation': f"{wins}W - {total - wins}L",
-            'Win Rate': f"{win_rate:.1f}%",
-        })
-
-    return pd.DataFrame(results)
+    return _sl_scenario_statistics(df, scenarios, column)
 
 
 def calculate_sl_reduction_statistics(df: pd.DataFrame) -> pd.DataFrame:
@@ -1198,6 +1224,25 @@ def calculate_sl_buffer_small_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def calculate_sl_fixed_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate 1:1 win/loss statistics for a single stop size used on every trade.
+
+    The recorded safe stop is discarded and replaced by a fixed number of pips,
+    so both the survival check and the 1:1 target move to that size. The first
+    row keeps the recorded stops, as a baseline to read the rest against.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with columns: Fixed SL, Trades, Notation, Win Rate
+    """
+    scenarios: List[Tuple[str, object]] = [('Default', df['SL'])]
+    scenarios.extend((_pip_label(pips), float(pips)) for pips in SL_FIXED_PIPS)
+    return _sl_scenario_statistics(df, scenarios, 'Fixed SL')
+
+
 def display_analysis_sl_reduction(df: pd.DataFrame):
     """
     Display 1:1 win/loss statistics as the safe stop is tightened.
@@ -1255,6 +1300,25 @@ def display_analysis_sl_buffer_small_sl(df: pd.DataFrame):
 
     stats_df = calculate_sl_buffer_small_sl_statistics(df)
     display(HTML(_create_sl_sortable_table(stats_df, "sl-buffer-small-table")))
+
+
+def display_analysis_sl_fixed(df: pd.DataFrame):
+    """
+    Display 1:1 win/loss statistics for one stop size used on every trade.
+
+    The Win Rate column header is click-to-sort, descending.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = ("<h2 style='color: #e0e0e0; background-color: #1e1e1e; "
+                  "padding: 10px;'>Fixed SL Statistics</h2>")
+    display(HTML(title_html))
+
+    stats_df = calculate_sl_fixed_statistics(df)
+    display(HTML(_create_sl_sortable_table(stats_df, "sl-fixed-table")))
 
 
 PULLBACK_ENTRY_PIPS = [0, 1, 2, 3]

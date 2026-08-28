@@ -28,6 +28,7 @@ from utils.confirmation_candle import (
     calculate_pullback_statistics,
     calculate_sl_statistics,
     calculate_sl_buffer_small_sl_statistics,
+    calculate_sl_fixed_statistics,
     calculate_sl_buffer_statistics,
     calculate_sl_reduction_statistics,
     calculate_tp_statistics,
@@ -82,6 +83,12 @@ def _sl_buffer_section(df: pd.DataFrame) -> str:
 def _sl_buffer_small_sl_section(df: pd.DataFrame) -> str:
     return _create_sl_sortable_table(
         calculate_sl_buffer_small_sl_statistics(df), "sl-buffer-small-table"
+    )
+
+
+def _sl_fixed_section(df: pd.DataFrame) -> str:
+    return _create_sl_sortable_table(
+        calculate_sl_fixed_statistics(df), "sl-fixed-table"
     )
 
 
@@ -167,6 +174,15 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "The same buffer, but only on stops under 5 pips - trades with a stop of "
         "5.0 or wider keep it as recorded. All trades are still scored.",
         _sl_buffer_small_sl_section,
+    ),
+    (
+        "sl-fixed",
+        "Fixed SL",
+        "Fixed SL Statistics",
+        "The recorded stop replaced by one size for every trade, so both the "
+        "survival check and the 1:1 target move to it. Default keeps the "
+        "recorded stops as a baseline.",
+        _sl_fixed_section,
     ),
     (
         "tp-range",
