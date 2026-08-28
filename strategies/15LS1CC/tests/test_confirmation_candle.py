@@ -35,10 +35,10 @@ from utils.confirmation_candle import (
     WEEKDAY_ORDER,
     _format_wl,
     SL_RANGES,
-    SL_BUFFER_COLS,
+    SL_REDUCTION_PIPS,
     calculate_sl_statistics,
     _create_sl_sortable_table,
-    calculate_sl_vs_buffer_statistics,
+    calculate_sl_reduction_statistics,
     PULLBACK_ENTRY_PIPS,
     calculate_pullback_statistics,
     TP_RANGES,
@@ -1328,173 +1328,127 @@ def test_sl_sortable_table_empty():
     assert "sortSlRange" not in html
 
 
-def test_sl_vs_buffer_columns():
-    sample = get_sample_data()
-    result = calculate_sl_vs_buffer_statistics(sample)
-    assert list(result.columns) == ['Hypothesis', 'Trades', 'Notation']
-
-
-def test_sl_vs_buffer_hypotheses():
-    """6 cumulative SL caps then 3 buffer rows. SL_RANGES has no floored bands
-    for the v5 CSV, so there are no combined floor+buffer rows."""
-    sample = get_sample_data()
-    result = calculate_sl_vs_buffer_statistics(sample)
-    expected = (
-        [f'0-{x} SL' for x in range(5, 11)]
-        + ['1 pip buffer', '2 pips buffer', '3 pips buffer']
-    )
-    assert list(result['Hypothesis']) == expected
-
-
-def test_sl_vs_buffer_values():
-    """Sample SL/Pullback/TP: 3.5/3.5/0, 1.1/0.8/12, 2.0/2.1/0, 4.0/1.5/10,
-    3.0/3.0/0, 5.0/2.0/8, 2.5/2.5/0, 6.0/3.0/15, 8.0/7.0/10, 1.5/0.5/5.
-
-    Every trade with a TP survives its stop, so the Pullback check does not
-    change these counts (see test_sl_vs_buffer_requires_surviving_stop).
-
-    Limiting SL (win Pullback<SL AND TP>=SL, no buffer):
-      0-5 SL: 7 trades (excludes 5.0, 6.0, 8.0), wins idx1,3,9 -> 3W.
-      0-10 SL: all 10, wins idx1,3,5,7,8,9 -> 6W.
-    Adding buffer over all 10 trades (win TP>=SL+buffer):
-      1 pip -> 6W, 2 pips -> 6W, 3 pips -> 5W (idx8 10>=11 drops).
-    """
-    sample = get_sample_data()
-    result = calculate_sl_vs_buffer_statistics(sample)
-    rows = {row['Hypothesis']: row for _, row in result.iterrows()}
-
-    assert rows['0-5 SL']['Trades'] == 7
-    assert rows['0-5 SL']['Notation'] == '3W - 4L (42.9%)'
-    assert rows['0-6 SL']['Trades'] == 8
-    assert rows['0-6 SL']['Notation'] == '4W - 4L (50.0%)'
-    assert rows['0-10 SL']['Trades'] == 10
-    assert rows['0-10 SL']['Notation'] == '6W - 4L (60.0%)'
-
-    # Buffer rows take every trade (10), regardless of SL size.
-    assert rows['1 pip buffer']['Trades'] == 10
-    assert rows['1 pip buffer']['Notation'] == '6W - 4L (60.0%)'
-    assert rows['2 pips buffer']['Notation'] == '6W - 4L (60.0%)'
-    assert rows['3 pips buffer']['Notation'] == '5W - 5L (50.0%)'
-
-
-def test_sl_vs_buffer_buffer_uses_all_trades():
-    """A high-SL trade (SL=12) is excluded from every 0-X SL cap but still
-    counts in the buffer rows."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01', '2026-01-02'],
-        'Weekday': ['Monday', 'Tuesday'],
-        'Trade': ['#1', '#2'],
-        'Direction': ['Buy', 'Buy'],
-        'SL': [3.0, 12.0],
-        'Pullback': [1.0, 1.0],
-        'TP': [5.0, 20.0],
-        'R': [1.6, 1.6],
-    })
-
-    result = calculate_sl_vs_buffer_statistics(trades)
-    rows = {row['Hypothesis']: row for _, row in result.iterrows()}
-
-    # 0-10 SL cap sees only the SL=3 trade.
-    assert rows['0-10 SL']['Trades'] == 1
-    # Buffer rows see both trades.
-    assert rows['1 pip buffer']['Trades'] == 2
-    # 1 pip: SL3 needs TP>=4 (5 ok), SL12 needs TP>=13 (20 ok) -> 2W.
-    assert rows['1 pip buffer']['Notation'] == '2W - 0L (100.0%)'
-
-
-def test_sl_vs_buffer_requires_surviving_stop():
-    """A trade whose Pullback exceeds its SL is a loss in every hypothesis,
-    even with a far-away TP - matching the Strategies table."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'Weekday': ['Monday'],
-        'Trade': ['#1'],
-        'Direction': ['Buy'],
-        'SL': [3.0],
-        'Pullback': [7.0],  # stop hit before price ran to TP
-        'TP': [70.0],
-        'R': [-10.0],
-    })
-
-    result = calculate_sl_vs_buffer_statistics(trades)
-    rows = {row['Hypothesis']: row for _, row in result.iterrows()}
-
-    assert rows['0-5 SL']['Trades'] == 1
-    assert rows['0-5 SL']['Notation'] == '0W - 1L (0.0%)'
-    # A 3-pip buffer widens the stop to 6.0, still short of the 7.0 pullback.
-    assert rows['3 pips buffer']['Notation'] == '0W - 1L (0.0%)'
-
-
-def test_sl_vs_buffer_buffer_can_rescue_stopped_trade():
-    """A buffer wide enough to clear the pullback turns the loss into a win,
-    provided the TP still reaches the widened target."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'Weekday': ['Monday'],
-        'Trade': ['#1'],
-        'Direction': ['Buy'],
-        'SL': [3.0],
-        'Pullback': [3.5],
-        'TP': [70.0],
-        'R': [-10.0],
-    })
-
-    result = calculate_sl_vs_buffer_statistics(trades)
-    rows = {row['Hypothesis']: row for _, row in result.iterrows()}
-
-    # +0: Pullback 3.5 >= SL 3.0 -> loss.
-    assert rows['0-5 SL']['Notation'] == '0W - 1L (0.0%)'
-    # +1: stop is 4.0, Pullback 3.5 survives, TP 70 >= 4.0 -> win.
-    assert rows['1 pip buffer']['Notation'] == '1W - 0L (100.0%)'
-
-
-def test_sl_vs_buffer_matches_strategies_win_rule():
-    """Every 0-X SL row equals _calculate_stats_with_buffer on the same subset,
-    which is what the Strategies table reports."""
-    sample = get_sample_data()
-    rows = {
-        row['Hypothesis']: row
-        for _, row in calculate_sl_vs_buffer_statistics(sample).iterrows()
-    }
-
-    for low, high in [(0, x) for x in range(5, 11)]:
-        subset = sample[(sample['SL'] >= low) & (sample['SL'] < high)]
-        expected = _calculate_stats_with_buffer(subset, 'x', 0, 1)
-        wins = int(expected['Win Rate'].rstrip('%').split('.')[0])
-        actual = rows[f'{low}-{high} SL']['Notation']
-        assert rows[f'{low}-{high} SL']['Trades'] == expected['Trades']
-        if expected['Trades']:
-            assert actual.split('(')[1].startswith(str(wins)), (
-                f"{low}-{high}: {actual} vs {expected['Win Rate']}")
-
-
-def test_sl_vs_buffer_empty():
-    empty = get_empty_data()
-    result = calculate_sl_vs_buffer_statistics(empty)
-    assert len(result) == len(SL_RANGES) + len(SL_BUFFER_COLS)
-    for _, row in result.iterrows():
-        assert row['Trades'] == 0
-        assert row['Notation'] == '0W - 0L (0.0%)'
-
-
-def test_sl_vs_buffer_sortable_notation():
-    """The Notation column is click-to-sort DESC; Hypothesis and Trades are not."""
-    sample = get_sample_data()
-    stats = calculate_sl_vs_buffer_statistics(sample)
-    html = _create_sl_sortable_table(stats, "sl-vs-buffer")
-
-    notation_idx = list(stats.columns).index("Notation")
-    assert f"sortSlRange('sl-vs-buffer', {notation_idx}, this)" in html
-    assert "Notation ↓" in html
-    # Hypothesis and Trades headers stay plain.
-    assert ">Hypothesis</th>" in html
-    assert ">Trades</th>" in html
-    assert "return pct(b) - pct(a);" in html
-
-
 def _pullback_rows(result):
     """Index pullback statistics rows by Pullback level."""
     return {row['Pullback']: row for _, row in result.iterrows()}
+
+
+def test_sl_reduction_pips_constant():
+    """Five reduction values starting at 0 (no reduction)."""
+    assert SL_REDUCTION_PIPS == [0, 1, 2, 3, 4]
+    assert len(SL_REDUCTION_PIPS) == 5
+
+
+def test_sl_reduction_columns():
+    """Same column shape as the weekday and SL range tables."""
+    result = calculate_sl_reduction_statistics(get_sample_data())
+    assert list(result.columns) == ['SL Reduction', 'Trades', 'Notation', 'Win Rate']
+
+
+def test_sl_reduction_rows():
+    result = calculate_sl_reduction_statistics(get_sample_data())
+    assert list(result['SL Reduction']) == ['0 pips', '1 pip', '2 pips', '3 pips', '4 pips']
+    # Every row scores the whole dataset; a reduction never drops trades.
+    assert (result['Trades'] == 10).all()
+
+
+def test_sl_reduction_worked_example():
+    """The brief's example: SL 3.6, Pullback 1.2, TP far enough to clear the
+    target at every stop. Wins at -0/-1/-2, then the 1.2 pullback takes out the
+    0.6 stop at -3, and -4 leaves no stop at all."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        'Direction': ['Buy'],
+        'SL': [3.6],
+        'Pullback': [1.2],
+        'TP': [20.0],
+        'R': [5.0],
+    })
+
+    rows = {r['SL Reduction']: r for _, r in
+            calculate_sl_reduction_statistics(trades).iterrows()}
+    assert rows['0 pips']['Notation'] == '1W - 0L'
+    assert rows['1 pip']['Notation'] == '1W - 0L'
+    assert rows['2 pips']['Notation'] == '1W - 0L'
+    assert rows['3 pips']['Notation'] == '0W - 1L'   # stop 0.6 < pullback 1.2
+    assert rows['4 pips']['Notation'] == '0W - 1L'   # stop -0.4, no room at all
+
+
+def test_sl_reduction_target_shrinks_with_the_stop():
+    """A 1:1 target is measured on the reduced stop, so a trade whose TP was
+    short of the original stop can win once the stop is tightened."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        'Direction': ['Buy'],
+        'SL': [5.0],
+        'Pullback': [0.5],
+        'TP': [3.0],
+        'R': [0.0],
+    })
+
+    rows = {r['SL Reduction']: r for _, r in
+            calculate_sl_reduction_statistics(trades).iterrows()}
+    assert rows['0 pips']['Notation'] == '0W - 1L'   # TP 3 < SL 5
+    assert rows['2 pips']['Notation'] == '1W - 0L'   # TP 3 >= stop 3
+    assert rows['4 pips']['Notation'] == '1W - 0L'   # TP 3 >= stop 1
+
+
+def test_sl_reduction_stopped_out_trade_stays_a_loss():
+    """Tightening a stop can never rescue a trade the original stop took out."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        'Direction': ['Buy'],
+        'SL': [3.0],
+        'Pullback': [4.0],
+        'TP': [30.0],
+        'R': [-10.0],
+    })
+
+    result = calculate_sl_reduction_statistics(trades)
+    assert (result['Notation'] == '0W - 1L').all()
+
+
+def test_sl_reduction_win_rate_matches_notation():
+    result = calculate_sl_reduction_statistics(get_sample_data())
+    for _, row in result.iterrows():
+        wins = int(row['Notation'].split('W')[0])
+        assert row['Win Rate'] == f"{wins / row['Trades'] * 100:.1f}%"
+
+
+def test_sl_reduction_zero_matches_the_unreduced_rule():
+    """Row "0 pips" must equal the plain 1:1 rule used elsewhere."""
+    sample = get_sample_data()
+    rows = {r['SL Reduction']: r for _, r in
+            calculate_sl_reduction_statistics(sample).iterrows()}
+    wins = int((
+        (sample['Pullback'] < sample['SL']) & (sample['TP'] >= sample['SL'])
+    ).sum())
+    assert rows['0 pips']['Notation'] == f"{wins}W - {len(sample) - wins}L"
+
+
+def test_sl_reduction_empty():
+    result = calculate_sl_reduction_statistics(get_empty_data())
+    assert len(result) == len(SL_REDUCTION_PIPS)
+    for _, row in result.iterrows():
+        assert row['Trades'] == 0
+        assert row['Notation'] == '0W - 0L'
+        assert row['Win Rate'] == '0.0%'
+
+
+def test_sl_reduction_sortable_win_rate_only():
+    stats = calculate_sl_reduction_statistics(get_sample_data())
+    html = _create_sl_sortable_table(stats, "sl-reduction-table")
+    for idx, col in enumerate(stats.columns):
+        if col == 'Win Rate':
+            assert f"sortSlRange('sl-reduction-table', {idx}, this)" in html
+        else:
+            assert f"sortSlRange('sl-reduction-table', {idx}, this)" not in html
 
 
 def test_pullback_entry_pips_constant():
@@ -1863,15 +1817,16 @@ def run_all_tests():
         test_sl_sortable_table_uses_given_id,
         test_sl_sortable_table_sorts_descending,
         test_sl_sortable_table_empty,
-        test_sl_vs_buffer_columns,
-        test_sl_vs_buffer_hypotheses,
-        test_sl_vs_buffer_values,
-        test_sl_vs_buffer_buffer_uses_all_trades,
-        test_sl_vs_buffer_requires_surviving_stop,
-        test_sl_vs_buffer_buffer_can_rescue_stopped_trade,
-        test_sl_vs_buffer_matches_strategies_win_rule,
-        test_sl_vs_buffer_empty,
-        test_sl_vs_buffer_sortable_notation,
+        test_sl_reduction_pips_constant,
+        test_sl_reduction_columns,
+        test_sl_reduction_rows,
+        test_sl_reduction_worked_example,
+        test_sl_reduction_target_shrinks_with_the_stop,
+        test_sl_reduction_stopped_out_trade_stays_a_loss,
+        test_sl_reduction_win_rate_matches_notation,
+        test_sl_reduction_zero_matches_the_unreduced_rule,
+        test_sl_reduction_empty,
+        test_sl_reduction_sortable_win_rate_only,
         test_pullback_entry_pips_constant,
         test_pullback_statistics_columns,
         test_pullback_statistics_levels_present,

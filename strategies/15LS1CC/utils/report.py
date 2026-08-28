@@ -27,7 +27,7 @@ from utils.confirmation_candle import (
     _create_sl_sortable_table,
     calculate_pullback_statistics,
     calculate_sl_statistics,
-    calculate_sl_vs_buffer_statistics,
+    calculate_sl_reduction_statistics,
     calculate_tp_statistics,
     calculate_weekday_statistics,
     create_html_table,
@@ -65,9 +65,9 @@ def _sl_section(df: pd.DataFrame) -> str:
     return _create_sl_sortable_table(calculate_sl_statistics(df), "sl-range-stats")
 
 
-def _sl_vs_buffer_section(df: pd.DataFrame) -> str:
+def _sl_reduction_section(df: pd.DataFrame) -> str:
     return _create_sl_sortable_table(
-        calculate_sl_vs_buffer_statistics(df), "sl-vs-buffer-table"
+        calculate_sl_reduction_statistics(df), "sl-reduction-table"
     )
 
 
@@ -131,11 +131,12 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         _sl_section,
     ),
     (
-        "sl-vs-buffer",
-        "SL vs Buffer",
-        "Limiting SL vs Adding Buffer (1:1 RRR)",
-        "Each lever alone. Same win rule as the Strategies table, so the numbers are comparable.",
-        _sl_vs_buffer_section,
+        "sl-reduction",
+        "Reducing SL",
+        "Reducing SL Statistics",
+        "Every stop shaved by N pips: win = Pullback &lt; SL - N AND TP &gt;= SL - N. "
+        "The broker minimum stop is 1.1 pips.",
+        _sl_reduction_section,
     ),
     (
         "tp-range",

@@ -1062,102 +1062,76 @@ def display_analysis_sl(df: pd.DataFrame):
     display(HTML(html_table))
 
 
-SL_BUFFER_COLS = [
-    ("1 pip", 1.0),
-    ("2 pips", 2.0),
-    ("3 pips", 3.0),
-]
+# Pips to shave off the safe stop. 0 means the stop is left as recorded.
+SL_REDUCTION_PIPS = [0, 1, 2, 3, 4]
 
 
-def calculate_sl_vs_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_sl_reduction_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Compare 1:1 RRR levers: each alone, then the SL floors combined with a buffer.
+    Calculate 1:1 win/loss statistics for progressively tighter stops.
 
-    Every hypothesis scores a win the same way: the trade must BOTH survive its
-    (possibly padded) stop and reach the target, i.e.
-        Pullback < SL + buffer   AND   TP >= SL + buffer
-    so the numbers are directly comparable with the Strategies table.
+    Each row shaves N pips off every trade's safe stop:
+        effective SL = SL - N
+    A trade wins when it survives that tighter stop and still reaches a 1:1
+    target on it:
+        Pullback < effective SL   AND   TP >= effective SL
 
-    * Limiting SL ("0-X SL" caps and "X-10 SL" floors): take only trades whose
-      SL is inside the range, with no buffer.
-    * Adding buffer ("N pip buffer"): take every trade, padding the stop by
-      N pips.
-    * Combined ("X-10 SL and N pip buffer"): take only floored-SL trades AND
-      pad the stop by N pips.
+    Example: SL 3.6, Pullback 1.2. At -1 the stop is 2.6 and the trade
+    survives; at -3 the stop is 0.6, which the 1.2 pullback takes out, so it
+    becomes a loss.
+
+    Reductions that drive the effective stop to zero or below leave no room for
+    any pullback, so those trades count as losses - which is what adopting that
+    reduction as a rule would actually cost. Note the broker minimum stop is
+    1.1 pips, so rows whose effective stop falls under that are informational
+    rather than tradeable.
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: Hypothesis, Trades, Notation
+        DataFrame with columns: SL Reduction, Trades, Notation, Win Rate
     """
-    def _wins(trades: pd.DataFrame, buffer: float) -> int:
-        """Trades that survive SL + buffer and reach it as a 1:1 target."""
-        if trades.empty:
-            return 0
-        effective_sl = trades['SL'] + buffer
-        return len(trades[
-            (trades['Pullback'] < effective_sl) & (trades['TP'] >= effective_sl)
-        ])
-
+    total = len(df)
     results = []
 
-    # Limiting SL: cumulative 0-X caps then X-10 floors (no buffer).
-    for label, low, high in SL_RANGES:
-        range_trades = df[(df['SL'] >= low) & (df['SL'] < high)]
-        total = len(range_trades)
-        wins = _wins(range_trades, 0.0)
-        results.append({
-            'Hypothesis': f'{label} SL',
-            'Trades': total,
-            'Notation': _format_wl(wins, total - wins, total),
-        })
+    for reduction in SL_REDUCTION_PIPS:
+        effective_sl = df['SL'] - reduction
+        wins = int((
+            (df['Pullback'] < effective_sl) & (df['TP'] >= effective_sl)
+        ).sum()) if total else 0
+        win_rate = (wins / total * 100) if total > 0 else 0.0
 
-    # Adding buffer: every trade (no SL cap).
-    all_trades = df[df['SL'].notna()]
-    total = len(all_trades)
-    for col, buffer in SL_BUFFER_COLS:
-        wins = _wins(all_trades, buffer)
-        results.append({
-            'Hypothesis': f'{col} buffer',
-            'Trades': total,
-            'Notation': _format_wl(wins, total - wins, total),
-        })
+        label = "0 pips" if reduction == 0 else (
+            "1 pip" if reduction == 1 else f"{reduction} pips")
 
-    # Combined: SL floor AND buffer.
-    for label, low, high in SL_RANGES:
-        if low == 0:  # only the X-10 floors
-            continue
-        range_trades = df[(df['SL'] >= low) & (df['SL'] < high)]
-        total = len(range_trades)
-        for col, buffer in SL_BUFFER_COLS:
-            wins = _wins(range_trades, buffer)
-            results.append({
-                'Hypothesis': f'{label} SL and {col} buffer',
-                'Trades': total,
-                'Notation': _format_wl(wins, total - wins, total),
-            })
+        results.append({
+            'SL Reduction': label,
+            'Trades': total,
+            'Notation': f"{wins}W - {total - wins}L",
+            'Win Rate': f"{win_rate:.1f}%",
+        })
 
     return pd.DataFrame(results)
 
 
-def display_analysis_sl_vs_buffer(df: pd.DataFrame):
+def display_analysis_sl_reduction(df: pd.DataFrame):
     """
-    Display a head-to-head comparison of limiting SL versus adding a stop
-    buffer at 1:1 RRR, each lever alone and then the two combined.
+    Display 1:1 win/loss statistics as the safe stop is tightened.
 
-    The Notation column header is click-to-sort by win rate, descending.
+    The Win Rate column header is click-to-sort, descending.
 
     Args:
         df: DataFrame with trading data
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px 10px 0;'>Limiting SL vs Adding Buffer (1:1 RRR)</h2>"
+    title_html = ("<h2 style='color: #e0e0e0; background-color: #1e1e1e; "
+                  "padding: 10px;'>Reducing SL Statistics</h2>")
     display(HTML(title_html))
 
-    stats_df = calculate_sl_vs_buffer_statistics(df)
-    html_table = _create_sl_sortable_table(stats_df, "sl-vs-buffer")
+    stats_df = calculate_sl_reduction_statistics(df)
+    html_table = _create_sl_sortable_table(stats_df, "sl-reduction-table")
     display(HTML(html_table))
 
 
