@@ -39,12 +39,16 @@ forex-backtester/
 │       ├── data.csv             # Trading data for this strategy
 │       ├── utils/               # Analysis modules
 │       │   ├── __init__.py
-│       │   └── confirmation_candle.py
+│       │   ├── confirmation_candle.py
+│       │   └── report.py        # Static HTML report builder
 │       └── tests/
-│           └── test_confirmation_candle.py
-├── labs/                        # Jupyter notebooks (one per strategy)
+│           ├── test_confirmation_candle.py
+│           └── test_report.py
+├── labs/                        # Notebooks and report renderers
 │   ├── 5OB1CC.ipynb             # Combined analysis for 5OB1CC strategy
-│   └── 15LS1CC.ipynb            # Analysis for 15LS1CC strategy
+│   ├── 15LS1CC.ipynb            # Analysis for 15LS1CC strategy
+│   ├── render.py                # Renders 15LS1CC to a static HTML page
+│   └── build/                   # Rendered output (gitignored)
 ├── pyproject.toml               # Poetry configuration and dependencies
 └── Makefile                     # Build automation commands
 ```
@@ -53,6 +57,11 @@ forex-backtester/
 
 - Python 3.11 or higher
 - Poetry (for dependency management)
+- [watchexec](https://github.com/watchexec/watchexec) (optional) - only needed
+  for the live-reloading HTML report:
+  ```bash
+  brew install watchexec
+  ```
 
 ## Installation
 
@@ -79,6 +88,56 @@ This will open Jupyter in the current directory, allowing you to navigate to the
 - **5OB1CC.ipynb** - Combined analysis for the 5-minute Order Block strategy
 - **15LS1CC.ipynb** - Analysis for the 15-minute Leg Structure strategy
 
+### Live HTML report (15LS1CC)
+
+The 15LS1CC lab also renders to a single self-contained HTML page, so you can
+read the analysis in a browser without starting a Jupyter kernel. Every table
+recomputes from `data.csv` in about two seconds, which is why there is no
+notebook state to keep warm.
+
+Render once:
+
+```bash
+poetry run python labs/render.py
+open labs/build/15LS1CC.html
+```
+
+Re-render on every save (this is the normal working loop - edit `data.csv` or
+`confirmation_candle.py`, hit save, and the page updates itself):
+
+```bash
+watchexec -w strategies/15LS1CC -e py,csv -- poetry run python labs/render.py
+```
+
+`watchexec` is event-driven, not a timer: it asks the OS to notify it when a
+watched file changes, and idles at ~0% CPU otherwise.
+
+**The page reloads itself only when the data actually changes** - never on a
+timer - and it restores your scroll position and any column sort afterwards, so
+a rebuild does not throw away what you were looking at. Change detection uses
+`fetch()` on `build-id.txt` when the page is served over HTTP; opened as a
+`file://` URL that fetch is blocked by the browser, so it falls back to loading
+`build-id.js` through a `<script>` tag, which `file://` does allow. If neither
+works the page says so in its status line instead of reloading blindly.
+
+Serving the folder gives change-triggered reloads on both paths:
+
+```bash
+python3 -m http.server -d labs/build 8000
+# then open http://localhost:8000/15LS1CC.html
+```
+
+If the CSV is half-written when the watcher fires, the render fails gracefully:
+the page shows a red **Build failed** panel with the traceback, the watcher
+stays alive, and the page recovers on its own once the CSV parses again.
+
+For a frozen snapshot to share, print or screenshot (a self-reloading page never
+settles for a headless browser):
+
+```bash
+poetry run python labs/render.py out.html --no-reload
+```
+
 ## Dependencies
 
 - **jupyter**: Interactive computing environment
@@ -86,6 +145,10 @@ This will open Jupyter in the current directory, allowing you to navigate to the
 - **numpy**: Numerical computing
 - **matplotlib**: Charting and visualization
 - **pytest**: Testing framework
+
+External tools:
+
+- **watchexec** (optional): re-runs `labs/render.py` when a watched file changes
 
 ## Makefile Commands
 

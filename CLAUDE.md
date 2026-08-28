@@ -18,6 +18,8 @@ strategies/<name>/
 
 Notebooks live in `labs/<name>.ipynb` and import from their strategy's utils package via `sys.path.insert(0, '../strategies/<name>')`.
 
+15LS1CC additionally renders to a static HTML page. `strategies/15LS1CC/utils/report.py` holds the page-building logic and `labs/render.py` is a thin entry point, mirroring the notebook/module split. Output goes to `labs/build/` (gitignored). See "Rendering the HTML Report" below.
+
 Current strategies:
 - **5OB1CC** - 5-minute Order Block, 1-minute Confirmation Candle (`strategies/5OB1CC/`)
 - **15LS1CC** - 15-minute Leg Structure, 1-minute Confirmation Candle (`strategies/15LS1CC/`)
@@ -78,7 +80,7 @@ Each strategy has its own `data.csv` inside its `strategies/<name>/` directory.
 6. If Pullback is higher than SL, it means that overall trade could have been profitable but a higher SL was needed than "safe stop"
 7. R column (if not empty) is a number of how many R's this trade achieved (e.g., 10 pips for TP and 3 pips for SL would have achieved 10/3=3 R)
 8. Minimum broker SL is 1.1 pips
-9. Win condition: TP > (RRR ratio x SL)
+9. Win condition: a trade must BOTH survive its stop and reach the target - `Pullback < SL AND TP >= RRR x SL`. Checking only the TP leg scores trades that were stopped out before running to target as wins (the data marks those with a negative R) and inflates every win rate. When a stop is adjusted, both halves use the adjusted value: `Pullback < effective SL AND TP >= RRR x effective SL`
 10. When a trade is entered, only the SL column is known. Pullback and TP are only learned after the trade is finished. Therefore, Pullback and TP columns must not be used for strategy filtering (e.g., "take a trade when Pullback is smaller than SL" does not make sense because Pullback is unknown at entry time)
 
 **Example 1**: SL 3.1 pips, Pullback 2.4 pips and TP 10 pips. When entering a position, safe stop loss was 3.1 pips away from entry. Then price at some point went 2.4 pips against the entry but later recovered and shot 10 pips from entry. Total reward (R) was 10/3.1=3R.
@@ -109,6 +111,7 @@ When building new analysis features, follow this three-file pattern within the s
 ### Reference Implementations
 - **5OB1CC**: `labs/5OB1CC.ipynb`, `strategies/5OB1CC/utils/hours.py`, `strategies/5OB1CC/tests/test_hours.py`
 - **15LS1CC**: `labs/15LS1CC.ipynb`, `strategies/15LS1CC/utils/confirmation_candle.py`, `strategies/15LS1CC/tests/test_confirmation_candle.py`
+- **15LS1CC HTML report**: `labs/render.py`, `strategies/15LS1CC/utils/report.py`, `strategies/15LS1CC/tests/test_report.py`
 
 ## Acceptance Criteria
 
@@ -163,6 +166,58 @@ All analysis tables should follow this standardized column format:
 - **Days %**: `(Days with wins / Total trading days) * 100`
 - Trading days are counted from the filtered dataset, not calendar days
 
+## Rendering the HTML Report
+
+`labs/render.py` builds `labs/build/15LS1CC.html` from `data.csv`. Pair it with a
+file watcher for the normal working loop:
+
+```bash
+brew install watchexec   # one-off
+
+poetry run python labs/render.py                                    # render once
+watchexec -w strategies/15LS1CC -e py,csv -- poetry run python labs/render.py
+poetry run python labs/render.py out.html --no-reload               # frozen snapshot
+```
+
+`watchexec` is event-driven (OS filesystem notifications), not a polling timer.
+
+### Conventions for report sections
+
+Sections are declared in `report.py`'s `SECTIONS` list as
+`(anchor, nav_label, heading, note, builder)`. When adding or changing one:
+
+- **A section anchor and a table's `sort_id` must differ.** Both become DOM ids;
+  a collision makes `getElementById(tableId)` in the sort script return the
+  `<section>` and click-to-sort throws. Convention: anchor `foo`, table
+  `foo-table`. `test_no_duplicate_dom_ids` guards this.
+- **Headings and nav labels are escaped once** by `html.escape`, so write a
+  literal `<`, not `&lt;`. The `note` is inserted raw, so that one does use
+  entities. `test_headings_are_not_double_escaped` guards this.
+- **Verify rendered output in a browser**, not just the HTML string - column
+  widths, overflow and click-to-sort only fail at render time. Headless Chrome
+  over CDP works; a self-reloading page never settles, so screenshot the
+  `--no-reload` build.
+
+### Conventions for stop tables
+
+The SL tables (`SL Range`, `Reducing SL`, `Adding Buffer`, `Adding Buffer When
+SL < 5`, `Fixed SL`, `Pullback Range`) are a family and must stay consistent:
+
+- **One shared win rule.** Every stop scenario goes through
+  `_sl_scenario_statistics`, which takes `(label, effective SL)` pairs. Do not
+  reimplement the win condition in a new table - add a scenario builder instead.
+  Two tables silently drifting apart on this rule is a bug that has already
+  happened once.
+- **First row is labelled `Default`** and means "stops as recorded". Every
+  table's Default row must agree;
+  `test_every_stop_table_opens_with_the_same_default_row` pins that.
+- **Columns are `<label>, Trades, Notation, Win Rate`**, with `Notation` as
+  `"12W - 3L"` and `Win Rate` as `"52.7%"` in separate columns - never combined
+  into one cell.
+- **Row order carries meaning**, so these tables are rendered with
+  `sortable=False` and `first_col_width="50%"` to keep them aligned with each
+  other.
+
 ## Previewing Lab Data
 
 To view analysis results from a notebook without opening Jupyter, run the underlying Python functions directly:
@@ -186,3 +241,19 @@ Each lab notebook has a corresponding utils module inside its strategy directory
 1. Find the strategy directory it imports from (e.g., `labs/15LS1CC.ipynb` -> `strategies/15LS1CC/utils/`)
 2. Add the strategy path to sys.path, then call the calculation functions
 3. Use pandas display options for readable terminal output
+
+For 15LS1CC, `poetry run python labs/render.py` renders every table at once and
+is usually faster than calling functions one by one.
+
+## Acceptance Criteria for Lab Changes
+
+On top of the test rules above, a change to 15LS1CC analysis is not done until:
+
+1. `poetry run python labs/render.py` succeeds and the affected table is correct
+2. The notebook re-executes clean:
+   `poetry run jupyter nbconvert --to notebook --execute --inplace labs/15LS1CC.ipynb`
+   (check no cell has an `error` output)
+3. Notebook cell comments citing figures are re-checked - they go stale silently
+   when the data or the win rule changes
+4. `git diff --stat strategies/15LS1CC/data.csv` is empty, in case a test or a
+   manual check wrote to it
