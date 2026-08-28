@@ -946,7 +946,8 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _create_sl_sortable_table(df: pd.DataFrame, table_id: str,
-                              sortable: bool = True) -> str:
+                              sortable: bool = True,
+                              first_col_width: Optional[str] = None) -> str:
     """
     Build an SL Range table HTML, optionally with click-to-sort headers.
 
@@ -961,6 +962,9 @@ def _create_sl_sortable_table(df: pd.DataFrame, table_id: str,
         sortable: Set False for tables whose row order carries meaning - the
             stop tables read as a progression from Default outwards, which a
             re-sort would scramble.
+        first_col_width: CSS width for the label column (e.g. "50%"). Fixes the
+            table layout so the remaining columns split what is left evenly,
+            which lines several same-shaped tables up with each other.
 
     Returns:
         HTML string with a dark-mode styled table
@@ -1037,16 +1041,20 @@ def _create_sl_sortable_table(df: pd.DataFrame, table_id: str,
         }
     </script>
     """
-    html += f'<table class="analysis-table" id="{table_id}">\n        <thead>\n            <tr>\n'
+    table_style = ' style="table-layout: fixed;"' if first_col_width else ""
+    html += (f'<table class="analysis-table" id="{table_id}"{table_style}>'
+             '\n        <thead>\n            <tr>\n')
 
     for idx, col in enumerate(columns):
+        width_style = (f' style="width: {first_col_width};"'
+                       if idx == 0 and first_col_width else "")
         if col in sortable_cols:
             html += (
-                f'<th class="sortable" title="Sort by win rate (desc)" '
+                f'<th class="sortable" title="Sort by win rate (desc)"{width_style} '
                 f'onclick="sortSlRange(\'{table_id}\', {idx}, this)">{col} ↓</th>'
             )
         else:
-            html += f"<th>{col}</th>"
+            html += f"<th{width_style}>{col}</th>"
 
     html += "\n            </tr>\n        </thead>\n        <tbody>\n"
 
@@ -1075,7 +1083,7 @@ def display_analysis_sl(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_statistics(df)
-    html_table = _create_sl_sortable_table(stats_df, "sl-range-stats", sortable=False)
+    html_table = _create_sl_sortable_table(stats_df, "sl-range-stats", sortable=False, first_col_width="50%")
     display(HTML(html_table))
 
 
@@ -1277,7 +1285,7 @@ def display_analysis_sl_reduction(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_reduction_statistics(df)
-    display(HTML(_create_sl_sortable_table(stats_df, "sl-reduction-table", sortable=False)))
+    display(HTML(_create_sl_sortable_table(stats_df, "sl-reduction-table", sortable=False, first_col_width="50%")))
 
 
 def display_analysis_sl_buffer(df: pd.DataFrame):
@@ -1296,7 +1304,7 @@ def display_analysis_sl_buffer(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_buffer_statistics(df)
-    display(HTML(_create_sl_sortable_table(stats_df, "sl-buffer-table", sortable=False)))
+    display(HTML(_create_sl_sortable_table(stats_df, "sl-buffer-table", sortable=False, first_col_width="50%")))
 
 
 def display_analysis_sl_buffer_small_sl(df: pd.DataFrame):
@@ -1317,7 +1325,7 @@ def display_analysis_sl_buffer_small_sl(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_buffer_small_sl_statistics(df)
-    display(HTML(_create_sl_sortable_table(stats_df, "sl-buffer-small-table", sortable=False)))
+    display(HTML(_create_sl_sortable_table(stats_df, "sl-buffer-small-table", sortable=False, first_col_width="50%")))
 
 
 def display_analysis_sl_fixed(df: pd.DataFrame):

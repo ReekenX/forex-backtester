@@ -1756,6 +1756,32 @@ def test_sl_fixed_sortable_win_rate_only():
             assert f"sortSlRange('sl-fixed-table', {idx}, this)" not in html
 
 
+def test_first_col_width_fixes_the_table_layout():
+    stats = calculate_sl_statistics(get_sample_data())
+    html = _create_sl_sortable_table(stats, "t", sortable=False, first_col_width="50%")
+
+    assert 'style="table-layout: fixed;"' in html
+    assert '<th style="width: 50%;">SL Range</th>' in html
+    # Only the first column is pinned; the rest split what is left.
+    assert html.count('style="width: 50%;"') == 1
+
+
+def test_first_col_width_is_opt_in():
+    stats = calculate_sl_statistics(get_sample_data())
+    html = _create_sl_sortable_table(stats, "t", sortable=False)
+
+    assert 'table-layout: fixed' not in html
+    assert 'style="width:' not in html
+
+
+def test_first_col_width_composes_with_sorting():
+    stats = calculate_sl_statistics(get_sample_data())
+    html = _create_sl_sortable_table(stats, "t", sortable=True, first_col_width="40%")
+
+    assert '<th style="width: 40%;">SL Range</th>' in html
+    assert "sortSlRange('t'" in html
+
+
 def test_every_stop_table_opens_with_the_same_default_row():
     """SL Range, Reducing SL, Adding Buffer, Buffer (SL<5) and Fixed SL all
     start from the recorded stops, so their Default rows must agree."""
@@ -2180,6 +2206,9 @@ def run_all_tests():
         test_sl_fixed_win_rate_matches_notation,
         test_sl_fixed_empty,
         test_sl_fixed_sortable_win_rate_only,
+        test_first_col_width_fixes_the_table_layout,
+        test_first_col_width_is_opt_in,
+        test_first_col_width_composes_with_sorting,
         test_every_stop_table_opens_with_the_same_default_row,
         test_pullback_entry_pips_constant,
         test_pullback_statistics_columns,

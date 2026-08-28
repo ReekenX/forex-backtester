@@ -365,3 +365,19 @@ def test_stop_tables_are_not_sortable_but_others_are():
 
     assert "sortSlRange('pullback-analysis'" in page
     assert "sortAnalysisTable('strategies-1-1-table'" in page
+
+
+def test_stop_tables_share_a_pinned_first_column():
+    """The four stop tables pin their label column so they line up with each
+    other; the other tables keep auto sizing."""
+    page = build_report(get_sample_data(), 'now', 'abc123')
+
+    for table_id in ('sl-range-stats', 'sl-reduction-table',
+                     'sl-buffer-table', 'sl-buffer-small-table'):
+        start = page.index(f'id="{table_id}"')
+        head = page[start:start + 400]
+        assert 'table-layout: fixed' in head, f'{table_id} not fixed-layout'
+        assert 'style="width: 50%;"' in head, f'{table_id} first column not pinned'
+
+    start = page.index('id="pullback-analysis"')
+    assert 'table-layout: fixed' not in page[start:start + 400]
