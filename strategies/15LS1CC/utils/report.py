@@ -44,6 +44,8 @@ POSITIVE = "#4ade80"
 NEGATIVE = "#f87171"
 BORDER = "#404040"
 
+MAX_WIDTH = "1200px"
+
 BUILD_ID_FILENAME = "build-id.txt"
 
 # Seconds between reload checks (poll when served over HTTP, blind reload on file://).
@@ -186,14 +188,17 @@ def _render_summary(df: pd.DataFrame) -> str:
     tones = {"positive": POSITIVE, "negative": NEGATIVE, "neutral": TEXT}
     cards = []
     for label, value, tone in _summary_cards(df):
+        # Long values (the date range) would clip at the 1200px cap, so step the
+        # type down and let that card claim the width it needs.
+        font_size = 18 if len(value) <= 12 else 13
         cards.append(
             f"""<div style="background-color: {BG_PANEL}; border: 1px solid {BORDER};
-                border-radius: 6px; padding: 12px 16px; min-width: 140px; flex: 1 1 140px;">
+                border-radius: 6px; padding: 12px 16px; flex: 1 1 auto;">
                 <div style="color: {TEXT_MUTED}; font-size: 11px; text-transform: uppercase;
-                    letter-spacing: 0.08em; margin-bottom: 6px;">{html.escape(label)}</div>
-                <div style="color: {tones[tone]}; font-size: 18px; font-weight: bold;
-                    white-space: nowrap;">
-                    {html.escape(value)}</div>
+                    letter-spacing: 0.08em; margin-bottom: 6px; white-space: nowrap;">
+                    {html.escape(label)}</div>
+                <div style="color: {tones[tone]}; font-size: {font_size}px; font-weight: bold;
+                    white-space: nowrap;">{html.escape(value)}</div>
             </div>"""
         )
     return (
@@ -302,7 +307,9 @@ def build_report(df: pd.DataFrame, generated_at: str, build_id: str,
         background-color: {BG_PAGE};
         color: {TEXT};
         font-family: 'Courier New', monospace;
-        margin: 0;
+        box-sizing: border-box;
+        max-width: {MAX_WIDTH};
+        margin: 0 auto;
         padding: 24px 28px 60px;
     }}
     a:hover {{ background-color: {BG_RAISED}; color: {TEXT} !important; }}
@@ -352,7 +359,9 @@ def build_error_page(message: str, generated_at: str) -> str:
         background-color: {BG_PAGE};
         color: {TEXT};
         font-family: 'Courier New', monospace;
-        margin: 0;
+        box-sizing: border-box;
+        max-width: {MAX_WIDTH};
+        margin: 0 auto;
         padding: 24px 28px;
     }}
 </style>
