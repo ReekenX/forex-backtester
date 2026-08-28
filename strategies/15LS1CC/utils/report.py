@@ -134,7 +134,7 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "sl-range",
         "SL Range",
         "SL Range Statistics",
-        "Win rate per safe-stop band at 1:1 to 1:4. Win = Pullback &lt; SL AND TP &gt;= RRR x SL.",
+        "Win rate per safe-stop band at 1:1. Win = Pullback &lt; SL AND TP &gt;= SL.",
         _sl_section,
     ),
     (

@@ -899,26 +899,21 @@ SL_RANGES = [
     (f"0-{x}", 0, x) for x in range(5, 11)
 ]
 
-SL_STATISTICS_RRR_RATIOS = [1, 2, 3, 4]
-
-
 def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate win/loss statistics for SL pip ranges.
+    Calculate win/loss statistics for SL pip ranges at 1:1 RRR.
 
-    A trade wins at 1:N RRR only if it BOTH survives its stop and reaches the
-    target: Pullback < SL AND TP >= N * SL. Skipping the survival check would
-    score trades that were stopped out before running to target as wins - the
-    data marks those with a negative R - and inflate every win rate. This
-    matches _calculate_stats and calculate_sl_buffer_impact_statistics.
+    Win: Pullback < SL AND TP >= SL - the trade survived its stop and reached
+    a 1:1 target. Skipping the survival check would score trades that were
+    stopped out before running to target as wins - the data marks those with a
+    negative R - and inflate every win rate. This matches _calculate_stats and
+    calculate_sl_buffer_impact_statistics.
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: SL Range, Trades, and a
-        "Notation (1:N RRR)" / "Win Rate (1:N RRR)" pair per ratio in
-        SL_STATISTICS_RRR_RATIOS
+        DataFrame with columns: SL Range, Trades, Notation, Win Rate
     """
     results = []
 
@@ -926,17 +921,18 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
         range_trades = df[(df['SL'] >= low) & (df['SL'] < high)]
         total = len(range_trades)
 
-        row = {'SL Range': label, 'Trades': total}
-        for rrr in SL_STATISTICS_RRR_RATIOS:
-            wins = len(range_trades[
-                (range_trades['Pullback'] < range_trades['SL'])
-                & (range_trades['TP'] >= rrr * range_trades['SL'])
-            ]) if total else 0
-            win_rate = (wins / total * 100) if total > 0 else 0.0
-            row[f'Notation (1:{rrr} RRR)'] = f"{wins}W - {total - wins}L"
-            row[f'Win Rate (1:{rrr} RRR)'] = f"{win_rate:.1f}%"
+        wins = len(range_trades[
+            (range_trades['Pullback'] < range_trades['SL'])
+            & (range_trades['TP'] >= range_trades['SL'])
+        ]) if total else 0
+        win_rate = (wins / total * 100) if total > 0 else 0.0
 
-        results.append(row)
+        results.append({
+            'SL Range': label,
+            'Trades': total,
+            'Notation': f"{wins}W - {total - wins}L",
+            'Win Rate': f"{win_rate:.1f}%",
+        })
 
     return pd.DataFrame(results)
 

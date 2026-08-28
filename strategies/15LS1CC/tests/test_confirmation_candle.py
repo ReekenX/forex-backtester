@@ -36,7 +36,6 @@ from utils.confirmation_candle import (
     _format_wl,
     SL_RANGES,
     SL_BUFFER_COLS,
-    SL_STATISTICS_RRR_RATIOS,
     calculate_sl_statistics,
     _create_sl_sortable_table,
     calculate_sl_buffer_impact_statistics,
@@ -1106,38 +1105,30 @@ def test_sl_ranges_constant():
 
 
 def test_sl_statistics_columns():
+    """Same column shape as the weekday table."""
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
-    expected = ['SL Range', 'Trades']
-    for rrr in SL_STATISTICS_RRR_RATIOS:
-        expected += [f'Notation (1:{rrr} RRR)', f'Win Rate (1:{rrr} RRR)']
-    assert list(result.columns) == expected
+    assert list(result.columns) == ['SL Range', 'Trades', 'Notation', 'Win Rate']
+    assert list(result.columns)[1:] == list(
+        calculate_weekday_statistics(sample).columns)[1:]
 
 
-def test_sl_statistics_rrr_notation():
-    """RRR win: Pullback < SL AND TP >= ratio * SL. Sample SL/TP:
-    3.5/0, 1.1/12, 2.0/0, 4.0/10, 3.0/0, 5.0/8, 2.5/0, 6.0/15, 8.0/10, 1.5/5.
+def test_sl_statistics_win_needs_a_full_1_1_target():
+    """TP must reach SL, not merely be positive. SL 4, TP 3 is a loss."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02'],
+        'Weekday': ['Monday', 'Tuesday'],
+        'Trade': ['#1', '#1'],
+        'Direction': ['Buy', 'Buy'],
+        'SL': [4.0, 4.0],
+        'Pullback': [1.0, 1.0],
+        'TP': [3.0, 4.0],
+        'R': [0.0, 1.0],
+    })
 
-    Over the full 0-10 band:
-      1:2 wins (TP>=2*SL): idx 1,3,7,9 -> 4 of 10.
-      1:3 wins (TP>=3*SL): idx 1,9 -> 2 of 10.
-      1:4 wins (TP>=4*SL): idx 1 -> 1 of 10.
-    """
-    sample = get_sample_data()
-    result = calculate_sl_statistics(sample)
-    rows = {row['SL Range']: row for _, row in result.iterrows()}
-
-    assert rows['0-10']['Notation (1:2 RRR)'] == '4W - 6L'
-    assert rows['0-10']['Win Rate (1:2 RRR)'] == '40.0%'
-    assert rows['0-10']['Notation (1:3 RRR)'] == '2W - 8L'
-    assert rows['0-10']['Win Rate (1:3 RRR)'] == '20.0%'
-    assert rows['0-10']['Notation (1:4 RRR)'] == '1W - 9L'
-    assert rows['0-10']['Win Rate (1:4 RRR)'] == '10.0%'
-    # Narrower 0-5 band (SL 3.5,1.1,2.0,4.0,3.0,2.5,1.5) drops the 6.0 winner.
-    assert rows['0-5']['Notation (1:2 RRR)'] == '3W - 4L'
-    assert rows['0-5']['Win Rate (1:2 RRR)'] == '42.9%'
-    assert rows['0-5']['Notation (1:3 RRR)'] == '2W - 5L'
-    assert rows['0-5']['Notation (1:4 RRR)'] == '1W - 6L'
+    rows = {r['SL Range']: r for _, r in calculate_sl_statistics(trades).iterrows()}
+    assert rows['0-5']['Notation'] == '1W - 1L'
+    assert rows['0-5']['Win Rate'] == '50.0%'
 
 
 def test_sl_statistics_all_ranges_present():
@@ -1175,14 +1166,14 @@ def test_sl_statistics_notation():
     result = calculate_sl_statistics(sample)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-5']['Notation (1:1 RRR)'] == '3W - 4L'
-    assert rows['0-5']['Win Rate (1:1 RRR)'] == '42.9%'
-    assert rows['0-6']['Notation (1:1 RRR)'] == '4W - 4L'
-    assert rows['0-6']['Win Rate (1:1 RRR)'] == '50.0%'
-    assert rows['0-7']['Notation (1:1 RRR)'] == '5W - 4L'
-    assert rows['0-7']['Win Rate (1:1 RRR)'] == '55.6%'
-    assert rows['0-10']['Notation (1:1 RRR)'] == '6W - 4L'
-    assert rows['0-10']['Win Rate (1:1 RRR)'] == '60.0%'
+    assert rows['0-5']['Notation'] == '3W - 4L'
+    assert rows['0-5']['Win Rate'] == '42.9%'
+    assert rows['0-6']['Notation'] == '4W - 4L'
+    assert rows['0-6']['Win Rate'] == '50.0%'
+    assert rows['0-7']['Notation'] == '5W - 4L'
+    assert rows['0-7']['Win Rate'] == '55.6%'
+    assert rows['0-10']['Notation'] == '6W - 4L'
+    assert rows['0-10']['Win Rate'] == '60.0%'
 
 
 def test_sl_statistics_cumulative_bands():
@@ -1202,9 +1193,8 @@ def test_sl_statistics_cumulative_bands():
 
 
 def test_sl_statistics_requires_surviving_stop():
-    """A trade stopped out before running to target is a loss in every RRR
-    column, even though its TP is far away. The data marks these with a
-    negative R."""
+    """A trade stopped out before running to target is a loss even though its
+    TP is far away. The data marks these with a negative R."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
         'Weekday': ['Monday'],
@@ -1216,17 +1206,14 @@ def test_sl_statistics_requires_surviving_stop():
         'R': [-5.0],
     })
 
-    result = calculate_sl_statistics(trades)
-    rows = {row['SL Range']: row for _, row in result.iterrows()}
-
+    rows = {r['SL Range']: r for _, r in calculate_sl_statistics(trades).iterrows()}
     assert rows['0-5']['Trades'] == 1
-    for rrr in SL_STATISTICS_RRR_RATIOS:
-        assert rows['0-5'][f'Notation (1:{rrr} RRR)'] == '0W - 1L'
-        assert rows['0-5'][f'Win Rate (1:{rrr} RRR)'] == '0.0%'
+    assert rows['0-5']['Notation'] == '0W - 1L'
+    assert rows['0-5']['Win Rate'] == '0.0%'
 
 
 def test_sl_statistics_survivor_wins():
-    """The same trade with a Pullback inside the stop is a win at 1:1-1:4."""
+    """The same trade with a Pullback inside the stop is a win."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
         'Weekday': ['Monday'],
@@ -1238,12 +1225,9 @@ def test_sl_statistics_survivor_wins():
         'R': [5.0],
     })
 
-    result = calculate_sl_statistics(trades)
-    rows = {row['SL Range']: row for _, row in result.iterrows()}
-
-    for rrr in SL_STATISTICS_RRR_RATIOS:
-        assert rows['0-5'][f'Notation (1:{rrr} RRR)'] == '1W - 0L'
-        assert rows['0-5'][f'Win Rate (1:{rrr} RRR)'] == '100.0%'
+    rows = {r['SL Range']: r for _, r in calculate_sl_statistics(trades).iterrows()}
+    assert rows['0-5']['Notation'] == '1W - 0L'
+    assert rows['0-5']['Win Rate'] == '100.0%'
 
 
 def test_sl_statistics_empty():
@@ -1252,9 +1236,8 @@ def test_sl_statistics_empty():
     assert len(result) == len(SL_RANGES)
     for _, row in result.iterrows():
         assert row['Trades'] == 0
-        for rrr in SL_STATISTICS_RRR_RATIOS:
-            assert row[f'Notation (1:{rrr} RRR)'] == '0W - 0L'
-            assert row[f'Win Rate (1:{rrr} RRR)'] == '0.0%'
+        assert row['Notation'] == '0W - 0L'
+        assert row['Win Rate'] == '0.0%'
 
 
 def test_sl_statistics_large_sl():
@@ -1288,23 +1271,20 @@ def test_sl_statistics_no_tp_is_loss():
         'R': [0],
     })
 
-    result = calculate_sl_statistics(trades)
-    rows = {row['SL Range']: row for _, row in result.iterrows()}
-
-    assert rows['0-5']['Notation (1:1 RRR)'] == '0W - 1L'
-    assert rows['0-5']['Win Rate (1:1 RRR)'] == '0.0%'
-    assert rows['0-10']['Notation (1:1 RRR)'] == '0W - 1L'
+    rows = {r['SL Range']: r for _, r in calculate_sl_statistics(trades).iterrows()}
+    assert rows['0-5']['Notation'] == '0W - 1L'
+    assert rows['0-10']['Notation'] == '0W - 1L'
 
 
 def test_sl_sortable_table_notation_headers_clickable():
-    """Only the win-rate columns are click-to-sort. With Notation and Win Rate
-    split apart, the Notation columns carry no percentage and stay plain."""
+    """Only the Win Rate column is click-to-sort; SL Range, Trades and the
+    Notation column carry no percentage and stay plain."""
     sample = get_sample_data()
     stats = calculate_sl_statistics(sample)
     html = _create_sl_sortable_table(stats, "sl-range-stats")
 
     for idx, col in enumerate(stats.columns):
-        if col.startswith("Win Rate"):
+        if col == "Win Rate":
             assert f"sortSlRange('sl-range-stats', {idx}, this)" in html
             assert f"{col} ↓" in html
         else:
@@ -2018,7 +1998,7 @@ def run_all_tests():
         test_weekday_statistics_single_day,
         test_sl_ranges_constant,
         test_sl_statistics_columns,
-        test_sl_statistics_rrr_notation,
+        test_sl_statistics_win_needs_a_full_1_1_target,
         test_sl_statistics_all_ranges_present,
         test_sl_statistics_trade_counts,
         test_sl_statistics_notation,
