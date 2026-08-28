@@ -65,24 +65,24 @@ def _weekday_section(df: pd.DataFrame) -> str:
 
 
 def _sl_section(df: pd.DataFrame) -> str:
-    return _create_sl_sortable_table(calculate_sl_statistics(df), "sl-range-stats")
+    return _create_sl_sortable_table(calculate_sl_statistics(df), "sl-range-stats", sortable=False)
 
 
 def _sl_reduction_section(df: pd.DataFrame) -> str:
     return _create_sl_sortable_table(
-        calculate_sl_reduction_statistics(df), "sl-reduction-table"
+        calculate_sl_reduction_statistics(df), "sl-reduction-table", sortable=False
     )
 
 
 def _sl_buffer_section(df: pd.DataFrame) -> str:
     return _create_sl_sortable_table(
-        calculate_sl_buffer_statistics(df), "sl-buffer-table"
+        calculate_sl_buffer_statistics(df), "sl-buffer-table", sortable=False
     )
 
 
 def _sl_buffer_small_sl_section(df: pd.DataFrame) -> str:
     return _create_sl_sortable_table(
-        calculate_sl_buffer_small_sl_statistics(df), "sl-buffer-small-table"
+        calculate_sl_buffer_small_sl_statistics(df), "sl-buffer-small-table", sortable=False
     )
 
 

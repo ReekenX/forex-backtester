@@ -945,21 +945,25 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
-def _create_sl_sortable_table(df: pd.DataFrame, table_id: str) -> str:
+def _create_sl_sortable_table(df: pd.DataFrame, table_id: str,
+                              sortable: bool = True) -> str:
     """
-    Build an SL Range table HTML with click-to-sort headers on every win-rate
-    column. A column is sortable when its cells carry a win-rate percentage
-    (e.g. "42W - 61L (40.8%)") - this covers both the "Notation*" columns and
-    the buffer columns ("1 pip", "2 pips", "3 pips"). Clicking a header sorts
+    Build an SL Range table HTML, optionally with click-to-sort headers.
+
+    When sortable, a column becomes clickable if its cells carry a win-rate
+    percentage (e.g. "42W - 61L (40.8%)" or a bare "40.8%"). Clicking sorts
     rows by that column's win rate, descending only (each click re-sorts DESC).
 
     Args:
-        df: DataFrame with an 'SL Range' column and one or more win-rate columns
+        df: DataFrame with a label column and one or more win-rate columns
         table_id: Unique DOM id for this table (avoids clashes when several
-            sortable tables render in the same notebook)
+            tables render on the same page)
+        sortable: Set False for tables whose row order carries meaning - the
+            stop tables read as a progression from Default outwards, which a
+            re-sort would scramble.
 
     Returns:
-        HTML string with a sortable, dark-mode styled table
+        HTML string with a dark-mode styled table
     """
     import re
 
@@ -972,7 +976,7 @@ def _create_sl_sortable_table(df: pd.DataFrame, table_id: str) -> str:
     sortable_cols = {
         col for col in columns
         if any(win_rate_re.search(str(v)) for v in df[col])
-    }
+    } if sortable else set()
 
     html = """
     <style>
@@ -1010,6 +1014,10 @@ def _create_sl_sortable_table(df: pd.DataFrame, table_id: str) -> str:
             color: #4ade80;
         }
     </style>
+    """
+
+    if sortable_cols:
+        html += """
     <script>
         function sortSlRange(tableId, colIndex, th) {
             var table = document.getElementById(tableId);
@@ -1056,7 +1064,7 @@ def display_analysis_sl(df: pd.DataFrame):
     """
     Display win/loss statistics broken down by SL pip range.
 
-    Each Notation column header is click-to-sort by win rate, descending.
+    Rows read as a progression from Default outwards, so they are not sortable.
 
     Args:
         df: DataFrame with trading data
@@ -1067,7 +1075,7 @@ def display_analysis_sl(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_statistics(df)
-    html_table = _create_sl_sortable_table(stats_df, "sl-range-stats")
+    html_table = _create_sl_sortable_table(stats_df, "sl-range-stats", sortable=False)
     display(HTML(html_table))
 
 
@@ -1257,7 +1265,7 @@ def display_analysis_sl_reduction(df: pd.DataFrame):
     """
     Display 1:1 win/loss statistics as the safe stop is tightened.
 
-    The Win Rate column header is click-to-sort, descending.
+    Rows read as a progression from Default outwards, so they are not sortable.
 
     Args:
         df: DataFrame with trading data
@@ -1269,14 +1277,14 @@ def display_analysis_sl_reduction(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_reduction_statistics(df)
-    display(HTML(_create_sl_sortable_table(stats_df, "sl-reduction-table")))
+    display(HTML(_create_sl_sortable_table(stats_df, "sl-reduction-table", sortable=False)))
 
 
 def display_analysis_sl_buffer(df: pd.DataFrame):
     """
     Display 1:1 win/loss statistics as the safe stop is padded.
 
-    The Win Rate column header is click-to-sort, descending.
+    Rows read as a progression from Default outwards, so they are not sortable.
 
     Args:
         df: DataFrame with trading data
@@ -1288,14 +1296,14 @@ def display_analysis_sl_buffer(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_buffer_statistics(df)
-    display(HTML(_create_sl_sortable_table(stats_df, "sl-buffer-table")))
+    display(HTML(_create_sl_sortable_table(stats_df, "sl-buffer-table", sortable=False)))
 
 
 def display_analysis_sl_buffer_small_sl(df: pd.DataFrame):
     """
     Display 1:1 win/loss statistics when only the tight stops are padded.
 
-    The Win Rate column header is click-to-sort, descending.
+    Rows read as a progression from Default outwards, so they are not sortable.
 
     Args:
         df: DataFrame with trading data
@@ -1309,7 +1317,7 @@ def display_analysis_sl_buffer_small_sl(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_buffer_small_sl_statistics(df)
-    display(HTML(_create_sl_sortable_table(stats_df, "sl-buffer-small-table")))
+    display(HTML(_create_sl_sortable_table(stats_df, "sl-buffer-small-table", sortable=False)))
 
 
 def display_analysis_sl_fixed(df: pd.DataFrame):

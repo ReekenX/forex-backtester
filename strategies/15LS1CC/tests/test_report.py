@@ -351,3 +351,17 @@ def test_sort_by_win_rate_handles_empty_and_malformed():
     df = pd.DataFrame({'Win Rate': ['10.0%', 'n/a', '90.0%', '50.0%']})
     out = _sort_by_win_rate(df)
     assert list(out['Win Rate']) == ['90.0%', '50.0%', '10.0%', 'n/a']
+
+
+def test_stop_tables_are_not_sortable_but_others_are():
+    """The four stop tables keep their Default-outwards order; Pullback and the
+    Strategies tables stay click-to-sort."""
+    page = build_report(get_sample_data(), 'now', 'abc123')
+
+    for table_id in ('sl-range-stats', 'sl-reduction-table',
+                     'sl-buffer-table', 'sl-buffer-small-table'):
+        assert f'id="{table_id}"' in page, f'{table_id} missing'
+        assert f"sortSlRange('{table_id}'" not in page, f'{table_id} still sortable'
+
+    assert "sortSlRange('pullback-analysis'" in page
+    assert "sortAnalysisTable('strategies-1-1-table'" in page

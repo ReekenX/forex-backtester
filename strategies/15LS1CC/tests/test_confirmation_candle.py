@@ -1286,11 +1286,10 @@ def test_sl_statistics_no_tp_is_loss():
 
 
 def test_sl_sortable_table_notation_headers_clickable():
-    """Only the Win Rate column is click-to-sort; SL Range, Trades and the
-    Notation column carry no percentage and stay plain."""
+    """With sortable on, only the Win Rate column is click-to-sort."""
     sample = get_sample_data()
     stats = calculate_sl_statistics(sample)
-    html = _create_sl_sortable_table(stats, "sl-range-stats")
+    html = _create_sl_sortable_table(stats, "sl-range-stats", sortable=True)
 
     for idx, col in enumerate(stats.columns):
         if col == "Win Rate":
@@ -1299,6 +1298,20 @@ def test_sl_sortable_table_notation_headers_clickable():
         else:
             assert f">{col}</th>" in html
             assert f"sortSlRange('sl-range-stats', {idx}, this)" not in html
+
+
+def test_sl_sortable_table_can_be_turned_off():
+    """sortable=False emits no handlers, no sort script and no arrows."""
+    stats = calculate_sl_statistics(get_sample_data())
+    html = _create_sl_sortable_table(stats, "sl-range-stats", sortable=False)
+
+    assert "onclick" not in html
+    assert "sortSlRange" not in html
+    assert "↓" not in html
+    assert 'class="sortable"' not in html
+    # The data is all still there.
+    for col in stats.columns:
+        assert f">{col}</th>" in html
 
 
 def test_sl_sortable_table_still_sorts_combined_notation_columns():
@@ -1452,14 +1465,12 @@ def test_sl_reduction_empty():
         assert row['Win Rate'] == '0.0%'
 
 
-def test_sl_reduction_sortable_win_rate_only():
+def test_sl_reduction_is_not_sortable():
+    """Row order is the point of this table, so sorting is off."""
     stats = calculate_sl_reduction_statistics(get_sample_data())
-    html = _create_sl_sortable_table(stats, "sl-reduction-table")
-    for idx, col in enumerate(stats.columns):
-        if col == 'Win Rate':
-            assert f"sortSlRange('sl-reduction-table', {idx}, this)" in html
-        else:
-            assert f"sortSlRange('sl-reduction-table', {idx}, this)" not in html
+    html = _create_sl_sortable_table(stats, "sl-reduction-table", sortable=False)
+    assert "onclick" not in html
+    assert "sortSlRange" not in html
 
 
 def test_sl_buffer_pips_constant():
@@ -1542,14 +1553,12 @@ def test_sl_buffer_empty():
         assert row['Win Rate'] == '0.0%'
 
 
-def test_sl_buffer_sortable_win_rate_only():
+def test_sl_buffer_is_not_sortable():
+    """Row order is the point of this table, so sorting is off."""
     stats = calculate_sl_buffer_statistics(get_sample_data())
-    html = _create_sl_sortable_table(stats, "sl-buffer-table")
-    for idx, col in enumerate(stats.columns):
-        if col == 'Win Rate':
-            assert f"sortSlRange('sl-buffer-table', {idx}, this)" in html
-        else:
-            assert f"sortSlRange('sl-buffer-table', {idx}, this)" not in html
+    html = _create_sl_sortable_table(stats, "sl-buffer-table", sortable=False)
+    assert "onclick" not in html
+    assert "sortSlRange" not in html
 
 
 def test_sl_buffer_small_sl_threshold_constant():
@@ -1651,14 +1660,12 @@ def test_sl_buffer_small_sl_empty():
         assert row['Notation'] == '0W - 0L'
 
 
-def test_sl_buffer_small_sl_sortable_win_rate_only():
+def test_sl_buffer_small_sl_is_not_sortable():
+    """Row order is the point of this table, so sorting is off."""
     stats = calculate_sl_buffer_small_sl_statistics(get_sample_data())
-    html = _create_sl_sortable_table(stats, "sl-buffer-small-table")
-    for idx, col in enumerate(stats.columns):
-        if col == 'Win Rate':
-            assert f"sortSlRange('sl-buffer-small-table', {idx}, this)" in html
-        else:
-            assert f"sortSlRange('sl-buffer-small-table', {idx}, this)" not in html
+    html = _create_sl_sortable_table(stats, "sl-buffer-small-table", sortable=False)
+    assert "onclick" not in html
+    assert "sortSlRange" not in html
 
 
 def test_sl_fixed_pips_constant():
@@ -2133,6 +2140,7 @@ def run_all_tests():
         test_sl_statistics_large_sl,
         test_sl_statistics_no_tp_is_loss,
         test_sl_sortable_table_notation_headers_clickable,
+        test_sl_sortable_table_can_be_turned_off,
         test_sl_sortable_table_still_sorts_combined_notation_columns,
         test_sl_sortable_table_uses_given_id,
         test_sl_sortable_table_sorts_descending,
@@ -2146,7 +2154,7 @@ def run_all_tests():
         test_sl_reduction_win_rate_matches_notation,
         test_sl_reduction_zero_matches_the_unreduced_rule,
         test_sl_reduction_empty,
-        test_sl_reduction_sortable_win_rate_only,
+        test_sl_reduction_is_not_sortable,
         test_sl_buffer_pips_constant,
         test_sl_buffer_columns_and_rows,
         test_sl_buffer_zero_row_matches_reduction_zero_row,
@@ -2154,7 +2162,7 @@ def run_all_tests():
         test_sl_buffer_target_moves_out_with_the_stop,
         test_sl_buffer_win_rate_matches_notation,
         test_sl_buffer_empty,
-        test_sl_buffer_sortable_win_rate_only,
+        test_sl_buffer_is_not_sortable,
         test_sl_buffer_small_sl_threshold_constant,
         test_sl_buffer_small_sl_columns_and_rows,
         test_sl_buffer_small_sl_zero_row_matches_the_other_tables,
@@ -2163,7 +2171,7 @@ def run_all_tests():
         test_sl_buffer_small_sl_threshold_is_exclusive,
         test_sl_buffer_small_sl_win_rate_matches_notation,
         test_sl_buffer_small_sl_empty,
-        test_sl_buffer_small_sl_sortable_win_rate_only,
+        test_sl_buffer_small_sl_is_not_sortable,
         test_sl_fixed_pips_constant,
         test_sl_fixed_columns_and_rows,
         test_sl_fixed_default_row_matches_the_other_tables,
