@@ -1097,7 +1097,7 @@ SL_BUFFER_PIPS = [0, 1, 2, 3, 4, 5]
 SL_BUFFER_SMALL_SL_THRESHOLD = 5.0
 
 # Stop sizes to substitute for every trade's recorded SL.
-SL_FIXED_PIPS = [3, 4, 5, 6, 7]
+SL_FIXED_PIPS = [3, 4, 5, 6, 7, 8, 9, 10]
 
 
 def _pip_label(pips: int) -> str:

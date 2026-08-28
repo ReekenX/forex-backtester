@@ -1669,15 +1669,16 @@ def test_sl_buffer_small_sl_is_not_sortable():
 
 
 def test_sl_fixed_pips_constant():
-    """3 to 7 pips, incremented by 1."""
-    assert SL_FIXED_PIPS == [3, 4, 5, 6, 7]
+    """3 to 10 pips, incremented by 1."""
+    assert SL_FIXED_PIPS == [3, 4, 5, 6, 7, 8, 9, 10]
 
 
 def test_sl_fixed_columns_and_rows():
     result = calculate_sl_fixed_statistics(get_sample_data())
     assert list(result.columns) == ['Fixed SL', 'Trades', 'Notation', 'Win Rate']
     assert list(result['Fixed SL']) == [
-        'Default', '3 pips', '4 pips', '5 pips', '6 pips', '7 pips']
+        'Default', '3 pips', '4 pips', '5 pips', '6 pips', '7 pips',
+        '8 pips', '9 pips', '10 pips']
     assert (result['Trades'] == 10).all()
 
 
