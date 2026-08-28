@@ -7,10 +7,12 @@ Jupyter kernel. Pair it with a file watcher to get a live-updating page:
 
     watchexec -w strategies/15LS1CC -e py,csv -- poetry run python labs/render.py
 
-The page reloads itself when the build id changes. Served over HTTP it polls
-build-id.txt and reloads only on a real change; opened as a file:// URL that
-poll is blocked by the browser, so it falls back to a timed reload. Either way
-the scroll position is preserved across reloads.
+The page reloads itself only when the build id actually changes - never on a
+timer. Over http:// it polls build-id.txt with fetch(); as a file:// URL that
+fetch is blocked by the browser, so it loads build-id.js through a <script> tag
+instead, which file:// does allow. Sort state and scroll position are saved to
+sessionStorage and replayed after the reload, so a rebuild never throws away a
+column you sorted.
 """
 
 import hashlib
@@ -47,10 +49,12 @@ BORDER = "#404040"
 MAX_WIDTH = "1200px"
 
 BUILD_ID_FILENAME = "build-id.txt"
+# Same id as a script, so file:// pages can read it: fetch() is blocked there by
+# the browser, but a <script src> with a cache-busting query still loads.
+BUILD_ID_JS_FILENAME = "build-id.js"
 
-# Seconds between reload checks (poll when served over HTTP, blind reload on file://).
+# Milliseconds between change checks. The page only reloads on a real change.
 POLL_INTERVAL_MS = 1000
-FALLBACK_RELOAD_MS = 2000
 
 
 def _weekday_section(df: pd.DataFrame) -> str:
@@ -232,45 +236,101 @@ def _render_section(anchor: str, heading: str, note: str, body: str) -> str:
 
 def _reload_script(build_id: str) -> str:
     """
-    Reload the page when the build id changes.
+    Reload the page only when the build id actually changes, and put the view
+    back the way the reader left it.
 
-    Over HTTP, poll build-id.txt and reload only on a real change. On file://
-    the fetch is blocked, so fall back to a timed reload. Scroll position is
-    saved either way so the page does not jump.
+    Change detection tries fetch() first (works over http://), then falls back
+    to loading build-id.js through a <script> tag, which is the one way a
+    file:// page can read a sibling file. If neither works the page simply stops
+    watching rather than reloading on a timer.
+
+    Sort state and scroll position are saved to sessionStorage and replayed
+    after load, so a rebuild does not throw away a column the reader sorted.
+    Both table sorts are descending-only and idempotent, so replaying one click
+    on the same header restores the order exactly.
     """
     return f"""<script>
 (function () {{
     var BUILD_ID = "{build_id}";
-    var KEY = "15ls1cc-scroll";
-    try {{
-        var saved = sessionStorage.getItem(KEY);
-        if (saved !== null) window.scrollTo(0, parseInt(saved, 10) || 0);
-        window.addEventListener("beforeunload", function () {{
-            try {{ sessionStorage.setItem(KEY, String(window.scrollY)); }} catch (e) {{}}
-        }});
-    }} catch (e) {{}}
+    var SCROLL_KEY = "15ls1cc-scroll";
+    var SORT_KEY = "15ls1cc-sorts";
+    var POLL = {POLL_INTERVAL_MS};
 
     var badge = document.getElementById("reload-mode");
     function setMode(text) {{ if (badge) badge.textContent = text; }}
 
-    function poll() {{
+    function readSorts() {{
+        try {{ return JSON.parse(sessionStorage.getItem(SORT_KEY)) || {{}}; }}
+        catch (e) {{ return {{}}; }}
+    }}
+    function writeSorts(v) {{
+        try {{ sessionStorage.setItem(SORT_KEY, JSON.stringify(v)); }} catch (e) {{}}
+    }}
+
+    // Remember which header the reader sorted by, per table.
+    document.addEventListener("click", function (ev) {{
+        var el = ev.target;
+        var th = el && el.closest ? el.closest("th.sortable") : null;
+        if (!th) return;
+        var table = th.closest("table");
+        if (!table || !table.id) return;
+        var sorts = readSorts();
+        sorts[table.id] = th.cellIndex;
+        writeSorts(sorts);
+    }}, true);
+
+    // Replay those sorts on load.
+    var sorts = readSorts();
+    Object.keys(sorts).forEach(function (id) {{
+        var table = document.getElementById(id);
+        if (!table || !table.tHead || !table.tHead.rows.length) return;
+        var th = table.tHead.rows[0].cells[sorts[id]];
+        if (th && th.classList.contains("sortable")) th.click();
+    }});
+
+    // Restore scroll last, so re-sorting cannot shift it.
+    try {{
+        var y = sessionStorage.getItem(SCROLL_KEY);
+        if (y !== null) window.scrollTo(0, parseInt(y, 10) || 0);
+        window.addEventListener("beforeunload", function () {{
+            try {{ sessionStorage.setItem(SCROLL_KEY, String(window.scrollY)); }} catch (e) {{}}
+        }});
+    }} catch (e) {{}}
+
+    function changed(id) {{ return id && id !== BUILD_ID; }}
+
+    function pollOverHttp() {{
         fetch("{BUILD_ID_FILENAME}?t=" + Date.now(), {{ cache: "no-store" }})
             .then(function (r) {{
                 if (!r.ok) throw new Error("bad status");
                 return r.text();
             }})
             .then(function (id) {{
-                id = id.trim();
-                if (id && id !== BUILD_ID) {{ location.reload(); return; }}
+                if (changed(id.trim())) {{ location.reload(); return; }}
                 setMode("watching for changes");
-                setTimeout(poll, {POLL_INTERVAL_MS});
+                setTimeout(pollOverHttp, POLL);
             }})
-            .catch(function () {{
-                setMode("reloading every {FALLBACK_RELOAD_MS}ms (open over http:// to poll instead)");
-                setTimeout(function () {{ location.reload(); }}, {FALLBACK_RELOAD_MS});
-            }});
+            .catch(probeOverFile);
     }}
-    poll();
+
+    function probeOverFile() {{
+        var s = document.createElement("script");
+        s.src = "{BUILD_ID_JS_FILENAME}?t=" + Date.now();
+        s.onload = function () {{
+            s.remove();
+            if (changed(window.__LAB_BUILD_ID__)) {{ location.reload(); return; }}
+            setMode("watching for changes (file://)");
+            setTimeout(probeOverFile, POLL);
+        }};
+        s.onerror = function () {{
+            s.remove();
+            setMode("auto-reload unavailable - refresh manually, "
+                    + "or serve the folder over http:// (see labs/render.py)");
+        }};
+        document.head.appendChild(s);
+    }}
+
+    pollOverHttp();
 }})();
 </script>"""
 
@@ -339,6 +399,13 @@ def build_report(df: pd.DataFrame, generated_at: str, build_id: str,
 </html>"""
 
 
+def _write_build_id(out_dir, build_id: str) -> None:
+    """Write the build id twice: as text for fetch(), as JS for file:// pages."""
+    (out_dir / BUILD_ID_FILENAME).write_text(build_id, encoding="utf-8")
+    (out_dir / BUILD_ID_JS_FILENAME).write_text(
+        f'window.__LAB_BUILD_ID__ = "{build_id}";\n', encoding="utf-8")
+
+
 def build_error_page(message: str, generated_at: str) -> str:
     """
     Page shown when the CSV cannot be read or the tables cannot be built.
@@ -386,7 +453,7 @@ def render_error_to_file(message: str, out_path, generated_at: str) -> str:
     build_id = hashlib.sha256(message.encode("utf-8")).hexdigest()[:12]
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(build_error_page(message, generated_at), encoding="utf-8")
-    (out_path.parent / BUILD_ID_FILENAME).write_text(build_id, encoding="utf-8")
+    _write_build_id(out_path.parent, build_id)
     return build_id
 
 
@@ -408,5 +475,5 @@ def render_to_file(df: pd.DataFrame, out_path, generated_at: str,
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
         build_report(df, generated_at, build_id, live_reload), encoding="utf-8")
-    (out_path.parent / BUILD_ID_FILENAME).write_text(build_id, encoding="utf-8")
+    _write_build_id(out_path.parent, build_id)
     return build_id

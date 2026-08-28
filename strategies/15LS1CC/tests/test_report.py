@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 from utils.confirmation_candle import load_data  # noqa: E402
 from utils.report import (  # noqa: E402
     BUILD_ID_FILENAME,
+    BUILD_ID_JS_FILENAME,
     SECTIONS,
     build_error_page,
     build_report,
@@ -145,6 +146,42 @@ def test_live_reload_script_present_by_default():
     assert 'location.reload()' in html
 
 
+def test_reload_never_fires_on_a_timer():
+    """Every location.reload() must sit behind a build-id comparison. A blind
+    timed reload would wipe the reader's column sort every few seconds."""
+    html = build_report(get_sample_data(), 'now', 'abc123')
+    script = html[html.index('<script>'):]
+    # The only reloads are inside `if (changed(...))` guards.
+    assert script.count('location.reload()') == 2
+    assert script.count('if (changed(') == 2
+    # No setTimeout schedules a reload directly.
+    assert 'setTimeout(function () { location.reload()' not in script
+    assert 'location.reload(); }' not in script
+
+
+def test_reload_script_probes_both_transports():
+    """fetch() for http://, a <script> tag for file:// where fetch is blocked."""
+    html = build_report(get_sample_data(), 'now', 'abc123')
+    assert f'fetch("{BUILD_ID_FILENAME}?t="' in html
+    assert f'"{BUILD_ID_JS_FILENAME}?t="' in html
+    assert 'window.__LAB_BUILD_ID__' in html
+
+
+def test_reload_script_persists_sort_and_scroll():
+    html = build_report(get_sample_data(), 'now', 'abc123')
+    assert '15ls1cc-sorts' in html
+    assert '15ls1cc-scroll' in html
+    # Sorts are captured from header clicks and replayed by clicking again.
+    assert 'th.sortable' in html
+    assert 'th.cellIndex' in html
+
+
+def test_reload_script_reports_when_it_cannot_watch():
+    """If neither transport works the page must say so, not sit silently."""
+    html = build_report(get_sample_data(), 'now', 'abc123')
+    assert 'auto-reload unavailable' in html
+
+
 def test_no_reload_produces_a_frozen_page():
     """A reloading page never settles for a headless browser or a PDF print."""
     html = build_report(get_sample_data(), 'now', 'abc123', live_reload=False)
@@ -163,6 +200,10 @@ def test_render_to_file_writes_html_and_build_id(tmp_path):
     assert sidecar.exists()
     assert sidecar.read_text() == build_id
     assert build_id in out.read_text()
+
+    js = out.parent / BUILD_ID_JS_FILENAME
+    assert js.exists()
+    assert js.read_text().strip() == f'window.__LAB_BUILD_ID__ = "{build_id}";' 
 
 
 def test_render_to_file_rewrites_on_second_call(tmp_path):
@@ -219,6 +260,7 @@ def test_render_error_to_file_bumps_build_id(tmp_path):
 
     assert err_id != good_id
     assert (out.parent / BUILD_ID_FILENAME).read_text() == err_id
+    assert err_id in (out.parent / BUILD_ID_JS_FILENAME).read_text()
     assert 'Build failed' in out.read_text()
 
 

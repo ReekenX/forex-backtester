@@ -7,10 +7,12 @@ Live-reloading workflow (watchexec re-runs this on every save):
 
     watchexec -w strategies/15LS1CC -e py,csv -- poetry run python labs/render.py
 
-Open labs/build/15LS1CC.html directly, or serve the directory to get
-change-triggered reloads instead of timed ones:
+Open labs/build/15LS1CC.html directly, or serve the directory:
 
     python3 -m http.server -d labs/build 8000
+
+Either way the page reloads only when the data actually changes, and restores
+your column sort and scroll position afterwards.
 
 Pass --no-reload for a frozen snapshot (sharing, printing to PDF, screenshots).
 """
