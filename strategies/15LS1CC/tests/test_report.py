@@ -63,11 +63,27 @@ def test_build_report_is_a_full_document():
 
 
 def test_build_report_contains_every_section():
-    html = build_report(get_sample_data(), '2026-08-28 10:00:00', 'abc123')
-    for anchor, _, heading, _, _ in SECTIONS:
-        assert f'id="{anchor}"' in html, f'missing section {anchor}'
-        assert f'href="#{anchor}"' in html, f'missing nav link for {anchor}'
-        assert heading in html, f'missing heading {heading}'
+    import html as html_mod
+
+    page = build_report(get_sample_data(), '2026-08-28 10:00:00', 'abc123')
+    for anchor, label, heading, _, _ in SECTIONS:
+        assert f'id="{anchor}"' in page, f'missing section {anchor}'
+        assert f'href="#{anchor}"' in page, f'missing nav link for {anchor}'
+        # Headings and nav labels are escaped once on the way in, so compare
+        # against the escaped form (a heading may contain '<').
+        assert html_mod.escape(heading) in page, f'missing heading {heading}'
+        assert html_mod.escape(label) in page, f'missing nav label {label}'
+
+
+def test_headings_are_not_double_escaped():
+    """Headings and nav labels pass through html.escape, so they must be
+    written as literal text, not pre-escaped entities."""
+    page = build_report(get_sample_data(), 'now', 'abc123')
+    assert '&amp;lt;' not in page
+    assert '&amp;gt;' not in page
+    for _, label, heading, _, _ in SECTIONS:
+        assert '&lt;' not in label and '&lt;' not in heading, (
+            f'pre-escaped entity in {label!r} / {heading!r}')
 
 
 def test_sections_are_uniquely_anchored():

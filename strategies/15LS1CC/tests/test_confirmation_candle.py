@@ -36,9 +36,11 @@ from utils.confirmation_candle import (
     _format_wl,
     SL_RANGES,
     SL_BUFFER_PIPS,
+    SL_BUFFER_SMALL_SL_THRESHOLD,
     SL_REDUCTION_PIPS,
     calculate_sl_statistics,
     _create_sl_sortable_table,
+    calculate_sl_buffer_small_sl_statistics,
     calculate_sl_buffer_statistics,
     calculate_sl_reduction_statistics,
     PULLBACK_ENTRY_PIPS,
@@ -1543,6 +1545,115 @@ def test_sl_buffer_sortable_win_rate_only():
             assert f"sortSlRange('sl-buffer-table', {idx}, this)" not in html
 
 
+def test_sl_buffer_small_sl_threshold_constant():
+    assert SL_BUFFER_SMALL_SL_THRESHOLD == 5.0
+
+
+def test_sl_buffer_small_sl_columns_and_rows():
+    result = calculate_sl_buffer_small_sl_statistics(get_sample_data())
+    assert list(result.columns) == ['SL Buffer', 'Trades', 'Notation', 'Win Rate']
+    assert list(result['SL Buffer']) == [
+        '0 pips', '1 pip', '2 pips', '3 pips', '4 pips', '5 pips']
+    # Wide-stop trades are left alone, not dropped.
+    assert (result['Trades'] == 10).all()
+
+
+def test_sl_buffer_small_sl_zero_row_matches_the_other_tables():
+    sample = get_sample_data()
+    small = calculate_sl_buffer_small_sl_statistics(sample).iloc[0]
+    plain = calculate_sl_buffer_statistics(sample).iloc[0]
+    assert small['Notation'] == plain['Notation']
+    assert small['Win Rate'] == plain['Win Rate']
+
+
+def test_sl_buffer_small_sl_leaves_wide_stops_alone():
+    """SL 6.0 (>= 5.0) keeps its stop, so padding never rescues it. The same
+    trade in the unconditional table is saved at +1."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        'Direction': ['Buy'],
+        'SL': [6.0],
+        'Pullback': [6.5],
+        'TP': [20.0],
+        'R': [-3.0],
+    })
+
+    small = {r['SL Buffer']: r for _, r in
+             calculate_sl_buffer_small_sl_statistics(trades).iterrows()}
+    plain = {r['SL Buffer']: r for _, r in
+             calculate_sl_buffer_statistics(trades).iterrows()}
+
+    assert small['1 pip']['Notation'] == '0W - 1L'   # stop stays 6.0
+    assert small['5 pips']['Notation'] == '0W - 1L'
+    assert plain['1 pip']['Notation'] == '1W - 0L'   # stop widens to 7.0
+
+
+def test_sl_buffer_small_sl_pads_tight_stops():
+    """SL 3.0 (< 5.0) does get the buffer, matching the unconditional table."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        'Direction': ['Buy'],
+        'SL': [3.0],
+        'Pullback': [3.5],
+        'TP': [6.0],
+        'R': [-2.0],
+    })
+
+    small = {r['SL Buffer']: r for _, r in
+             calculate_sl_buffer_small_sl_statistics(trades).iterrows()}
+    assert small['0 pips']['Notation'] == '0W - 1L'
+    assert small['1 pip']['Notation'] == '1W - 0L'
+
+
+def test_sl_buffer_small_sl_threshold_is_exclusive():
+    """A stop of exactly 5.0 is 'wide' and keeps its recorded value."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02'],
+        'Weekday': ['Monday', 'Tuesday'],
+        'Trade': ['#1', '#1'],
+        'Direction': ['Buy', 'Buy'],
+        'SL': [5.0, 4.9],
+        'Pullback': [5.2, 5.2],
+        'TP': [20.0, 20.0],
+        'R': [-3.0, -3.0],
+    })
+
+    rows = {r['SL Buffer']: r for _, r in
+            calculate_sl_buffer_small_sl_statistics(trades).iterrows()}
+    # +1: the 4.9 stop becomes 5.9 and survives the 5.2 pullback; the 5.0 stop
+    # is untouched and does not.
+    assert rows['1 pip']['Notation'] == '1W - 1L'
+
+
+def test_sl_buffer_small_sl_win_rate_matches_notation():
+    result = calculate_sl_buffer_small_sl_statistics(get_sample_data())
+    for _, row in result.iterrows():
+        wins = int(row['Notation'].split('W')[0])
+        assert row['Win Rate'] == f"{wins / row['Trades'] * 100:.1f}%"
+
+
+def test_sl_buffer_small_sl_empty():
+    result = calculate_sl_buffer_small_sl_statistics(get_empty_data())
+    assert len(result) == len(SL_BUFFER_PIPS)
+    for _, row in result.iterrows():
+        assert row['Trades'] == 0
+        assert row['Notation'] == '0W - 0L'
+
+
+def test_sl_buffer_small_sl_sortable_win_rate_only():
+    stats = calculate_sl_buffer_small_sl_statistics(get_sample_data())
+    html = _create_sl_sortable_table(stats, "sl-buffer-small-table")
+    for idx, col in enumerate(stats.columns):
+        if col == 'Win Rate':
+            assert f"sortSlRange('sl-buffer-small-table', {idx}, this)" in html
+        else:
+            assert f"sortSlRange('sl-buffer-small-table', {idx}, this)" not in html
+
+
 def test_pullback_entry_pips_constant():
     """Pullback entry levels are 0, 1, 2 and 3 pips."""
     assert PULLBACK_ENTRY_PIPS == [0, 1, 2, 3]
@@ -1927,6 +2038,15 @@ def run_all_tests():
         test_sl_buffer_win_rate_matches_notation,
         test_sl_buffer_empty,
         test_sl_buffer_sortable_win_rate_only,
+        test_sl_buffer_small_sl_threshold_constant,
+        test_sl_buffer_small_sl_columns_and_rows,
+        test_sl_buffer_small_sl_zero_row_matches_the_other_tables,
+        test_sl_buffer_small_sl_leaves_wide_stops_alone,
+        test_sl_buffer_small_sl_pads_tight_stops,
+        test_sl_buffer_small_sl_threshold_is_exclusive,
+        test_sl_buffer_small_sl_win_rate_matches_notation,
+        test_sl_buffer_small_sl_empty,
+        test_sl_buffer_small_sl_sortable_win_rate_only,
         test_pullback_entry_pips_constant,
         test_pullback_statistics_columns,
         test_pullback_statistics_levels_present,

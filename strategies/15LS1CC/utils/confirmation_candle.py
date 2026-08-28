@@ -1068,14 +1068,17 @@ SL_REDUCTION_PIPS = [0, 1, 2, 3, 4]
 # Pips to pad the safe stop with. 0 means the stop is left as recorded.
 SL_BUFFER_PIPS = [0, 1, 2, 3, 4, 5]
 
+# Only stops strictly below this get padded in the small-SL buffer table.
+SL_BUFFER_SMALL_SL_THRESHOLD = 5.0
+
 
 def _pip_label(pips: int) -> str:
     """Render a pip count for a table cell: '0 pips', '1 pip', '2 pips'."""
     return f"{pips} pip" if pips == 1 else f"{pips} pips"
 
 
-def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float],
-                         column: str) -> pd.DataFrame:
+def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float], column: str,
+                         apply_below: Optional[float] = None) -> pd.DataFrame:
     """
     Score every trade at 1:1 with each stop adjustment applied.
 
@@ -1084,13 +1087,16 @@ def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float],
     A trade wins when it survives that stop and reaches a 1:1 target on it:
         Pullback < effective SL   AND   TP >= effective SL
 
-    Both the reduction and the buffer table go through here so the two can
-    never drift apart on the win rule.
+    Every shift table goes through here so they cannot drift apart on the win
+    rule.
 
     Args:
         df: DataFrame with trading data
         shifts: Pip adjustments to apply to every trade's SL
         column: Name for the leading column (e.g. 'SL Reduction')
+        apply_below: When set, only trades whose SL is strictly below this are
+            adjusted; the rest keep their recorded stop. Every trade is still
+            scored either way, so the Trades count does not change.
 
     Returns:
         DataFrame with columns: <column>, Trades, Notation, Win Rate
@@ -1099,7 +1105,11 @@ def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float],
     results = []
 
     for shift in shifts:
-        effective_sl = df['SL'] + shift
+        shifted = df['SL'] + shift
+        effective_sl = (
+            shifted if apply_below is None
+            else df['SL'].where(df['SL'] >= apply_below, shifted)
+        )
         wins = int((
             (df['Pullback'] < effective_sl) & (df['TP'] >= effective_sl)
         ).sum()) if total else 0
@@ -1164,6 +1174,30 @@ def calculate_sl_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return _sl_shift_statistics(df, SL_BUFFER_PIPS, 'SL Buffer')
 
 
+def calculate_sl_buffer_small_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate 1:1 win/loss statistics for padding only the tight stops.
+
+    Same as calculate_sl_buffer_statistics, except the buffer is applied only
+    to trades whose safe stop is below SL_BUFFER_SMALL_SL_THRESHOLD pips.
+    Trades at or above that keep their recorded stop, on the reasoning that a
+    stop that is already wide does not need the extra room and would only pay
+    for it with a further-away target.
+
+    Every trade is still scored, so the Trades count matches the other tables.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with columns: SL Buffer, Trades, Notation, Win Rate
+    """
+    return _sl_shift_statistics(
+        df, SL_BUFFER_PIPS, 'SL Buffer',
+        apply_below=SL_BUFFER_SMALL_SL_THRESHOLD,
+    )
+
+
 def display_analysis_sl_reduction(df: pd.DataFrame):
     """
     Display 1:1 win/loss statistics as the safe stop is tightened.
@@ -1200,6 +1234,27 @@ def display_analysis_sl_buffer(df: pd.DataFrame):
 
     stats_df = calculate_sl_buffer_statistics(df)
     display(HTML(_create_sl_sortable_table(stats_df, "sl-buffer-table")))
+
+
+def display_analysis_sl_buffer_small_sl(df: pd.DataFrame):
+    """
+    Display 1:1 win/loss statistics when only the tight stops are padded.
+
+    The Win Rate column header is click-to-sort, descending.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    threshold = f"{SL_BUFFER_SMALL_SL_THRESHOLD:g}"
+    title_html = ("<h2 style='color: #e0e0e0; background-color: #1e1e1e; "
+                  f"padding: 10px;'>Adding Buffer To SL When SL &lt; {threshold} "
+                  "Statistics</h2>")
+    display(HTML(title_html))
+
+    stats_df = calculate_sl_buffer_small_sl_statistics(df)
+    display(HTML(_create_sl_sortable_table(stats_df, "sl-buffer-small-table")))
 
 
 PULLBACK_ENTRY_PIPS = [0, 1, 2, 3]

@@ -27,6 +27,7 @@ from utils.confirmation_candle import (
     _create_sl_sortable_table,
     calculate_pullback_statistics,
     calculate_sl_statistics,
+    calculate_sl_buffer_small_sl_statistics,
     calculate_sl_buffer_statistics,
     calculate_sl_reduction_statistics,
     calculate_tp_statistics,
@@ -75,6 +76,12 @@ def _sl_reduction_section(df: pd.DataFrame) -> str:
 def _sl_buffer_section(df: pd.DataFrame) -> str:
     return _create_sl_sortable_table(
         calculate_sl_buffer_statistics(df), "sl-buffer-table"
+    )
+
+
+def _sl_buffer_small_sl_section(df: pd.DataFrame) -> str:
+    return _create_sl_sortable_table(
+        calculate_sl_buffer_small_sl_statistics(df), "sl-buffer-small-table"
     )
 
 
@@ -152,6 +159,14 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "The mirror of the table above - every stop padded by N pips: "
         "win = Pullback &lt; SL + N AND TP &gt;= SL + N.",
         _sl_buffer_section,
+    ),
+    (
+        "sl-buffer-small",
+        "Adding Buffer (SL < 5)",
+        "Adding Buffer To SL When SL < 5 Statistics",
+        "The same buffer, but only on stops under 5 pips - trades with a stop of "
+        "5.0 or wider keep it as recorded. All trades are still scored.",
+        _sl_buffer_small_sl_section,
     ),
     (
         "tp-range",
