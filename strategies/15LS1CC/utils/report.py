@@ -192,18 +192,20 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         _tp_section,
     ),
     (
+        "pullback",
+        "Pullback",
+        "Pullback Range Statistics",
+        "Filling a limit order N pips into the pullback instead of taking the "
+        "signal. Half fills at half the stop. M counts winners the limit never "
+        "filled, so they are excluded from Trades and Win Rate.",
+        _pullback_section,
+    ),
+    (
         "r-distribution",
         "R Distribution",
         "R Distribution",
         "Cumulative: a trade reaching 3R also passed through 1R and 2R.",
         create_r_histogram_combined,
-    ),
-    (
-        "pullback",
-        "Pullback",
-        "Pullback Range Statistics",
-        "Entering on a pullback of 0 / 1 / 2 / 3 pips instead of at the signal.",
-        _pullback_section,
     ),
 ]
 
