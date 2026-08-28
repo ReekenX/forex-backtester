@@ -13,7 +13,12 @@ import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
-from utils.confirmation_candle import load_data  # noqa: E402
+from utils.confirmation_candle import (  # noqa: E402
+    RRR_RATIOS,
+    _calculate_buffer_statistics_filtered,
+    get_buffer_strategies,
+    load_data,
+)
 from utils.report import (  # noqa: E402
     BUILD_ID_FILENAME,
     BUILD_ID_JS_FILENAME,
@@ -23,6 +28,7 @@ from utils.report import (  # noqa: E402
     compute_build_id,
     render_error_to_file,
     render_to_file,
+    _sort_by_win_rate,
     _summary_cards,
 )
 
@@ -273,3 +279,59 @@ def test_render_error_then_recover(tmp_path):
     render_to_file(get_sample_data(), out, 'now')
     assert 'Build failed' not in out.read_text()
     assert 'Weekday Statistics' in out.read_text()
+
+
+def test_no_duplicate_dom_ids():
+    """A section anchor must never collide with a table's sort id: the sort
+    script does getElementById(tableId) and would get the <section> instead."""
+    import re
+    from collections import Counter
+
+    html = build_report(get_sample_data(), 'now', 'abc123')
+    counts = Counter(re.findall(r'id="([^"]+)"', html))
+    dupes = {k: v for k, v in counts.items() if v > 1}
+    assert not dupes, f'duplicate ids: {dupes}'
+
+
+def test_strategies_split_one_table_per_rrr():
+
+    anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
+    for rrr in RRR_RATIOS:
+        assert f'strategies-1-{rrr}' in anchors
+
+    html = build_report(get_sample_data(), 'now', 'abc123')
+    for rrr in RRR_RATIOS:
+        assert f'Strategies (1:{rrr} RRR)' in html
+        assert f'id="strategies-1-{rrr}-table"' in html
+
+
+def test_strategies_tables_are_pre_sorted_by_win_rate():
+    """Ranked server-side, so the table is ordered on first paint."""
+
+    df = get_sample_data()
+    names = [n for n, _ in get_buffer_strategies()]
+    for rrr in RRR_RATIOS:
+        stats = _calculate_buffer_statistics_filtered(df, names)
+        stats = _sort_by_win_rate(stats[stats['RRR'] == f'1:{rrr}'])
+        rates = [float(v.rstrip('%')) for v in stats['Win Rate']]
+        assert rates == sorted(rates, reverse=True), f'1:{rrr} not ranked'
+
+
+def test_strategies_tables_only_hold_their_own_rrr():
+
+    df = get_sample_data()
+    names = [n for n, _ in get_buffer_strategies()]
+    for rrr in RRR_RATIOS:
+        stats = _calculate_buffer_statistics_filtered(df, names)
+        stats = stats[stats['RRR'] == f'1:{rrr}']
+        assert set(stats['RRR']) == {f'1:{rrr}'}
+        assert len(stats) > 0
+
+
+def test_sort_by_win_rate_handles_empty_and_malformed():
+
+    assert _sort_by_win_rate(pd.DataFrame()).empty
+
+    df = pd.DataFrame({'Win Rate': ['10.0%', 'n/a', '90.0%', '50.0%']})
+    out = _sort_by_win_rate(df)
+    assert list(out['Win Rate']) == ['90.0%', '50.0%', '10.0%', 'n/a']

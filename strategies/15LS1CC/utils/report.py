@@ -34,6 +34,7 @@ from utils.confirmation_candle import (
     create_html_table,
     create_r_histogram_combined,
     get_buffer_strategies,
+    RRR_RATIOS,
 )
 
 # Palette from CLAUDE.md's standard table styling.
@@ -72,7 +73,9 @@ def _sl_buffer_impact_section(df: pd.DataFrame) -> str:
 
 
 def _sl_vs_buffer_section(df: pd.DataFrame) -> str:
-    return _create_sl_sortable_table(calculate_sl_vs_buffer_statistics(df), "sl-vs-buffer")
+    return _create_sl_sortable_table(
+        calculate_sl_vs_buffer_statistics(df), "sl-vs-buffer-table"
+    )
 
 
 def _tp_section(df: pd.DataFrame) -> str:
@@ -83,11 +86,39 @@ def _pullback_section(df: pd.DataFrame) -> str:
     return _create_sl_sortable_table(calculate_pullback_statistics(df), "pullback-analysis")
 
 
-def _strategies_section(df: pd.DataFrame) -> str:
-    names = [name for name, _ in get_buffer_strategies()]
-    return create_html_table(
-        _calculate_buffer_statistics_filtered(df, names), sort_id="strategies-table"
+def _sort_by_win_rate(stats: pd.DataFrame) -> pd.DataFrame:
+    """
+    Order rows by win rate, highest first.
+
+    Sorted here rather than left to the click-to-sort script so the table is
+    already ranked on first paint, before any JavaScript runs.
+    """
+    if stats.empty:
+        return stats
+    key = (
+        stats["Win Rate"].astype(str).str.rstrip("%")
+        .apply(lambda v: float(v) if v.replace(".", "", 1).isdigit() else -1.0)
     )
+    return (
+        stats.assign(_wr=key)
+        .sort_values("_wr", ascending=False, kind="stable")
+        .drop(columns="_wr")
+        .reset_index(drop=True)
+    )
+
+
+def _strategies_section_for(rrr: int) -> Callable[[pd.DataFrame], str]:
+    """Build the Strategies table for a single RRR, ranked by win rate."""
+    def build(df: pd.DataFrame) -> str:
+        names = [name for name, _ in get_buffer_strategies()]
+        stats = _calculate_buffer_statistics_filtered(df, names)
+        stats = stats[stats["RRR"] == f"1:{rrr}"]
+        # Distinct from the section anchor: a duplicate id would make
+        # getElementById inside the sort script return the <section>.
+        return create_html_table(
+            _sort_by_win_rate(stats), sort_id=f"strategies-1-{rrr}-table"
+        )
+    return build
 
 
 # (anchor, nav label, heading, note, builder) - mirrors the notebook's cell order.
@@ -141,14 +172,20 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "Entering on a pullback of 0 / 1 / 2 / 3 pips instead of at the signal.",
         _pullback_section,
     ),
-    (
-        "strategies",
-        "Strategies",
-        "Strategies",
-        "All Trades / Fixed SL / Max SL across SL buffers and Min/Max SL gates.",
-        _strategies_section,
-    ),
 ]
+
+# One Strategies table per RRR, each ranked by win rate descending.
+SECTIONS.extend(
+    (
+        f"strategies-1-{rrr}",
+        f"Strategies 1:{rrr}",
+        f"Strategies (1:{rrr} RRR)",
+        "All Trades / Fixed SL / Max SL across SL buffers and Min/Max SL gates, "
+        f"ranked by win rate. Breakeven at 1:{rrr} is {100 / (1 + rrr):.1f}%.",
+        _strategies_section_for(rrr),
+    )
+    for rrr in RRR_RATIOS
+)
 
 
 def compute_build_id(df: pd.DataFrame) -> str:

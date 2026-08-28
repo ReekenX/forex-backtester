@@ -650,14 +650,15 @@ def test_buffer_statistics_min_sl_filter_applies_before_fixed_sl():
 
 
 def test_rrr_ratios_constant():
-    """Test that RRR_RATIOS has expected values."""
-    assert RRR_RATIOS == [1, 2]
+    """1:3 is the ceiling for this project (see CLAUDE.md)."""
+    assert RRR_RATIOS == [1, 2, 3]
 
 
 def test_breakeven_rate():
     """Test breakeven rate calculation for different RRR ratios."""
     assert _breakeven_rate(1) == 50.0
     assert abs(_breakeven_rate(2) - 33.333) < 0.01
+    assert _breakeven_rate(3) == 25.0
 
 
 def test_1_2_rrr_win_condition():
@@ -894,8 +895,9 @@ def test_calculate_fixed_sl_statistics_has_both_rrr():
     sample = get_sample_data()
     result = calculate_fixed_sl_statistics(sample)
     rrr_values = result['RRR'].unique()
+    expected = [f'1:{r}' for r in RRR_RATIOS]
     for rrr in rrr_values:
-        assert rrr in ['1:1', '1:2'], f"Unexpected RRR: {rrr}"
+        assert rrr in expected, f"Unexpected RRR: {rrr}"
 
 
 def test_calculate_fixed_sl_statistics_total_rows():

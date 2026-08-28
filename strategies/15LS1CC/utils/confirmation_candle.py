@@ -17,8 +17,8 @@ import pandas as pd
 from typing import Dict, List, Optional, Tuple, Callable
 
 
-# RRR ratios to test
-RRR_RATIOS = [1, 2]
+# RRR ratios to test (1:3 is the ceiling - see CLAUDE.md)
+RRR_RATIOS = [1, 2, 3]
 
 # Extra pip buffer values to test
 BUFFER_PIPS = [0, 1, 2, 3]
