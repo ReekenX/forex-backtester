@@ -98,7 +98,7 @@ notebook state to keep warm.
 Render once:
 
 ```bash
-poetry run python labs/render.py
+make report                 # or: poetry run python labs/render.py
 open labs/build/15LS1CC.html
 ```
 
@@ -106,7 +106,8 @@ Re-render on every save (this is the normal working loop - edit `data.csv` or
 `confirmation_candle.py`, hit save, and the page updates itself):
 
 ```bash
-watchexec -w strategies/15LS1CC -e py,csv -- poetry run python labs/render.py
+make watch                  # wraps:
+# watchexec -w strategies/15LS1CC -e py,csv -- poetry run python labs/render.py
 ```
 
 `watchexec` is event-driven, not a timer: it asks the OS to notify it when a
@@ -123,7 +124,7 @@ works the page says so in its status line instead of reloading blindly.
 Serving the folder gives change-triggered reloads on both paths:
 
 ```bash
-python3 -m http.server -d labs/build 8000
+make serve                  # or: python3 -m http.server -d labs/build 8000
 # then open http://localhost:8000/15LS1CC.html
 ```
 
@@ -157,6 +158,9 @@ External tools:
 - `make format`: Format code using Black
 - `make lint`: Lint and auto-fix code using Ruff
 - `make test`: Run all tests
+- `make report`: Render the 15LS1CC HTML report once into `labs/build/`
+- `make watch`: Re-render the report on every save (requires watchexec)
+- `make serve`: Serve `labs/build/` on http://localhost:8000
 
 ## Running Tests
 
