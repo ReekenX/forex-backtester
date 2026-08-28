@@ -15,4 +15,4 @@ windows:
       - alias run="while true; do tmux rename-window -t\${TMUX_PANE} 'claude'; clear; claude --dangerously-skip-permissions; tmux rename-window -t\${TMUX_PANE} '🔴 claude'; sleep 1; done"
   - git: tig
   - webserver:
-      - alias run="poetry run jupyter notebook labs/"
+      - alias run="watchexec -w strategies/15LS1CC -e py,csv -- poetry run python labs/render.py"
