@@ -106,7 +106,7 @@ def write_sample_csv(tmp_path):
 
 
 def test_load_data_columns(tmp_path):
-    """The trailing win-rate header cell is recovered as the R column."""
+    """The win-rate header cell after TP is recovered as the R column."""
     df = load_data(write_sample_csv(tmp_path))
     assert list(df.columns) == [
         'Date', 'Weekday', 'Trade', 'Direction', 'SL', 'Pullback', 'TP', 'R',
@@ -137,18 +137,46 @@ def test_load_data_keeps_named_r_column(tmp_path):
     assert df['R'].tolist() == [7.0]
 
 
+def test_load_data_finds_r_past_trailing_scratch_columns(tmp_path):
+    """The sheet carries working columns to the right of R. Taking the last
+    column instead of the one after TP handed R an empty scratch column and
+    silently zeroed every R multiple."""
+    path = tmp_path / "scratch.csv"
+    path.write_text(
+        "Date,Weekday,Trade,Direction,SL,Pullback,TP,54.8%,ROI,R SL,R ROI\n"
+        "2026-07-27,Monday,#1,Sell,4.4,0.7,34,7R,-2R,4.4,3R\n"
+        "2026-07-27,Monday,#2,Sell,7.1,7.1,,,-3R,,2R\n")
+    df = load_data(str(path))
+    assert df['R'].tolist() == [7.0, 0.0]
+    # The scratch columns still load; they are simply unused.
+    assert 'R SL' in df.columns
+
+
+def test_load_data_without_a_tp_column_is_left_alone(tmp_path):
+    """No TP means no way to place R, so nothing is renamed rather than a
+    random column being claimed."""
+    path = tmp_path / "no_tp.csv"
+    path.write_text("Date,Weekday,Trade,Direction,SL,Pullback\n"
+                    "2026-07-27,Monday,#1,Sell,4.4,0.7\n")
+    df = load_data(str(path))
+    assert 'R' not in df.columns
+
+
 def test_load_data_real_csv():
     """The project CSV loads with the expected columns and numeric types."""
     import os
     csv_path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), '..', 'data.csv')
     df = load_data(csv_path)
-    assert list(df.columns) == [
-        'Date', 'Weekday', 'Trade', 'Direction', 'SL', 'Pullback', 'TP', 'R',
-    ]
+    # The sheet may carry scratch columns to the right, so check the core
+    # columns are present and in order rather than pinning the full list.
+    core = ['Date', 'Weekday', 'Trade', 'Direction', 'SL', 'Pullback', 'TP', 'R']
+    assert list(df.columns)[:len(core)] == core
     assert len(df) > 0
     for col in ['SL', 'Pullback', 'TP', 'R']:
         assert df[col].notna().all()
+    # Every trade that reached a target carries an R multiple, and vice versa.
+    assert int((df['R'] != 0).sum()) == int((df['TP'] > 0).sum())
 
 
 def test_get_strategies():
@@ -2328,6 +2356,8 @@ def test_three_setups_table_empty():
 def run_all_tests():
     """Run all tests and report results."""
     tests = [
+        test_load_data_finds_r_past_trailing_scratch_columns,
+        test_load_data_without_a_tp_column_is_left_alone,
         test_load_data_real_csv,
         test_get_strategies,
         test_strategy_names_include_base,

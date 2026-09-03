@@ -9,8 +9,9 @@ CSV columns: Date, Weekday, Trade, Direction, SL, Pullback, TP, R
 The R column is exported from the spreadsheet with an "R" suffix (e.g. "7R")
 and is negative when the trade was stopped out before reaching that target
 (e.g. "-6R" means 6R was available but Pullback exceeded SL). Its header cell
-holds a computed win-rate value instead of the name "R", so load_data renames
-the trailing column.
+holds a computed win-rate value instead of the name "R", so load_data recovers
+it by position - the column immediately after TP. Anything the sheet carries to
+the right of it is scratch work and is loaded but unused.
 """
 
 import math
@@ -40,9 +41,14 @@ def load_data(filepath: str = "../strategies/15LS1CC/data.csv") -> pd.DataFrame:
     df = pd.read_csv(filepath)
 
     # The spreadsheet export labels the R column with a computed win-rate cell
-    # (e.g. "47.3%") instead of "R", so recover it from the trailing column.
-    if "R" not in df.columns and len(df.columns) > 0:
-        df = df.rename(columns={df.columns[-1]: "R"})
+    # (e.g. "47.3%") instead of "R", so recover it by position: R is the column
+    # immediately after TP. Locating it that way rather than as the trailing
+    # column keeps working when the sheet grows scratch columns to its right,
+    # which silently handed R the wrong data once already.
+    if "R" not in df.columns and "TP" in df.columns:
+        tp_index = df.columns.get_loc("TP")
+        if tp_index + 1 < len(df.columns):
+            df = df.rename(columns={df.columns[tp_index + 1]: "R"})
 
     if "R" in df.columns:
         df["R"] = df["R"].astype(str).str.replace("R", "", regex=False).str.strip()
