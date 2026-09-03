@@ -13,6 +13,8 @@ holds a computed win-rate value instead of the name "R", so load_data renames
 the trailing column.
 """
 
+import math
+
 import pandas as pd
 from typing import Dict, List, Optional, Tuple, Callable
 
@@ -1528,6 +1530,18 @@ def _pip_cell(value: Optional[float]) -> str:
     return f"{value:.2f}".rstrip("0").rstrip(".")
 
 
+def _whole_pip_cell(value: Optional[float]) -> str:
+    """
+    Render a pip figure rounded to whole pips: 25.15 -> '25', 54.85 -> '55'.
+
+    Half-way values round up rather than to even, so a 16.5 pip target reads
+    as 17 instead of Python's default 16.
+    """
+    if value is None:
+        return ""
+    return str(int(math.floor(value + 0.5)))
+
+
 def _r_cell(total: int) -> str:
     """Render a running R total with an explicit sign: '+4R', '-1R', '0R'."""
     return f"+{total}R" if total > 0 else f"{total}R"
@@ -1552,6 +1566,10 @@ def calculate_three_setups_comparison(
       so the entry is SL/2 closer to it and SL/2 further from the target:
         stop = SL/2, pullback = Pullback - SL/2, target distance = TP + SL/2
         win = (Pullback - SL/2) < SL/2 AND (TP + SL/2) >= rrr * SL/2
+
+    The Waiter's TP cell is rounded to whole pips - a half-pip on a 25 pip
+    target is noise. Only the display rounds; the win test uses the exact
+    figure.
 
     Halving a small safe stop can land under the 1.1 pip broker minimum; those
     rows are informational rather than tradeable, as in the Reducing SL table.
@@ -1599,7 +1617,7 @@ def calculate_three_setups_comparison(
             waiter_r += rrr_ratio if waiter_won else -1
             row['Waiter SL'] = _pip_cell(half)
             row['Waiter Pullback'] = _pip_cell(waiter_pullback)
-            row['Waiter TP'] = _pip_cell(waiter_tp) if tp > 0 else ""
+            row['Waiter TP'] = _whole_pip_cell(waiter_tp) if tp > 0 else ""
         else:
             row['Waiter SL'] = ""
             row['Waiter Pullback'] = ""

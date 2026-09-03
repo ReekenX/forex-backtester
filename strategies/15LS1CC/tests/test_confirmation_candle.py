@@ -54,6 +54,7 @@ from utils.confirmation_candle import (
     THREE_SETUPS_CUMULATIVE_KEYS,
     _pip_cell,
     _r_cell,
+    _whole_pip_cell,
     _three_setups_header_groups,
     calculate_three_setups_comparison,
     create_three_setups_table,
@@ -2230,6 +2231,37 @@ def test_three_setups_real_sample_keeps_half_pip_precision():
     assert stats.loc[6, 'Aggressive SL'] == '1.25'
 
 
+def test_three_setups_waiter_tp_is_rounded_to_whole_pips():
+    """Half a pip on a 25 pip target is noise, so the cell reads whole pips -
+    but the win test still uses the exact figure."""
+    df = pd.DataFrame({
+        'Date': ['2026-01-12', '2026-01-13', '2026-01-14'],
+        'Weekday': ['Monday', 'Tuesday', 'Wednesday'],
+        'Trade': ['#1', '#1', '#1'],
+        'Direction': ['Sell', 'Sell', 'Sell'],
+        # half = 2.15 / 0.35 / 2.5, all reached, so all three fill.
+        'SL': [4.3, 0.7, 5.0],
+        'Pullback': [3.5, 0.7, 4.0],
+        'TP': [23.0, 54.5, 14.0],
+        'R': [5.0, 0.0, 2.0],
+    })
+    stats = calculate_three_setups_comparison(df)
+    # 23 + 2.15 = 25.15 -> 25; 54.5 + 0.35 = 54.85 -> 55; 14 + 2.5 = 16.5 -> 17.
+    assert list(stats['Waiter TP']) == ['25', '55', '17']
+    # The other Waiter cells keep their half pips.
+    assert stats.loc[0, 'Waiter SL'] == '2.15'
+    assert stats.loc[0, 'Waiter Pullback'] == '1.35'
+
+
+def test_whole_pip_cell_rounds_half_up():
+    assert _whole_pip_cell(None) == ''
+    assert _whole_pip_cell(25.15) == '25'
+    assert _whole_pip_cell(54.85) == '55'
+    # Python's round() would give 16 here; a target should not shrink.
+    assert _whole_pip_cell(16.5) == '17'
+    assert _whole_pip_cell(14.0) == '14'
+
+
 def test_pip_cell_trims_trailing_zeros():
     assert _pip_cell(None) == ''
     assert _pip_cell(34.0) == '34'
@@ -2445,6 +2477,8 @@ def run_all_tests():
         test_three_setups_rrr_is_configurable,
         test_three_setups_empty,
         test_three_setups_real_sample_keeps_half_pip_precision,
+        test_three_setups_waiter_tp_is_rounded_to_whole_pips,
+        test_whole_pip_cell_rounds_half_up,
         test_pip_cell_trims_trailing_zeros,
         test_r_cell_always_carries_a_sign,
         test_three_setups_header_groups_collapse,
