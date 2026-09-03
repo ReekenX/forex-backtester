@@ -14,6 +14,7 @@ the trailing column.
 """
 
 import math
+from decimal import Decimal, ROUND_HALF_UP
 
 import pandas as pd
 from typing import Dict, List, Optional, Tuple, Callable
@@ -1519,15 +1520,21 @@ THREE_SETUPS_CUMULATIVE_KEYS = ('Regular Outcome', 'Aggressive ROI', 'Waiter ROI
 
 def _pip_cell(value: Optional[float]) -> str:
     """
-    Render a pip figure for a cell; None renders as an empty cell.
+    Render a pip figure to one decimal; None renders as an empty cell.
 
-    Halving a stop recorded to one decimal produces a second one (4.3 -> 2.15),
-    so two decimals are kept and trailing zeros trimmed: the recorded figures
-    still read as they do in the CSV.
+    Halving a stop recorded to one decimal produces a second one (5.5 -> 2.75),
+    which is finer than the data warrants, so the cell rounds back to one:
+    2.75 -> '2.8'. Trailing zeros are trimmed, so the recorded figures still
+    read as they do in the CSV (34.0 -> '34').
+
+    Rounded through Decimal on the value's own repr rather than with format(),
+    so a half-way figure goes up: 2.15 is a hair under 2.15 in binary and
+    would otherwise render as '2.1'.
     """
     if value is None:
         return ""
-    return f"{value:.2f}".rstrip("0").rstrip(".")
+    rounded = Decimal(str(value)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    return f"{rounded:f}".rstrip("0").rstrip(".")
 
 
 def _whole_pip_cell(value: Optional[float]) -> str:
@@ -1567,9 +1574,8 @@ def calculate_three_setups_comparison(
         stop = SL/2, pullback = Pullback - SL/2, target distance = TP + SL/2
         win = (Pullback - SL/2) < SL/2 AND (TP + SL/2) >= rrr * SL/2
 
-    The Waiter's TP cell is rounded to whole pips - a half-pip on a 25 pip
-    target is noise. Only the display rounds; the win test uses the exact
-    figure.
+    Cells round for display only - SL and Pullback to one decimal, the
+    Waiter's TP to whole pips. Every win test uses the exact figure.
 
     Halving a small safe stop can land under the 1.1 pip broker minimum; those
     rows are informational rather than tradeable, as in the Reducing SL table.

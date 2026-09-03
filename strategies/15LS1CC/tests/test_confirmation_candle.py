@@ -2222,13 +2222,13 @@ def test_three_setups_empty():
     assert list(stats.columns) == [key for _, _, key in THREE_SETUPS_COLUMNS]
 
 
-def test_three_setups_real_sample_keeps_half_pip_precision():
-    """Halving a one-decimal stop makes a second decimal, which must survive
-    into the cell rather than being rounded away."""
+def test_three_setups_real_sample_rounds_halved_stops_to_one_decimal():
+    """Halving a one-decimal stop makes a second decimal, which is finer than
+    the data warrants, so the cell rounds it back - half-way going up."""
     stats = calculate_three_setups_comparison(get_sample_data())
-    # SL 3.5 -> 1.75, SL 2.5 -> 1.25.
-    assert stats.loc[0, 'Aggressive SL'] == '1.75'
-    assert stats.loc[6, 'Aggressive SL'] == '1.25'
+    # SL 3.5 -> 1.75 -> '1.8', SL 2.5 -> 1.25 -> '1.3'.
+    assert stats.loc[0, 'Aggressive SL'] == '1.8'
+    assert stats.loc[6, 'Aggressive SL'] == '1.3'
 
 
 def test_three_setups_waiter_tp_is_rounded_to_whole_pips():
@@ -2248,9 +2248,9 @@ def test_three_setups_waiter_tp_is_rounded_to_whole_pips():
     stats = calculate_three_setups_comparison(df)
     # 23 + 2.15 = 25.15 -> 25; 54.5 + 0.35 = 54.85 -> 55; 14 + 2.5 = 16.5 -> 17.
     assert list(stats['Waiter TP']) == ['25', '55', '17']
-    # The other Waiter cells keep their half pips.
-    assert stats.loc[0, 'Waiter SL'] == '2.15'
-    assert stats.loc[0, 'Waiter Pullback'] == '1.35'
+    # The other Waiter cells round to one decimal rather than to whole pips.
+    assert stats.loc[0, 'Waiter SL'] == '2.2'
+    assert stats.loc[0, 'Waiter Pullback'] == '1.4'
 
 
 def test_whole_pip_cell_rounds_half_up():
@@ -2262,12 +2262,17 @@ def test_whole_pip_cell_rounds_half_up():
     assert _whole_pip_cell(14.0) == '14'
 
 
-def test_pip_cell_trims_trailing_zeros():
+def test_pip_cell_rounds_to_one_decimal():
     assert _pip_cell(None) == ''
     assert _pip_cell(34.0) == '34'
     assert _pip_cell(4.4) == '4.4'
-    assert _pip_cell(2.15) == '2.15'
     assert _pip_cell(0.0) == '0'
+    # A halved stop carries a second decimal; it rounds back to one.
+    assert _pip_cell(2.75) == '2.8'
+    assert _pip_cell(4.35) == '4.4'
+    # 2.15 is a hair under 2.15 in binary, so format() would give '2.1'.
+    assert _pip_cell(2.15) == '2.2'
+    assert _pip_cell(1.05) == '1.1'
 
 
 def test_r_cell_always_carries_a_sign():
@@ -2476,10 +2481,10 @@ def run_all_tests():
         test_three_setups_win_needs_both_survival_and_target,
         test_three_setups_rrr_is_configurable,
         test_three_setups_empty,
-        test_three_setups_real_sample_keeps_half_pip_precision,
+        test_three_setups_real_sample_rounds_halved_stops_to_one_decimal,
         test_three_setups_waiter_tp_is_rounded_to_whole_pips,
         test_whole_pip_cell_rounds_half_up,
-        test_pip_cell_trims_trailing_zeros,
+        test_pip_cell_rounds_to_one_decimal,
         test_r_cell_always_carries_a_sign,
         test_three_setups_header_groups_collapse,
         test_three_setups_cumulative_keys_are_real_columns,
