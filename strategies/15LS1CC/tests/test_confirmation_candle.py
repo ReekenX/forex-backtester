@@ -2026,10 +2026,21 @@ def test_pullback_statistics_empty():
 
 def test_tp_ranges_constant():
     """Test that TP_RANGES has expected ranges."""
-    assert len(TP_RANGES) == 2
-    assert TP_RANGES[0] == ("0-35", 0, 35)
-    assert TP_RANGES[1][0] == "35+"
-    assert TP_RANGES[1][1] == 35
+    assert len(TP_RANGES) == 4
+    assert TP_RANGES[0] == ("0-10", 0, 10)
+    assert TP_RANGES[1] == ("10-20", 10, 20)
+    assert TP_RANGES[2] == ("20-30", 20, 30)
+    assert TP_RANGES[3][0] == "30+"
+    assert TP_RANGES[3][1] == 30
+
+
+def test_tp_ranges_are_contiguous_and_open_ended():
+    """Each band picks up where the last stopped, and the top one is open, so
+    every profitable trade lands in exactly one row."""
+    for (_, _, high), (_, low, _) in zip(TP_RANGES, TP_RANGES[1:]):
+        assert high == low
+    assert TP_RANGES[0][1] == 0
+    assert TP_RANGES[-1][2] == float("inf")
 
 
 def test_tp_statistics_columns():
@@ -2043,8 +2054,8 @@ def test_tp_statistics_all_ranges_present():
     """Test that all TP ranges appear in results."""
     sample = get_sample_data()
     result = calculate_tp_statistics(sample)
-    assert len(result) == 2
-    assert list(result['TP Range']) == ['0-35', '35+']
+    assert len(result) == 4
+    assert list(result['TP Range']) == ['0-10', '10-20', '20-30', '30+']
 
 
 def test_tp_statistics_trade_counts():
@@ -2052,26 +2063,49 @@ def test_tp_statistics_trade_counts():
 
     Sample TP values: 0, 12.0, 0, 10.0, 0, 8.0, 0, 15.0, 10.0, 5.0
     Profitable overall (TP > 0): 6
-    0-35 (TP>0, TP<35): 12, 10, 8, 15, 10, 5 = 6
+    0-10  (TP>0, TP<10):  8, 5           = 2
+    10-20 (10<=TP<20):    12, 10, 15, 10 = 4
     """
     sample = get_sample_data()
     result = calculate_tp_statistics(sample)
     counts = dict(zip(result['TP Range'], result['Trades']))
-    assert counts['0-35'] == '6 of 6'
-    assert counts['35+'] == '0 of 6'
+    assert counts['0-10'] == '2 of 6'
+    assert counts['10-20'] == '4 of 6'
+    assert counts['20-30'] == '0 of 6'
+    assert counts['30+'] == '0 of 6'
+
+
+def test_tp_statistics_band_boundary_is_inclusive_at_the_bottom():
+    """A TP of exactly 10 belongs to 10-20, not 0-10."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01', '2026-01-02', '2026-01-03'],
+        'Weekday': ['Monday', 'Tuesday', 'Wednesday'],
+        'Trade': ['#1', '#1', '#1'],
+        'Direction': ['Buy', 'Buy', 'Buy'],
+        'SL': [3.0, 3.0, 3.0],
+        'Pullback': [1.0, 1.0, 1.0],
+        'TP': [9.9, 10.0, 30.0],
+        'R': [3.3, 3.3, 10.0],
+    })
+    counts = dict(zip(*[calculate_tp_statistics(trades)[c]
+                        for c in ('TP Range', 'Trades')]))
+    assert counts['0-10'] == '1 of 3'
+    assert counts['10-20'] == '1 of 3'
+    assert counts['20-30'] == '0 of 3'
+    assert counts['30+'] == '1 of 3'
 
 
 def test_tp_statistics_empty():
     """Test TP statistics with empty dataset."""
     empty = get_empty_data()
     result = calculate_tp_statistics(empty)
-    assert len(result) == 2
+    assert len(result) == 4
     for _, row in result.iterrows():
         assert row['Trades'] == '0 of 0'
 
 
 def test_tp_statistics_large_tp():
-    """Test TP statistics with trades in the 35+ range."""
+    """Test TP statistics with trades in the 30+ range."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01', '2026-01-02'],
         'Weekday': ['Monday', 'Monday'],
@@ -2086,7 +2120,7 @@ def test_tp_statistics_large_tp():
     result = calculate_tp_statistics(trades)
     rows = {row['TP Range']: row for _, row in result.iterrows()}
 
-    assert rows['35+']['Trades'] == '2 of 2'
+    assert rows['30+']['Trades'] == '2 of 2'
 
 
 def test_buffer_statistics_filtered_all_trades():
@@ -2489,9 +2523,11 @@ def run_all_tests():
         test_pullback_statistics_sortable_columns,
         test_pullback_statistics_empty,
         test_tp_ranges_constant,
+        test_tp_ranges_are_contiguous_and_open_ended,
         test_tp_statistics_columns,
         test_tp_statistics_all_ranges_present,
         test_tp_statistics_trade_counts,
+        test_tp_statistics_band_boundary_is_inclusive_at_the_bottom,
         test_tp_statistics_empty,
         test_tp_statistics_large_tp,
         test_buffer_statistics_filtered_all_trades,

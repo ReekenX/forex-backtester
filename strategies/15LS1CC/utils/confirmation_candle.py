@@ -1447,11 +1447,13 @@ def display_analysis_pullback(df: pd.DataFrame):
     display(HTML(html_table))
 
 
+# Ten-pip bands, each holding TP >= low and TP < high, so a trade lands in
+# exactly one of them.
 TP_RANGES = [
-    # 80% of trades
-    ("0-35", 0, 35),
-    # 20% of trades
-    ("35+", 35, float("inf")),
+    ("0-10", 0, 10),
+    ("10-20", 10, 20),
+    ("20-30", 20, 30),
+    ("30+", 30, float("inf")),
 ]
 
 
