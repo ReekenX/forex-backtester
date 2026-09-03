@@ -49,6 +49,14 @@ from utils.confirmation_candle import (
     calculate_pullback_statistics,
     TP_RANGES,
     calculate_tp_statistics,
+    THREE_SETUPS_RRR,
+    THREE_SETUPS_COLUMNS,
+    THREE_SETUPS_CUMULATIVE_KEYS,
+    _pip_cell,
+    _r_cell,
+    _three_setups_header_groups,
+    calculate_three_setups_comparison,
+    create_three_setups_table,
 )
 
 
@@ -2082,6 +2090,204 @@ def test_buffer_statistics_filtered_empty():
     assert (result['Trades'] == 0).all()
 
 
+def get_three_setups_data():
+    """
+    Four trades chosen so the three setups disagree on every one of them.
+
+    At 1:2, with half = SL / 2:
+      A  SL 4.0  Pullback 1.0  TP 5.0   Regular loses (needs 8), Aggressive
+                                        wins (needs 4), Waiter never fills
+                                        (1.0 < 2.0)
+      B  SL 4.0  Pullback 3.0  TP 12.0  Regular wins, Aggressive is stopped
+                                        (3.0 > 2.0), Waiter fills and wins
+      C  SL 2.0  Pullback 2.0  TP 0     stopped out on the safe stop, so all
+                                        three lose; Waiter still fills
+      D  SL 3.0  Pullback 1.0  TP 3.0   Regular loses (needs 6), Aggressive
+                                        wins on the exact target (3 >= 3),
+                                        Waiter never fills (1.0 < 1.5)
+    """
+    return pd.DataFrame({
+        'Date': ['2026-01-12', '2026-01-12', '2026-01-13', '2026-01-14'],
+        'Weekday': ['Monday', 'Monday', 'Tuesday', 'Wednesday'],
+        'Trade': ['#1', '#2', '#1', '#1'],
+        'Direction': ['Buy', 'Sell', 'Buy', 'Sell'],
+        'SL': [4.0, 4.0, 2.0, 3.0],
+        'Pullback': [1.0, 3.0, 2.0, 1.0],
+        'TP': [5.0, 12.0, 0.0, 3.0],
+        'R': [1.25, 3.0, 0.0, 1.0],
+    })
+
+
+def test_three_setups_rrr_is_1_2():
+    assert THREE_SETUPS_RRR == 2
+
+
+def test_three_setups_columns_match_the_header_spec():
+    stats = calculate_three_setups_comparison(get_three_setups_data())
+    assert list(stats.columns) == [key for _, _, key in THREE_SETUPS_COLUMNS]
+
+
+def test_three_setups_keeps_one_row_per_trade_in_order():
+    df = get_three_setups_data()
+    stats = calculate_three_setups_comparison(df)
+    assert len(stats) == len(df)
+    assert list(stats['Trade']) == list(df['Trade'])
+    assert list(stats['Date']) == list(df['Date'])
+    assert list(stats['Weekday']) == list(df['Weekday'])
+    assert list(stats['Direction']) == list(df['Direction'])
+
+
+def test_three_setups_regular_columns_are_the_recorded_trade():
+    stats = calculate_three_setups_comparison(get_three_setups_data())
+    assert list(stats['Regular SL']) == ['4', '4', '2', '3']
+    assert list(stats['Regular Pullback']) == ['1', '3', '2', '1']
+    # An empty TP means the trade was never profitable, so it stays empty.
+    assert list(stats['Regular TP']) == ['5', '12', '', '3']
+
+
+def test_three_setups_regular_outcome_is_cumulative():
+    """-1R per loss, +2R per win, carried down the column."""
+    stats = calculate_three_setups_comparison(get_three_setups_data())
+    assert list(stats['Regular Outcome']) == ['-1R', '+1R', '0R', '-1R']
+
+
+def test_three_setups_aggressive_halves_the_stop():
+    stats = calculate_three_setups_comparison(get_three_setups_data())
+    assert list(stats['Aggressive SL']) == ['2', '2', '1', '1.5']
+
+
+def test_three_setups_aggressive_roi_is_cumulative():
+    """The halved stop halves the target too: A and D win where Regular
+    loses, and B is stopped out where Regular survives."""
+    stats = calculate_three_setups_comparison(get_three_setups_data())
+    assert list(stats['Aggressive ROI']) == ['+2R', '+1R', '0R', '+2R']
+
+
+def test_three_setups_waiter_misses_shallow_pullbacks():
+    """A limit order at SL/2 only fills when the pullback reached it."""
+    stats = calculate_three_setups_comparison(get_three_setups_data())
+    assert list(stats['Waiter SL']) == ['', '2', '1', '']
+    assert list(stats['Waiter Pullback']) == ['', '1', '1', '']
+    assert list(stats['Waiter TP']) == ['', '14', '', '']
+
+
+def test_three_setups_waiter_moves_the_entry_half_a_stop():
+    """Filling SL/2 into the pullback leaves SL/2 of stop, that much less
+    pullback to survive and that much more room to the target."""
+    stats = calculate_three_setups_comparison(get_three_setups_data())
+    # Trade B: SL 4.0, Pullback 3.0, TP 12.0 -> stop 2, pullback 1, TP 14.
+    assert stats.loc[1, 'Waiter SL'] == '2'
+    assert stats.loc[1, 'Waiter Pullback'] == '1'
+    assert stats.loc[1, 'Waiter TP'] == '14'
+
+
+def test_three_setups_waiter_roi_carries_across_missed_trades():
+    """A missed trade neither wins nor loses, so the running total is flat
+    rather than blank - the column has to read as an equity curve."""
+    stats = calculate_three_setups_comparison(get_three_setups_data())
+    assert list(stats['Waiter ROI']) == ['0R', '+2R', '+1R', '+1R']
+
+
+def test_three_setups_waiter_still_loses_a_stopped_out_trade():
+    """Trade C is taken out on the safe stop, which the Waiter shares."""
+    stats = calculate_three_setups_comparison(get_three_setups_data())
+    assert stats.loc[2, 'Waiter SL'] == '1'
+    assert stats.loc[2, 'Waiter ROI'] == '+1R'  # +2R at B, then -1R here
+
+
+def test_three_setups_win_needs_both_survival_and_target():
+    """A trade whose TP is huge but whose pullback took out the stop is a
+    loss for every setup, never a win."""
+    df = pd.DataFrame({
+        'Date': ['2026-01-12'], 'Weekday': ['Monday'], 'Trade': ['#1'],
+        'Direction': ['Buy'], 'SL': [2.6], 'Pullback': [2.7], 'TP': [31.0],
+        'R': [-10.0],
+    })
+    stats = calculate_three_setups_comparison(df)
+    assert stats.loc[0, 'Regular Outcome'] == '-1R'
+    assert stats.loc[0, 'Aggressive ROI'] == '-1R'
+    assert stats.loc[0, 'Waiter ROI'] == '-1R'
+
+
+def test_three_setups_rrr_is_configurable():
+    """At 1:1 the Regular targets are easier, so A and D flip to wins."""
+    stats = calculate_three_setups_comparison(get_three_setups_data(), rrr_ratio=1)
+    assert list(stats['Regular Outcome']) == ['+1R', '+2R', '+1R', '+2R']
+
+
+def test_three_setups_empty():
+    stats = calculate_three_setups_comparison(get_empty_data())
+    assert stats.empty
+    assert list(stats.columns) == [key for _, _, key in THREE_SETUPS_COLUMNS]
+
+
+def test_three_setups_real_sample_keeps_half_pip_precision():
+    """Halving a one-decimal stop makes a second decimal, which must survive
+    into the cell rather than being rounded away."""
+    stats = calculate_three_setups_comparison(get_sample_data())
+    # SL 3.5 -> 1.75, SL 2.5 -> 1.25.
+    assert stats.loc[0, 'Aggressive SL'] == '1.75'
+    assert stats.loc[6, 'Aggressive SL'] == '1.25'
+
+
+def test_pip_cell_trims_trailing_zeros():
+    assert _pip_cell(None) == ''
+    assert _pip_cell(34.0) == '34'
+    assert _pip_cell(4.4) == '4.4'
+    assert _pip_cell(2.15) == '2.15'
+    assert _pip_cell(0.0) == '0'
+
+
+def test_r_cell_always_carries_a_sign():
+    assert _r_cell(3) == '+3R'
+    assert _r_cell(0) == '0R'
+    assert _r_cell(-2) == '-2R'
+
+
+def test_three_setups_header_groups_collapse():
+    groups = _three_setups_header_groups()
+    assert groups == [('', 4), ('Regular', 4), ('Aggressive', 2), ('Waiter', 4)]
+    assert sum(span for _, span in groups) == len(THREE_SETUPS_COLUMNS)
+
+
+def test_three_setups_cumulative_keys_are_real_columns():
+    keys = [key for _, _, key in THREE_SETUPS_COLUMNS]
+    for key in THREE_SETUPS_CUMULATIVE_KEYS:
+        assert key in keys
+
+
+def test_three_setups_table_renders_grouped_headers():
+    html = create_three_setups_table(
+        calculate_three_setups_comparison(get_three_setups_data()))
+    assert 'id="three-setups-table"' in html
+    for group, span in _three_setups_header_groups():
+        if group:
+            assert f'colspan="{span}"' in html
+            assert f'>{group}</th>' in html
+
+
+def test_three_setups_table_is_not_sortable():
+    """Rows are a trade log and the R columns are cumulative, so re-ordering
+    them would make the running totals nonsense."""
+    html = create_three_setups_table(
+        calculate_three_setups_comparison(get_three_setups_data()))
+    assert 'sortable' not in html
+    assert 'onclick' not in html
+
+
+def test_three_setups_table_colours_the_running_totals():
+    html = create_three_setups_table(
+        calculate_three_setups_comparison(get_three_setups_data()))
+    assert 'positive-edge' in html
+    assert 'negative-edge' in html
+
+
+def test_three_setups_table_empty():
+    html = create_three_setups_table(
+        calculate_three_setups_comparison(get_empty_data()))
+    assert 'No data' in html
+
+
 def run_all_tests():
     """Run all tests and report results."""
     tests = [
@@ -2224,6 +2430,29 @@ def run_all_tests():
         test_buffer_statistics_filtered_all_trades,
         test_buffer_statistics_filtered_excludes_others,
         test_buffer_statistics_filtered_empty,
+        test_three_setups_rrr_is_1_2,
+        test_three_setups_columns_match_the_header_spec,
+        test_three_setups_keeps_one_row_per_trade_in_order,
+        test_three_setups_regular_columns_are_the_recorded_trade,
+        test_three_setups_regular_outcome_is_cumulative,
+        test_three_setups_aggressive_halves_the_stop,
+        test_three_setups_aggressive_roi_is_cumulative,
+        test_three_setups_waiter_misses_shallow_pullbacks,
+        test_three_setups_waiter_moves_the_entry_half_a_stop,
+        test_three_setups_waiter_roi_carries_across_missed_trades,
+        test_three_setups_waiter_still_loses_a_stopped_out_trade,
+        test_three_setups_win_needs_both_survival_and_target,
+        test_three_setups_rrr_is_configurable,
+        test_three_setups_empty,
+        test_three_setups_real_sample_keeps_half_pip_precision,
+        test_pip_cell_trims_trailing_zeros,
+        test_r_cell_always_carries_a_sign,
+        test_three_setups_header_groups_collapse,
+        test_three_setups_cumulative_keys_are_real_columns,
+        test_three_setups_table_renders_grouped_headers,
+        test_three_setups_table_is_not_sortable,
+        test_three_setups_table_colours_the_running_totals,
+        test_three_setups_table_empty,
     ]
 
     passed = 0

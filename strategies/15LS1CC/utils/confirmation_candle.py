@@ -1487,3 +1487,262 @@ def display_analysis_tp(df: pd.DataFrame):
     stats_df = calculate_tp_statistics(df)
     html_table = create_html_table(stats_df)
     display(HTML(html_table))
+
+
+# RRR the per-trade three-setups comparison is scored at.
+THREE_SETUPS_RRR = 2
+
+# (group header, column header, DataFrame key). A group header spans every
+# consecutive column that repeats it, so the order here is the table's order.
+THREE_SETUPS_COLUMNS = [
+    ('', 'Date', 'Date'),
+    ('', 'Weekday', 'Weekday'),
+    ('', 'Trade', 'Trade'),
+    ('', 'Direction', 'Direction'),
+    ('Regular', 'SL', 'Regular SL'),
+    ('Regular', 'Pullback', 'Regular Pullback'),
+    ('Regular', 'TP', 'Regular TP'),
+    ('Regular', 'Outcome', 'Regular Outcome'),
+    ('Aggressive', 'SL', 'Aggressive SL'),
+    ('Aggressive', 'ROI', 'Aggressive ROI'),
+    ('Waiter', 'SL', 'Waiter SL'),
+    ('Waiter', 'Pullback', 'Waiter Pullback'),
+    ('Waiter', 'TP', 'Waiter TP'),
+    ('Waiter', 'ROI', 'Waiter ROI'),
+]
+
+# Columns holding a running R total, coloured by sign.
+THREE_SETUPS_CUMULATIVE_KEYS = ('Regular Outcome', 'Aggressive ROI', 'Waiter ROI')
+
+
+def _pip_cell(value: Optional[float]) -> str:
+    """
+    Render a pip figure for a cell; None renders as an empty cell.
+
+    Halving a stop recorded to one decimal produces a second one (4.3 -> 2.15),
+    so two decimals are kept and trailing zeros trimmed: the recorded figures
+    still read as they do in the CSV.
+    """
+    if value is None:
+        return ""
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def _r_cell(total: int) -> str:
+    """Render a running R total with an explicit sign: '+4R', '-1R', '0R'."""
+    return f"+{total}R" if total > 0 else f"{total}R"
+
+
+def calculate_three_setups_comparison(
+        df: pd.DataFrame, rrr_ratio: int = THREE_SETUPS_RRR) -> pd.DataFrame:
+    """
+    Score every trade under three entry rules and track each one's running R.
+
+    All three read the same recorded trade; they differ only in where the stop
+    sits and where the entry is:
+
+    - Regular: the signal entry on the recorded safe stop.
+        win = Pullback < SL AND TP >= rrr * SL
+    - Aggressive: the same entry, but risking half the safe stop. The target
+      halves with the stop, so it needs less run but survives less pullback.
+        win = Pullback < SL/2 AND TP >= rrr * SL/2
+    - Waiter: a limit order SL/2 into the pullback. It only trades when the
+      pullback actually reached that price (Pullback >= SL/2); otherwise the
+      trade is missed and its cells stay empty. The safe stop does not move,
+      so the entry is SL/2 closer to it and SL/2 further from the target:
+        stop = SL/2, pullback = Pullback - SL/2, target distance = TP + SL/2
+        win = (Pullback - SL/2) < SL/2 AND (TP + SL/2) >= rrr * SL/2
+
+    Halving a small safe stop can land under the 1.1 pip broker minimum; those
+    rows are informational rather than tradeable, as in the Reducing SL table.
+
+    A win adds rrr R, a loss subtracts 1R, and a missed Waiter trade adds
+    nothing - its running total carries forward so the column still reads as an
+    equity curve.
+
+    Args:
+        df: DataFrame with trading data
+        rrr_ratio: Risk-reward ratio every setup is scored at
+
+    Returns:
+        DataFrame with the columns listed in THREE_SETUPS_COLUMNS, one row per
+        trade, in the order the trades were recorded
+    """
+    rows = []
+    regular_r = aggressive_r = waiter_r = 0
+
+    for _, trade in df.iterrows():
+        sl = float(trade['SL'])
+        pullback = float(trade['Pullback'])
+        tp = float(trade['TP'])
+        half = sl / 2
+
+        row = {key: trade.get(key, '')
+               for key in ('Date', 'Weekday', 'Trade', 'Direction')}
+
+        regular_won = pullback < sl and tp >= rrr_ratio * sl
+        regular_r += rrr_ratio if regular_won else -1
+        row['Regular SL'] = _pip_cell(sl)
+        row['Regular Pullback'] = _pip_cell(pullback)
+        row['Regular TP'] = _pip_cell(tp) if tp > 0 else ""
+        row['Regular Outcome'] = _r_cell(regular_r)
+
+        aggressive_won = pullback < half and tp >= rrr_ratio * half
+        aggressive_r += rrr_ratio if aggressive_won else -1
+        row['Aggressive SL'] = _pip_cell(half)
+        row['Aggressive ROI'] = _r_cell(aggressive_r)
+
+        if pullback >= half:
+            waiter_pullback = pullback - half
+            waiter_tp = tp + half
+            waiter_won = waiter_pullback < half and waiter_tp >= rrr_ratio * half
+            waiter_r += rrr_ratio if waiter_won else -1
+            row['Waiter SL'] = _pip_cell(half)
+            row['Waiter Pullback'] = _pip_cell(waiter_pullback)
+            row['Waiter TP'] = _pip_cell(waiter_tp) if tp > 0 else ""
+        else:
+            row['Waiter SL'] = ""
+            row['Waiter Pullback'] = ""
+            row['Waiter TP'] = ""
+        row['Waiter ROI'] = _r_cell(waiter_r)
+
+        rows.append(row)
+
+    keys = [key for _, _, key in THREE_SETUPS_COLUMNS]
+    return pd.DataFrame(rows, columns=keys)
+
+
+def _three_setups_header_groups() -> List[Tuple[str, int]]:
+    """Collapse THREE_SETUPS_COLUMNS into (group header, colspan) pairs."""
+    groups: List[List] = []
+    for group, _, _ in THREE_SETUPS_COLUMNS:
+        if groups and groups[-1][0] == group:
+            groups[-1][1] += 1
+        else:
+            groups.append([group, 1])
+    return [(group, span) for group, span in groups]
+
+
+def create_three_setups_table(stats: pd.DataFrame,
+                              table_id: str = "three-setups-table") -> str:
+    """
+    Render the per-trade three-setups comparison with grouped headers.
+
+    Rows are the trade log in recorded order and the R columns are cumulative,
+    so the table is deliberately not sortable - re-ordering it would make the
+    running totals meaningless.
+
+    Args:
+        stats: DataFrame from calculate_three_setups_comparison
+        table_id: Unique DOM id for this table
+
+    Returns:
+        HTML string with a dark-mode styled table
+    """
+    if stats.empty:
+        return ("<p style='color: #e0e0e0; background-color: #1e1e1e; "
+                "padding: 10px;'>No data</p>")
+
+    html = """
+    <style>
+        .setups-table {
+            border-collapse: collapse;
+            width: 100%;
+            background-color: #1e1e1e;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .setups-table th {
+            background-color: #2d2d2d;
+            color: #e0e0e0;
+            padding: 6px 8px;
+            text-align: left;
+            border: 1px solid #404040;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        .setups-table td {
+            padding: 4px 8px;
+            border: 1px solid #404040;
+            white-space: nowrap;
+        }
+        .setups-table tr:hover {
+            background-color: #2a2a2a;
+        }
+        .setups-table .group-start {
+            border-left: 2px solid #6b6b6b;
+        }
+        .setups-table .group-head {
+            text-align: center;
+        }
+        .setups-table .positive-edge {
+            color: #4ade80;
+        }
+        .setups-table .negative-edge {
+            color: #f87171;
+        }
+    </style>
+    """
+
+    # A group boundary gets a heavier left border so the three setups read as
+    # blocks rather than one 14-column run.
+    boundaries = set()
+    index = 0
+    for _, span in _three_setups_header_groups():
+        if index:
+            boundaries.add(index)
+        index += span
+
+    html += f'<table class="setups-table" id="{table_id}">\n        <thead>\n'
+
+    html += "            <tr>\n"
+    index = 0
+    for group, span in _three_setups_header_groups():
+        cls = ' class="group-head group-start"' if index else ' class="group-head"'
+        html += f'                <th colspan="{span}"{cls}>{group}</th>\n'
+        index += span
+    html += "            </tr>\n            <tr>\n"
+
+    for idx, (_, header, _) in enumerate(THREE_SETUPS_COLUMNS):
+        cls = ' class="group-start"' if idx in boundaries else ""
+        html += f"                <th{cls}>{header}</th>\n"
+    html += "            </tr>\n        </thead>\n        <tbody>\n"
+
+    for _, row in stats.iterrows():
+        html += "            <tr>\n"
+        for idx, (_, _, key) in enumerate(THREE_SETUPS_COLUMNS):
+            classes = ["group-start"] if idx in boundaries else []
+            value = row[key]
+            if key in THREE_SETUPS_CUMULATIVE_KEYS:
+                # Flat at zero is neither, so it stays the default colour.
+                total = float(str(value).rstrip("R"))
+                if total > 0:
+                    classes.append("positive-edge")
+                elif total < 0:
+                    classes.append("negative-edge")
+            cls = f' class="{" ".join(classes)}"' if classes else ""
+            html += f"                <td{cls}>{value}</td>\n"
+        html += "            </tr>\n"
+
+    html += "        </tbody>\n    </table>\n"
+    return html
+
+
+def display_three_setups(df: pd.DataFrame):
+    """
+    Display the per-trade Regular / Aggressive / Waiter comparison.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = (
+        "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px 10px 0;'>"
+        f"Three Setups Comparison on 1:{THREE_SETUPS_RRR} RRR</h2>"
+    )
+    display(HTML(title_html))
+
+    stats_df = calculate_three_setups_comparison(df)
+    display(HTML(create_three_setups_table(stats_df)))

@@ -353,6 +353,30 @@ def test_sort_by_win_rate_handles_empty_and_malformed():
     assert list(out['Win Rate']) == ['90.0%', '50.0%', '10.0%', 'n/a']
 
 
+def test_three_setups_section_follows_the_last_strategies_table():
+    """It reads as a per-trade postscript to the ranked tables, so it must
+    stay below Strategies (1:3 RRR)."""
+    anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
+    assert anchors.index('three-setups') > anchors.index(
+        f'strategies-1-{RRR_RATIOS[-1]}')
+
+
+def test_three_setups_section_renders_a_row_per_trade():
+    df = get_sample_data()
+    page = build_report(df, 'now', 'abc123')
+
+    start = page.index('id="three-setups-table"')
+    table = page[start:page.index('</table>', start)]
+    assert table.count('<tr>') == len(df) + 2, 'expected two header rows + one per trade'
+    assert 'Three Setups Comparison on 1:2 RRR' in page
+
+
+def test_three_setups_table_id_differs_from_its_anchor():
+    page = build_report(get_sample_data(), 'now', 'abc123')
+    assert 'id="three-setups"' in page
+    assert 'id="three-setups-table"' in page
+
+
 def test_stop_tables_are_not_sortable_but_others_are():
     """The four stop tables keep their Default-outwards order; Pullback and the
     Strategies tables stay click-to-sort."""

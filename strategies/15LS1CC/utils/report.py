@@ -22,6 +22,7 @@ from typing import Callable, List, Tuple
 import pandas as pd
 
 from utils.confirmation_candle import (
+    THREE_SETUPS_RRR,
     _calculate_buffer_statistics_filtered,
     _calculate_stats_with_buffer,
     _create_sl_sortable_table,
@@ -32,8 +33,10 @@ from utils.confirmation_candle import (
     calculate_sl_buffer_statistics,
     calculate_sl_reduction_statistics,
     calculate_tp_statistics,
+    calculate_three_setups_comparison,
     calculate_weekday_statistics,
     create_html_table,
+    create_three_setups_table,
     create_r_histogram_combined,
     get_buffer_strategies,
     RRR_RATIOS,
@@ -98,6 +101,11 @@ def _tp_section(df: pd.DataFrame) -> str:
 
 def _pullback_section(df: pd.DataFrame) -> str:
     return _create_sl_sortable_table(calculate_pullback_statistics(df), "pullback-analysis")
+
+
+def _three_setups_section(df: pd.DataFrame) -> str:
+    return create_three_setups_table(
+        calculate_three_setups_comparison(df), "three-setups-table")
 
 
 def _sort_by_win_rate(stats: pd.DataFrame) -> pd.DataFrame:
@@ -221,6 +229,22 @@ SECTIONS.extend(
     )
     for rrr in RRR_RATIOS
 )
+
+# Trade log rather than a summary, so it sits after the ranked tables.
+SECTIONS.append((
+    "three-setups",
+    "Three Setups",
+    f"Three Setups Comparison on 1:{THREE_SETUPS_RRR} RRR",
+    f"Every trade under three entry rules, scored at 1:{THREE_SETUPS_RRR}. "
+    "<b>Regular</b> takes the signal on the recorded safe stop. "
+    "<b>Aggressive</b> takes the same entry risking half that stop, so the "
+    "target halves with it. <b>Waiter</b> rests a limit order half a stop into "
+    "the pullback - it only trades when the pullback reached that price, and "
+    "blank cells are the trades it never filled. Outcome and ROI are "
+    f"cumulative R: &minus;1R per loss, +{THREE_SETUPS_RRR}R per win. Halved "
+    "stops under the 1.1 pip broker minimum are informational.",
+    _three_setups_section,
+))
 
 
 def compute_build_id(df: pd.DataFrame) -> str:
