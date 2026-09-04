@@ -749,6 +749,58 @@ def display_fixed_sl(df: pd.DataFrame):
         display(HTML(html_table))
 
 
+def calculate_r_counts(df: pd.DataFrame) -> pd.Series:
+    """
+    Count trades per whole R level (1R-10R), each trade counted once.
+
+    R is truncated towards zero, so a trade at 3.8R lands in the 3R bucket.
+    The sign is dropped: a negative R records the distance that was available
+    before the stop was hit, which is the same reach as a positive one.
+
+    Args:
+        df: DataFrame with trading data (must have 'R' column)
+
+    Returns:
+        Series indexed 1..10 with the number of trades at each R level
+    """
+    r_values = df["R"].dropna().abs().apply(lambda x: int(x))
+    r_values = r_values[(r_values >= 1) & (r_values <= 10)]
+    return r_values.value_counts().reindex(range(1, 11), fill_value=0)
+
+
+def _create_r_histogram(counts: pd.Series, title: str) -> str:
+    """
+    Render an R-level count series as a horizontal bar chart.
+
+    Args:
+        counts: Series indexed 1..10 holding the bar values
+        title: Heading shown above the bars
+
+    Returns:
+        HTML string with a styled horizontal bar chart
+    """
+    max_count = counts.max() if counts.max() > 0 else 1
+
+    html = f"""
+    <div style="background-color: #1e1e1e; padding: 20px; font-family: 'Courier New', monospace;">
+        <h2 style="color: #e0e0e0; margin-top: 0;">{title}</h2>
+    """
+
+    for r_val in range(1, 11):
+        count = counts[r_val]
+        bar_width = (count / max_count) * 100
+        html += f"""
+        <div style="display: flex; align-items: center; margin: 4px 0;">
+            <span style="color: #e0e0e0; width: 40px; text-align: right; margin-right: 10px;">{r_val}R</span>
+            <div style="background-color: #4ade80; height: 24px; width: {bar_width}%; min-width: {'2px' if count > 0 else '0'}; border-radius: 3px;"></div>
+            <span style="color: #a0a0a0; margin-left: 8px;">{count}</span>
+        </div>
+        """
+
+    html += "</div>"
+    return html
+
+
 def create_r_histogram_combined(df: pd.DataFrame) -> str:
     """
     Create an HTML bar chart showing cumulative R value distribution (1R-10R).
@@ -765,35 +817,30 @@ def create_r_histogram_combined(df: pd.DataFrame) -> str:
     Returns:
         HTML string with a styled horizontal bar chart
     """
-    r_values = df["R"].dropna().abs().apply(lambda x: int(x))
-    r_values = r_values[(r_values >= 1) & (r_values <= 10)]
-    raw_counts = r_values.value_counts().reindex(range(1, 11), fill_value=0)
+    raw_counts = calculate_r_counts(df)
 
     # Cumulative: each R level includes all trades that reached that R or higher
     cumulative_counts = pd.Series(
         {r: raw_counts.loc[r:].sum() for r in range(1, 11)}
     )
 
-    max_count = cumulative_counts.max() if cumulative_counts.max() > 0 else 1
+    return _create_r_histogram(cumulative_counts, "R Distribution")
 
-    html = """
-    <div style="background-color: #1e1e1e; padding: 20px; font-family: 'Courier New', monospace;">
-        <h2 style="color: #e0e0e0; margin-top: 0;">R Distribution</h2>
+
+def create_r_histogram_exact(df: pd.DataFrame) -> str:
     """
+    Create an HTML bar chart of plain R counts (1R-10R), not cumulative.
 
-    for r_val in range(1, 11):
-        count = cumulative_counts[r_val]
-        bar_width = (count / max_count) * 100
-        html += f"""
-        <div style="display: flex; align-items: center; margin: 4px 0;">
-            <span style="color: #e0e0e0; width: 40px; text-align: right; margin-right: 10px;">{r_val}R</span>
-            <div style="background-color: #4ade80; height: 24px; width: {bar_width}%; min-width: {'2px' if count > 0 else '0'}; border-radius: 3px;"></div>
-            <span style="color: #a0a0a0; margin-left: 8px;">{count}</span>
-        </div>
-        """
+    Each trade is counted once, in the bucket of the highest whole R it
+    reached, so the bars sum to the number of trades with an R value.
 
-    html += "</div>"
-    return html
+    Args:
+        df: DataFrame with trading data (must have 'R' column)
+
+    Returns:
+        HTML string with a styled horizontal bar chart
+    """
+    return _create_r_histogram(calculate_r_counts(df), "R Distribution (Exact)")
 
 
 def display_r_histogram_combined(df: pd.DataFrame):
@@ -808,6 +855,18 @@ def display_r_histogram_combined(df: pd.DataFrame):
     """
     from IPython.display import display, HTML
     html = create_r_histogram_combined(df)
+    display(HTML(html))
+
+
+def display_r_histogram_exact(df: pd.DataFrame):
+    """
+    Display a plain (non-cumulative) histogram of R values (1R-10R).
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+    html = create_r_histogram_exact(df)
     display(HTML(html))
 
 

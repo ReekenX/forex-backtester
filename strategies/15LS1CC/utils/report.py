@@ -38,6 +38,7 @@ from utils.confirmation_candle import (
     create_html_table,
     create_three_setups_table,
     create_r_histogram_combined,
+    create_r_histogram_exact,
     get_buffer_strategies,
     RRR_RATIOS,
 )
@@ -214,6 +215,14 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "R Distribution",
         "Cumulative: a trade reaching 3R also passed through 1R and 2R.",
         create_r_histogram_combined,
+    ),
+    (
+        "r-distribution-exact",
+        "R Distribution (Exact)",
+        "R Distribution (Exact)",
+        "The same trades counted once each, in the bucket of the highest whole "
+        "R they reached, so the bars sum to the trades that have an R.",
+        create_r_histogram_exact,
     ),
 ]
 

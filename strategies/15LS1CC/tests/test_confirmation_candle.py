@@ -58,6 +58,9 @@ from utils.confirmation_candle import (
     _three_setups_header_groups,
     calculate_three_setups_comparison,
     create_three_setups_table,
+    calculate_r_counts,
+    create_r_histogram_combined,
+    create_r_histogram_exact,
 )
 
 
@@ -2387,6 +2390,50 @@ def test_three_setups_table_empty():
     assert 'No data' in html
 
 
+def test_r_counts_bucket_each_trade_once():
+    """R is truncated towards zero and every trade lands in exactly one bucket."""
+    counts = calculate_r_counts(get_sample_data())
+    assert list(counts.index) == list(range(1, 11))
+    # 10R, 2.5R, 1.6R, 2.5R, 1.25R, 3.3R - the four 0R rows are outside 1-10.
+    assert counts[1] == 2
+    assert counts[2] == 2
+    assert counts[3] == 1
+    assert counts[10] == 1
+    assert counts.sum() == 6
+
+
+def test_r_counts_ignore_the_sign():
+    """A negative R records reach before the stop, so it counts like a positive."""
+    df = pd.DataFrame({'R': [-6, 6]})
+    counts = calculate_r_counts(df)
+    assert counts[6] == 2
+
+
+def test_exact_histogram_is_not_cumulative():
+    """Each bar is the plain count, unlike the cumulative chart above it."""
+    df = get_sample_data()
+    exact = create_r_histogram_exact(df)
+    cumulative = create_r_histogram_combined(df)
+    # 1R: 2 trades exactly, but 6 trades reached 1R or better.
+    assert '<span style="color: #a0a0a0; margin-left: 8px;">2</span>' in exact
+    assert '<span style="color: #a0a0a0; margin-left: 8px;">6</span>' in cumulative
+    assert '<span style="color: #a0a0a0; margin-left: 8px;">6</span>' not in exact
+
+
+def test_exact_histogram_renders_every_r_level():
+    """All ten rows are drawn, so empty levels stay visible as gaps."""
+    html = create_r_histogram_exact(get_sample_data())
+    assert 'R Distribution (Exact)' in html
+    for r_val in range(1, 11):
+        assert f'>{r_val}R</span>' in html
+
+
+def test_exact_histogram_empty():
+    """No R values means ten zero bars rather than a division by zero."""
+    html = create_r_histogram_exact(get_empty_data())
+    assert html.count('margin-left: 8px;">0</span>') == 10
+
+
 def run_all_tests():
     """Run all tests and report results."""
     tests = [
@@ -2558,6 +2605,11 @@ def run_all_tests():
         test_three_setups_table_is_not_sortable,
         test_three_setups_table_colours_the_running_totals,
         test_three_setups_table_empty,
+        test_r_counts_bucket_each_trade_once,
+        test_r_counts_ignore_the_sign,
+        test_exact_histogram_is_not_cumulative,
+        test_exact_histogram_renders_every_r_level,
+        test_exact_histogram_empty,
     ]
 
     passed = 0
