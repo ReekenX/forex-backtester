@@ -7,7 +7,7 @@ Live-reloading workflow (watchexec re-runs this on every save):
 
     watchexec -w strategies/15LS1CC -e py,csv -- poetry run python labs/render.py
 
-Open labs/build/15LS1CC.html directly, or serve the directory:
+Open labs/build/15C.html directly, or serve the directory:
 
     python3 -m http.server -d labs/build 8000
 
@@ -29,7 +29,7 @@ sys.path.insert(0, str(STRATEGY_DIR))
 from utils.confirmation_candle import load_data  # noqa: E402
 from utils.report import render_error_to_file, render_to_file  # noqa: E402
 
-DEFAULT_OUT = REPO_ROOT / "labs" / "build" / "15LS1CC.html"
+DEFAULT_OUT = REPO_ROOT / "labs" / "build" / "15C.html"
 
 
 def main(argv):
@@ -40,7 +40,7 @@ def main(argv):
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        df = load_data(str(STRATEGY_DIR / "data.csv"))
+        df = load_data(str(STRATEGY_DIR / "v5_data.csv"))
         build_id = render_to_file(df, out_path, generated_at, live_reload)
     except Exception:
         # A half-written CSV export raises inside pandas. Render the failure so

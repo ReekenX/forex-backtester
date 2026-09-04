@@ -212,7 +212,7 @@ def test_no_reload_produces_a_frozen_page():
 
 
 def test_render_to_file_writes_html_and_build_id(tmp_path):
-    out = tmp_path / 'nested' / '15LS1CC.html'
+    out = tmp_path / 'nested' / '15C.html'
     build_id = render_to_file(get_sample_data(), out, '2026-08-28 10:00:00')
 
     assert out.exists()
@@ -229,7 +229,7 @@ def test_render_to_file_writes_html_and_build_id(tmp_path):
 
 
 def test_render_to_file_rewrites_on_second_call(tmp_path):
-    out = tmp_path / '15LS1CC.html'
+    out = tmp_path / '15C.html'
     render_to_file(get_sample_data(), out, 'first')
     first = out.read_text()
 
@@ -244,8 +244,8 @@ def test_render_to_file_rewrites_on_second_call(tmp_path):
 def test_render_real_csv(tmp_path):
     """The project CSV renders end to end."""
     csv_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), '..', 'data.csv')
-    out = tmp_path / '15LS1CC.html'
+        os.path.dirname(os.path.abspath(__file__)), '..', 'v5_data.csv')
+    out = tmp_path / '15C.html'
     render_to_file(load_data(csv_path), out, 'now')
 
     html = out.read_text()
@@ -276,7 +276,7 @@ def test_error_page_keeps_reloading():
 
 
 def test_render_error_to_file_bumps_build_id(tmp_path):
-    out = tmp_path / '15LS1CC.html'
+    out = tmp_path / '15C.html'
     good_id = render_to_file(get_sample_data(), out, 'now')
     err_id = render_error_to_file('boom', out, 'now')
 
@@ -288,7 +288,7 @@ def test_render_error_to_file_bumps_build_id(tmp_path):
 
 def test_render_error_then_recover(tmp_path):
     """Once the CSV parses again the good page comes back."""
-    out = tmp_path / '15LS1CC.html'
+    out = tmp_path / '15C.html'
     render_error_to_file('boom', out, 'now')
     assert 'Build failed' in out.read_text()
 

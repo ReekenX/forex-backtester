@@ -169,7 +169,7 @@ def test_load_data_real_csv():
     """The project CSV loads with the expected columns and numeric types."""
     import os
     csv_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), '..', 'data.csv')
+        os.path.dirname(os.path.abspath(__file__)), '..', 'v5_data.csv')
     df = load_data(csv_path)
     # The sheet may carry scratch columns to the right, so check the core
     # columns are present and in order rather than pinning the full list.

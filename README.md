@@ -36,7 +36,7 @@ forex-backtester/
 │   │       ├── test_doubles.py
 │   │       └── test_ema.py
 │   └── 15LS1CC/                 # 15min Leg Structure 1min Confirmation Candle
-│       ├── data.csv             # Trading data for this strategy
+│       ├── v5_data.csv          # Trading data (15-minute timeframe)
 │       ├── utils/               # Analysis modules
 │       │   ├── __init__.py
 │       │   ├── confirmation_candle.py
@@ -48,7 +48,7 @@ forex-backtester/
 │   ├── 5OB1CC.ipynb             # Combined analysis for 5OB1CC strategy
 │   ├── 15LS1CC.ipynb            # Analysis for 15LS1CC strategy
 │   ├── render.py                # Renders 15LS1CC to a static HTML page
-│   └── build/                   # Rendered output (gitignored)
+│   └── build/                   # Rendered output, 15C.html (gitignored)
 ├── pyproject.toml               # Poetry configuration and dependencies
 └── Makefile                     # Build automation commands
 ```
@@ -92,17 +92,17 @@ This will open Jupyter in the current directory, allowing you to navigate to the
 
 The 15LS1CC lab also renders to a single self-contained HTML page, so you can
 read the analysis in a browser without starting a Jupyter kernel. Every table
-recomputes from `data.csv` in about two seconds, which is why there is no
+recomputes from `v5_data.csv` in about two seconds, which is why there is no
 notebook state to keep warm.
 
 Render once:
 
 ```bash
 make report                 # or: poetry run python labs/render.py
-open labs/build/15LS1CC.html
+open labs/build/15C.html
 ```
 
-Re-render on every save (this is the normal working loop - edit `data.csv` or
+Re-render on every save (this is the normal working loop - edit `v5_data.csv` or
 `confirmation_candle.py`, hit save, and the page updates itself):
 
 ```bash
@@ -125,7 +125,7 @@ Serving the folder gives change-triggered reloads on both paths:
 
 ```bash
 make serve                  # or: python3 -m http.server -d labs/build 8000
-# then open http://localhost:8000/15LS1CC.html
+# then open http://localhost:8000/15C.html
 ```
 
 If the CSV is half-written when the watcher fires, the render fails gracefully:

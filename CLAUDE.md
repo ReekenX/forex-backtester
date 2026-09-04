@@ -40,7 +40,7 @@ Prop firm rules are:
 
 ### Data Format
 
-Each strategy has its own `data.csv` inside its `strategies/<name>/` directory.
+Each strategy keeps its data inside its `strategies/<name>/` directory: `data.csv` for 5OB1CC, `v5_data.csv` for 15LS1CC. The 15LS1CC file is a 15-minute timeframe export; a one-minute export will land beside it under its own name.
 
 #### 5OB1CC Data Format (strategies/5OB1CC/data.csv)
 - **Date**: Trading date (YYYY-MM-DD format)
@@ -60,7 +60,7 @@ Each strategy has its own `data.csv` inside its `strategies/<name>/` directory.
 - **Hours Until News**: Time until news event in hours
 - **News Event**: Associated news event title
 
-#### 15LS1CC Data Format (strategies/15LS1CC/data.csv)
+#### 15LS1CC Data Format (strategies/15LS1CC/v5_data.csv)
 - **Date**: Trading date (YYYY-MM-DD format)
 - **Weekday**: Day of the week
 - **Trade**: Trade identifier
@@ -168,7 +168,7 @@ All analysis tables should follow this standardized column format:
 
 ## Rendering the HTML Report
 
-`labs/render.py` builds `labs/build/15LS1CC.html` from `data.csv`. Pair it with a
+`labs/render.py` builds `labs/build/15C.html` from `v5_data.csv`. Pair it with a
 file watcher for the normal working loop:
 
 ```bash
@@ -229,7 +229,7 @@ import sys; sys.path.insert(0, 'strategies/15LS1CC')
 import pandas as pd
 from utils.confirmation_candle import load_data, calculate_buffer_statistics
 
-df = load_data('strategies/15LS1CC/data.csv')
+df = load_data('strategies/15LS1CC/v5_data.csv')
 stats = calculate_buffer_statistics(df)
 pd.set_option('display.max_rows', None)
 pd.set_option('display.width', 200)
@@ -255,5 +255,5 @@ On top of the test rules above, a change to 15LS1CC analysis is not done until:
    (check no cell has an `error` output)
 3. Notebook cell comments citing figures are re-checked - they go stale silently
    when the data or the win rule changes
-4. `git diff --stat strategies/15LS1CC/data.csv` is empty, in case a test or a
+4. `git diff --stat strategies/15LS1CC/v5_data.csv` is empty, in case a test or a
    manual check wrote to it
