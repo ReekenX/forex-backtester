@@ -220,8 +220,7 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "r-distribution-exact",
         "R Distribution (Exact)",
         "R Distribution (Exact)",
-        "The same trades counted once each, in the bucket of the highest whole "
-        "R they reached, so the bars sum to the trades that have an R.",
+        "70% of all trades are 1-3 R ranges.",
         create_r_histogram_exact,
     ),
 ]
