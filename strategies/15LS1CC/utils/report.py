@@ -465,7 +465,7 @@ def build_report(df: pd.DataFrame, generated_at: str, build_id: str,
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>15LS1CC Lab</title>
+<title>15C Lab</title>
 <style>
     body {{
         background-color: {BG_PAGE};
@@ -482,7 +482,7 @@ def build_report(df: pd.DataFrame, generated_at: str, build_id: str,
 </head>
 <body>
 <header style="margin-bottom: 24px;">
-    <h1 style="color: {TEXT}; font-size: 22px; margin: 0 0 6px;">15LS1CC</h1>
+    <h1 style="color: {TEXT}; font-size: 22px; margin: 0 0 6px;">15C</h1>
     <p style="color: {TEXT_MUTED}; font-size: 12px; margin: 0;">
         15-minute Leg Structure, 1-minute Confirmation Candle &middot; EURUSD, London session
     </p>
@@ -524,7 +524,7 @@ def build_error_page(message: str, generated_at: str) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>15LS1CC Lab - build failed</title>
+<title>15C Lab - build failed</title>
 <style>
     body {{
         background-color: {BG_PAGE};

@@ -59,7 +59,7 @@ def test_build_report_is_a_full_document():
     html = build_report(get_sample_data(), '2026-08-28 10:00:00', 'abc123')
     assert html.startswith('<!DOCTYPE html>')
     assert html.rstrip().endswith('</html>')
-    assert '<title>15LS1CC Lab</title>' in html
+    assert '<title>15C Lab</title>' in html
 
 
 def test_build_report_contains_every_section():
