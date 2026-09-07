@@ -40,6 +40,7 @@ def get_sample_data():
                  '2026-07-28', '2026-07-29', '2026-07-29'],
         'Weekday': ['Monday', 'Monday', 'Tuesday', 'Tuesday', 'Wednesday', 'Wednesday'],
         'Trade': ['#1', '#2', '#1', '#2', '#1', '#2'],
+        '4H': ['Sell', 'Buy', 'Buy', 'Buy', 'Buy', 'Sell'],
         'Direction': ['Sell', 'Sell', 'Buy', 'Sell', 'Buy', 'Sell'],
         'SL': [4.4, 7.1, 2.6, 3.0, 4.3, 5.8],
         'Pullback': [0.7, 7.1, 2.7, 0.0, 0.9, 2.4],
@@ -50,7 +51,7 @@ def get_sample_data():
 
 def get_empty_data():
     return pd.DataFrame({
-        'Date': [], 'Weekday': [], 'Trade': [], 'Direction': [],
+        'Date': [], 'Weekday': [], 'Trade': [], '4H': [], 'Direction': [],
         'SL': [], 'Pullback': [], 'TP': [], 'R': [],
     })
 
@@ -295,6 +296,34 @@ def test_render_error_then_recover(tmp_path):
     render_to_file(get_sample_data(), out, 'now')
     assert 'Build failed' not in out.read_text()
     assert 'Weekday Signals' in out.read_text()
+
+
+def test_htf_alignment_section_follows_the_weekday_section():
+    """The 4H table reads as a companion to the weekday one, so it sits
+    directly below it and above the SL family."""
+    page = build_report(get_sample_data(), 'now', 'abc123')
+
+    weekday = page.index('id="weekday"')
+    htf = page.index('id="htf-alignment"')
+    sl_range = page.index('id="sl-range"')
+    assert weekday < htf < sl_range
+
+
+def test_htf_alignment_section_renders_its_rows():
+    """Default, Aligned and Against all reach the page."""
+    page = build_report(get_sample_data(), 'now', 'abc123')
+    start = page.index('id="htf-alignment"')
+    section = page[start:page.index('id="sl-range"')]
+
+    assert '4H Alignment Signals' in page
+    for label in ('Default', 'Aligned', 'Against'):
+        assert f'<td>{label}</td>' in section, f'{label} row missing'
+
+
+def test_htf_alignment_is_in_the_nav():
+    page = build_report(get_sample_data(), 'now', 'abc123')
+    assert 'href="#htf-alignment"' in page
+    assert '>4H Alignment<' in page
 
 
 def test_no_duplicate_dom_ids():

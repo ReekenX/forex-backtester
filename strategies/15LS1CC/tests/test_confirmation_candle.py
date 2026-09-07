@@ -16,6 +16,7 @@ from utils.confirmation_candle import (
     calculate_buffer_statistics,
     calculate_fixed_sl_statistics,
     calculate_weekday_statistics,
+    calculate_htf_alignment_statistics,
     _calculate_buffer_statistics_filtered,
     create_html_table,
     get_strategies,
@@ -69,6 +70,8 @@ def get_sample_data():
                     'Wednesday', 'Wednesday', 'Thursday', 'Thursday', 'Friday'],
         'Trade': ['#1', '#2', '#3', '#1', '#2',
                   '#1', '#2', '#1', '#2', '#1'],
+        '4H': ['Buy', 'Buy', 'Buy', 'Sell', 'Sell',
+               'Sell', 'Buy', 'Buy', 'Buy', 'Sell'],
         'Direction': ['Buy', 'Buy', 'Sell', 'Buy', 'Sell',
                       'Sell', 'Buy', 'Buy', 'Sell', 'Sell'],
         'SL': [3.5, 1.1, 2.0, 4.0, 3.0,
@@ -85,15 +88,15 @@ def get_sample_data():
 def get_empty_data():
     """Create an empty dataset."""
     return pd.DataFrame({
-        'Date': [], 'Weekday': [], 'Trade': [], 'Direction': [],
+        'Date': [], 'Weekday': [], 'Trade': [], '4H': [], 'Direction': [],
         'SL': [], 'Pullback': [], 'TP': [], 'R': [],
     })
 
 
-CSV_SAMPLE = """Date,Weekday,Trade,Direction,SL,Pullback,TP,47.3%
-2026-07-27,Monday,#1,Sell,4.4,0.7,34,7R
-2026-07-27,Monday,#2,Sell,7.1,7.1,,
-2026-07-28,Tuesday,#1,Buy,2.6,2.7,31,-10R
+CSV_SAMPLE = """Date,Weekday,Trade,4H (53.8%),Direction,SL,Pullback,TP,47.3%
+2026-07-27,Monday,#1,Buy,Sell,4.4,0.7,34,7R
+2026-07-27,Monday,#2,Sell,Sell,7.1,7.1,,
+2026-07-28,Tuesday,#1,Buy,Buy,2.6,2.7,31,-10R
 """
 
 
@@ -108,8 +111,35 @@ def test_load_data_columns(tmp_path):
     """The win-rate header cell after TP is recovered as the R column."""
     df = load_data(write_sample_csv(tmp_path))
     assert list(df.columns) == [
-        'Date', 'Weekday', 'Trade', 'Direction', 'SL', 'Pullback', 'TP', 'R',
+        'Date', 'Weekday', 'Trade', '4H', 'Direction', 'SL', 'Pullback', 'TP', 'R',
     ]
+
+
+def test_load_data_recovers_the_4h_column(tmp_path):
+    """The export labels 4H with a computed win-rate cell ("4H (53.8%)"); the
+    prefix is enough to recover it, and its values are left as Buy/Sell."""
+    df = load_data(write_sample_csv(tmp_path))
+    assert '4H' in df.columns
+    assert df['4H'].tolist() == ['Buy', 'Sell', 'Buy']
+
+
+def test_load_data_keeps_named_4h_column(tmp_path):
+    """A CSV that already names the column 4H is loaded unchanged."""
+    path = tmp_path / "named4h.csv"
+    path.write_text("Date,Weekday,Trade,4H,Direction,SL,Pullback,TP,R\n"
+                    "2026-07-27,Monday,#1,Buy,Sell,4.4,0.7,34,7R\n")
+    df = load_data(str(path))
+    assert df['4H'].tolist() == ['Buy']
+
+
+def test_load_data_without_a_4h_column(tmp_path):
+    """An older export with no 4H column still loads."""
+    path = tmp_path / "no4h.csv"
+    path.write_text("Date,Weekday,Trade,Direction,SL,Pullback,TP,R\n"
+                    "2026-07-27,Monday,#1,Sell,4.4,0.7,34,7R\n")
+    df = load_data(str(path))
+    assert '4H' not in df.columns
+    assert df['R'].tolist() == [7.0]
 
 
 def test_load_data_strips_r_suffix(tmp_path):
@@ -169,7 +199,8 @@ def test_load_data_real_csv():
     df = load_data(csv_path)
     # The sheet may carry scratch columns to the right, so check the core
     # columns are present and in order rather than pinning the full list.
-    core = ['Date', 'Weekday', 'Trade', 'Direction', 'SL', 'Pullback', 'TP', 'R']
+    core = ['Date', 'Weekday', 'Trade', '4H', 'Direction',
+            'SL', 'Pullback', 'TP', 'R']
     assert list(df.columns)[:len(core)] == core
     assert len(df) > 0
     for col in ['SL', 'Pullback', 'TP', 'R']:
@@ -1137,6 +1168,106 @@ def test_weekday_statistics_single_day():
     assert rows['Monday']['Win Rate'] == '50.0%'
     assert rows['Tuesday']['Trades'] == 0
     assert rows['Tuesday']['Notation'] == '0W - 0L'
+
+
+def test_htf_alignment_columns():
+    """Same column shape as the weekday table, so the two read alike."""
+    sample = get_sample_data()
+    result = calculate_htf_alignment_statistics(sample)
+    assert list(result.columns) == ['4H Alignment', 'Trades', 'Notation', 'Win Rate']
+    assert list(result.columns)[1:] == list(
+        calculate_weekday_statistics(sample).columns)[1:]
+
+
+def test_htf_alignment_rows():
+    """Default first, then the two halves."""
+    result = calculate_htf_alignment_statistics(get_sample_data())
+    assert list(result['4H Alignment']) == ['Default', 'Aligned', 'Against']
+
+
+def test_htf_alignment_default_matches_every_trade():
+    """Default applies no filter, so it must equal the whole dataset scored at
+    the weekday table's rule."""
+    sample = get_sample_data()
+    default = calculate_htf_alignment_statistics(sample).iloc[0]
+    assert default['Trades'] == len(sample)
+    assert default['Notation'] == '6W - 4L'
+    assert default['Win Rate'] == '60.0%'
+
+
+def test_htf_alignment_splits_the_trades():
+    """Aligned and Against partition the dataset - every trade lands in exactly
+    one of them. Sample 4H/Direction: 7 agree, 3 disagree."""
+    result = calculate_htf_alignment_statistics(get_sample_data())
+    counts = dict(zip(result['4H Alignment'], result['Trades']))
+    assert counts['Aligned'] == 7
+    assert counts['Against'] == 3
+    assert counts['Aligned'] + counts['Against'] == counts['Default']
+
+
+def test_htf_alignment_notation_and_win_rate():
+    """Sample winners (Pullback < SL AND TP > 0) are idx 1,3,5,7,8,9. Of those,
+    1, 5, 7 and 9 ran with the 4H trend and 3 and 8 fought it."""
+    result = calculate_htf_alignment_statistics(get_sample_data())
+    rows = {row['4H Alignment']: row for _, row in result.iterrows()}
+
+    assert rows['Aligned']['Notation'] == '4W - 3L'
+    assert rows['Aligned']['Win Rate'] == '57.1%'
+    assert rows['Against']['Notation'] == '2W - 1L'
+    assert rows['Against']['Win Rate'] == '66.7%'
+
+
+def test_htf_alignment_stopped_out_is_a_loss():
+    """A trade that lost its stop before running to target is a loss even with
+    a far-away TP, on both sides of the split."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-12', '2026-01-13'],
+        'Weekday': ['Monday', 'Tuesday'],
+        'Trade': ['#1', '#1'],
+        '4H': ['Buy', 'Buy'],
+        'Direction': ['Buy', 'Sell'],
+        'SL': [3.0, 3.0],
+        'Pullback': [4.0, 4.0],
+        'TP': [20.0, 20.0],
+        'R': [-6.0, -6.0],
+    })
+
+    rows = {r['4H Alignment']: r
+            for _, r in calculate_htf_alignment_statistics(trades).iterrows()}
+    assert rows['Aligned']['Notation'] == '0W - 1L'
+    assert rows['Against']['Notation'] == '0W - 1L'
+
+
+def test_htf_alignment_all_one_side():
+    """When every trade agrees with the 4H trend, Against is empty rather than
+    missing."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-12'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        '4H': ['Buy'],
+        'Direction': ['Buy'],
+        'SL': [3.0],
+        'Pullback': [1.0],
+        'TP': [5.0],
+        'R': [1.7],
+    })
+
+    rows = {r['4H Alignment']: r
+            for _, r in calculate_htf_alignment_statistics(trades).iterrows()}
+    assert rows['Aligned']['Notation'] == '1W - 0L'
+    assert rows['Against']['Trades'] == 0
+    assert rows['Against']['Notation'] == '0W - 0L'
+    assert rows['Against']['Win Rate'] == '0.0%'
+
+
+def test_htf_alignment_empty():
+    result = calculate_htf_alignment_statistics(get_empty_data())
+    assert len(result) == 3
+    for _, row in result.iterrows():
+        assert row['Trades'] == 0
+        assert row['Notation'] == '0W - 0L'
+        assert row['Win Rate'] == '0.0%'
 
 
 def test_sl_ranges_constant():
@@ -2284,6 +2415,14 @@ def run_all_tests():
         test_weekday_statistics_no_tp_is_a_loss,
         test_weekday_statistics_empty,
         test_weekday_statistics_single_day,
+        test_htf_alignment_columns,
+        test_htf_alignment_rows,
+        test_htf_alignment_default_matches_every_trade,
+        test_htf_alignment_splits_the_trades,
+        test_htf_alignment_notation_and_win_rate,
+        test_htf_alignment_stopped_out_is_a_loss,
+        test_htf_alignment_all_one_side,
+        test_htf_alignment_empty,
         test_sl_ranges_constant,
         test_sl_statistics_columns,
         test_sl_statistics_win_needs_a_full_1_1_target,

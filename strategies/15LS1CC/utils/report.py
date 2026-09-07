@@ -33,6 +33,7 @@ from utils.confirmation_candle import (
     calculate_tp_statistics,
     calculate_three_setups_comparison,
     calculate_weekday_statistics,
+    calculate_htf_alignment_statistics,
     create_html_table,
     create_three_setups_table,
     create_r_histogram_combined,
@@ -64,6 +65,10 @@ POLL_INTERVAL_MS = 1000
 
 def _weekday_section(df: pd.DataFrame) -> str:
     return create_html_table(calculate_weekday_statistics(df))
+
+
+def _htf_alignment_section(df: pd.DataFrame) -> str:
+    return create_html_table(calculate_htf_alignment_statistics(df))
 
 
 def _sl_section(df: pd.DataFrame) -> str:
@@ -138,6 +143,14 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "Weekday Signals",
         "Win = Pullback &lt; SL AND TP &gt; 0, i.e. the trade survived its stop and finished profitable at any distance.",
         _weekday_section,
+    ),
+    (
+        "htf-alignment",
+        "4H Alignment",
+        "4H Alignment Signals",
+        "Trades split by whether they ran with the 4H trend or against it. "
+        "Same win rule as the weekday table: Win = Pullback &lt; SL AND TP &gt; 0.",
+        _htf_alignment_section,
     ),
     (
         "sl-range",
