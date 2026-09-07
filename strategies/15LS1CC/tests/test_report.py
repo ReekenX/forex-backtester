@@ -294,7 +294,7 @@ def test_render_error_then_recover(tmp_path):
 
     render_to_file(get_sample_data(), out, 'now')
     assert 'Build failed' not in out.read_text()
-    assert 'Weekday Statistics' in out.read_text()
+    assert 'Weekday Signals' in out.read_text()
 
 
 def test_no_duplicate_dom_ids():
@@ -378,12 +378,11 @@ def test_three_setups_table_id_differs_from_its_anchor():
 
 
 def test_stop_tables_are_not_sortable_but_others_are():
-    """The four stop tables keep their Default-outwards order; Pullback and the
+    """The two stop tables keep their Default-outwards order; Pullback and the
     Strategies tables stay click-to-sort."""
     page = build_report(get_sample_data(), 'now', 'abc123')
 
-    for table_id in ('sl-range-stats', 'sl-reduction-table',
-                     'sl-buffer-table', 'sl-buffer-small-table'):
+    for table_id in ('sl-range-stats', 'sl-buffer-table'):
         assert f'id="{table_id}"' in page, f'{table_id} missing'
         assert f"sortSlRange('{table_id}'" not in page, f'{table_id} still sortable'
 
@@ -392,12 +391,11 @@ def test_stop_tables_are_not_sortable_but_others_are():
 
 
 def test_stop_tables_share_a_pinned_first_column():
-    """The four stop tables pin their label column so they line up with each
+    """The two stop tables pin their label column so they line up with each
     other; the other tables keep auto sizing."""
     page = build_report(get_sample_data(), 'now', 'abc123')
 
-    for table_id in ('sl-range-stats', 'sl-reduction-table',
-                     'sl-buffer-table', 'sl-buffer-small-table'):
+    for table_id in ('sl-range-stats', 'sl-buffer-table'):
         start = page.index(f'id="{table_id}"')
         head = page[start:start + 400]
         assert 'table-layout: fixed' in head, f'{table_id} not fixed-layout'

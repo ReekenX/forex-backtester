@@ -36,15 +36,11 @@ from utils.confirmation_candle import (
     _format_wl,
     SL_RANGES,
     SL_BUFFER_PIPS,
-    SL_BUFFER_SMALL_SL_THRESHOLD,
     SL_FIXED_PIPS,
-    SL_REDUCTION_PIPS,
     calculate_sl_statistics,
     _create_sl_sortable_table,
-    calculate_sl_buffer_small_sl_statistics,
     calculate_sl_fixed_statistics,
     calculate_sl_buffer_statistics,
-    calculate_sl_reduction_statistics,
     PULLBACK_ENTRY_PIPS,
     calculate_pullback_statistics,
     TP_RANGES,
@@ -1144,9 +1140,14 @@ def test_weekday_statistics_single_day():
 
 
 def test_sl_ranges_constant():
-    """SL_RANGES covers the cumulative 0-5 .. 0-10 bands."""
-    assert SL_RANGES == [(f"0-{x}", 0, x) for x in range(5, 11)]
-    assert len(SL_RANGES) == 6
+    """SL_RANGES covers two cumulative bands, one middle band and an open tail."""
+    assert SL_RANGES == [
+        ("0-5 SL", 0, 5),
+        ("0-10 SL", 0, 10),
+        ("5-10 SL", 5, 10),
+        ("10+ pips", 10, float('inf')),
+    ]
+    assert len(SL_RANGES) == 4
 
 
 def test_sl_statistics_columns():
@@ -1172,31 +1173,32 @@ def test_sl_statistics_win_needs_a_full_1_1_target():
     })
 
     rows = {r['SL Range']: r for _, r in calculate_sl_statistics(trades).iterrows()}
-    assert rows['0-5']['Notation'] == '1W - 1L'
-    assert rows['0-5']['Win Rate'] == '50.0%'
+    assert rows['0-5 SL']['Notation'] == '1W - 1L'
+    assert rows['0-5 SL']['Win Rate'] == '50.0%'
 
 
 def test_sl_statistics_all_ranges_present():
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
     assert len(result) == len(SL_RANGES) + 1
-    assert list(result['SL Range']) == ['Default'] + [f"0-{x}" for x in range(5, 11)]
+    assert list(result['SL Range']) == [
+        'Default', '0-5 SL', '0-10 SL', '5-10 SL', '10+ pips']
 
 
 def test_sl_statistics_trade_counts():
     """Sample SL values: 3.5, 1.1, 2.0, 4.0, 3.0, 5.0, 2.5, 6.0, 8.0, 1.5.
 
-    Cumulative SL < X: 0-5: 7, 0-6: 8, 0-7: 9, 0-8: 9, 0-9: 10, 0-10: 10.
+    Bands are half-open, [low, high): 0-5 takes the seven under 5.0, 5-10 takes
+    5.0, 6.0 and 8.0, and nothing in the sample reaches 10.
     """
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
     counts = dict(zip(result['SL Range'], result['Trades']))
-    assert counts['0-5'] == 7
-    assert counts['0-6'] == 8
-    assert counts['0-7'] == 9
-    assert counts['0-8'] == 9
-    assert counts['0-9'] == 10
-    assert counts['0-10'] == 10
+    assert counts['Default'] == 10
+    assert counts['0-5 SL'] == 7
+    assert counts['0-10 SL'] == 10
+    assert counts['5-10 SL'] == 3
+    assert counts['10+ pips'] == 0
 
 
 def test_sl_statistics_notation():
@@ -1205,36 +1207,32 @@ def test_sl_statistics_notation():
     2.5/2.5/0, 6.0/3.0/15, 8.0/7.0/10, 1.5/0.5/5.
 
     Stopped out (Pullback >= SL): idx 0, 2, 4, 6 - all have TP 0 anyway.
-    Winners: idx 1, 3, 5, 7, 8, 9, entering the bands as the cap widens.
+    Winners: idx 1, 3, 5, 7, 8, 9. Every loser has SL under 5, so the 5-10
+    band is all winners.
     """
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-5']['Notation'] == '3W - 4L'
-    assert rows['0-5']['Win Rate'] == '42.9%'
-    assert rows['0-6']['Notation'] == '4W - 4L'
-    assert rows['0-6']['Win Rate'] == '50.0%'
-    assert rows['0-7']['Notation'] == '5W - 4L'
-    assert rows['0-7']['Win Rate'] == '55.6%'
-    assert rows['0-10']['Notation'] == '6W - 4L'
-    assert rows['0-10']['Win Rate'] == '60.0%'
+    assert rows['0-5 SL']['Notation'] == '3W - 4L'
+    assert rows['0-5 SL']['Win Rate'] == '42.9%'
+    assert rows['0-10 SL']['Notation'] == '6W - 4L'
+    assert rows['0-10 SL']['Win Rate'] == '60.0%'
+    assert rows['5-10 SL']['Notation'] == '3W - 0L'
+    assert rows['5-10 SL']['Win Rate'] == '100.0%'
+    assert rows['10+ pips']['Notation'] == '0W - 0L'
+    assert rows['10+ pips']['Win Rate'] == '0.0%'
 
 
-def test_sl_statistics_cumulative_bands():
-    """Each band is cumulative (0 <= SL < X), so trade counts never shrink as
-    the cap widens. Sample SL: 3.5,1.1,2.0,4.0,3.0,5.0,2.5,6.0,8.0,1.5."""
+def test_sl_statistics_bands_partition_the_trades():
+    """0-5 and 5-10 are disjoint and together make up 0-10, and 0-10 plus 10+
+    accounts for every trade. Sample SL: 3.5,1.1,2.0,4.0,3.0,5.0,2.5,6.0,8.0,1.5."""
     sample = get_sample_data()
     result = calculate_sl_statistics(sample)
     counts = dict(zip(result['SL Range'], result['Trades']))
 
-    assert counts['0-5'] == 7   # excludes 5.0, 6.0, 8.0
-    assert counts['0-6'] == 8   # 5.0 joins
-    assert counts['0-7'] == 9   # 6.0 joins
-    assert counts['0-10'] == 10  # 8.0 joins
-
-    widths = [counts[label] for label, _, _ in SL_RANGES]
-    assert widths == sorted(widths)
+    assert counts['0-5 SL'] + counts['5-10 SL'] == counts['0-10 SL']
+    assert counts['0-10 SL'] + counts['10+ pips'] == counts['Default']
 
 
 def test_sl_statistics_requires_surviving_stop():
@@ -1252,9 +1250,9 @@ def test_sl_statistics_requires_surviving_stop():
     })
 
     rows = {r['SL Range']: r for _, r in calculate_sl_statistics(trades).iterrows()}
-    assert rows['0-5']['Trades'] == 1
-    assert rows['0-5']['Notation'] == '0W - 1L'
-    assert rows['0-5']['Win Rate'] == '0.0%'
+    assert rows['0-5 SL']['Trades'] == 1
+    assert rows['0-5 SL']['Notation'] == '0W - 1L'
+    assert rows['0-5 SL']['Win Rate'] == '0.0%'
 
 
 def test_sl_statistics_survivor_wins():
@@ -1271,8 +1269,8 @@ def test_sl_statistics_survivor_wins():
     })
 
     rows = {r['SL Range']: r for _, r in calculate_sl_statistics(trades).iterrows()}
-    assert rows['0-5']['Notation'] == '1W - 0L'
-    assert rows['0-5']['Win Rate'] == '100.0%'
+    assert rows['0-5 SL']['Notation'] == '1W - 0L'
+    assert rows['0-5 SL']['Win Rate'] == '100.0%'
 
 
 def test_sl_statistics_empty():
@@ -1286,7 +1284,7 @@ def test_sl_statistics_empty():
 
 
 def test_sl_statistics_large_sl():
-    """SL=12 and SL=15 fall outside every 0-X band, but Default still sees them."""
+    """SL=12 and SL=15 fall outside the capped bands and land in 10+."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01', '2026-01-02'],
         'Weekday': ['Monday', 'Monday'],
@@ -1303,8 +1301,10 @@ def test_sl_statistics_large_sl():
 
     assert rows['Default']['Trades'] == 2
     assert rows['Default']['Notation'] == '1W - 1L'
-    for label in [f"0-{x}" for x in range(5, 11)]:
+    for label in ['0-5 SL', '0-10 SL', '5-10 SL']:
         assert rows[label]['Trades'] == 0
+    assert rows['10+ pips']['Trades'] == 2
+    assert rows['10+ pips']['Notation'] == '1W - 1L'
 
 
 def test_sl_statistics_no_tp_is_loss():
@@ -1321,8 +1321,8 @@ def test_sl_statistics_no_tp_is_loss():
     })
 
     rows = {r['SL Range']: r for _, r in calculate_sl_statistics(trades).iterrows()}
-    assert rows['0-5']['Notation'] == '0W - 1L'
-    assert rows['0-10']['Notation'] == '0W - 1L'
+    assert rows['0-5 SL']['Notation'] == '0W - 1L'
+    assert rows['0-10 SL']['Notation'] == '0W - 1L'
 
 
 def test_sl_sortable_table_notation_headers_clickable():
@@ -1403,121 +1403,14 @@ def _pullback_rows(result):
     return {row['Pullback']: row for _, row in result.iterrows()}
 
 
-def test_sl_reduction_pips_constant():
-    """Five reduction values starting at 0 (no reduction)."""
-    assert SL_REDUCTION_PIPS == [0, 1, 2, 3, 4]
-    assert len(SL_REDUCTION_PIPS) == 5
 
 
-def test_sl_reduction_columns():
-    """Same column shape as the weekday and SL range tables."""
-    result = calculate_sl_reduction_statistics(get_sample_data())
-    assert list(result.columns) == ['SL Reduction', 'Trades', 'Notation', 'Win Rate']
 
 
-def test_sl_reduction_rows():
-    result = calculate_sl_reduction_statistics(get_sample_data())
-    assert list(result['SL Reduction']) == [
-        'Default', '1 pip', '2 pips', '3 pips', '4 pips']
-    # Every row scores the whole dataset; a reduction never drops trades.
-    assert (result['Trades'] == 10).all()
 
 
-def test_sl_reduction_worked_example():
-    """The brief's example: SL 3.6, Pullback 1.2, TP far enough to clear the
-    target at every stop. Wins at -0/-1/-2, then the 1.2 pullback takes out the
-    0.6 stop at -3, and -4 leaves no stop at all."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'Weekday': ['Monday'],
-        'Trade': ['#1'],
-        'Direction': ['Buy'],
-        'SL': [3.6],
-        'Pullback': [1.2],
-        'TP': [20.0],
-        'R': [5.0],
-    })
-
-    rows = {r['SL Reduction']: r for _, r in
-            calculate_sl_reduction_statistics(trades).iterrows()}
-    assert rows['Default']['Notation'] == '1W - 0L'
-    assert rows['1 pip']['Notation'] == '1W - 0L'
-    assert rows['2 pips']['Notation'] == '1W - 0L'
-    assert rows['3 pips']['Notation'] == '0W - 1L'   # stop 0.6 < pullback 1.2
-    assert rows['4 pips']['Notation'] == '0W - 1L'   # stop -0.4, no room at all
 
 
-def test_sl_reduction_target_shrinks_with_the_stop():
-    """A 1:1 target is measured on the reduced stop, so a trade whose TP was
-    short of the original stop can win once the stop is tightened."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'Weekday': ['Monday'],
-        'Trade': ['#1'],
-        'Direction': ['Buy'],
-        'SL': [5.0],
-        'Pullback': [0.5],
-        'TP': [3.0],
-        'R': [0.0],
-    })
-
-    rows = {r['SL Reduction']: r for _, r in
-            calculate_sl_reduction_statistics(trades).iterrows()}
-    assert rows['Default']['Notation'] == '0W - 1L'   # TP 3 < SL 5
-    assert rows['2 pips']['Notation'] == '1W - 0L'   # TP 3 >= stop 3
-    assert rows['4 pips']['Notation'] == '1W - 0L'   # TP 3 >= stop 1
-
-
-def test_sl_reduction_stopped_out_trade_stays_a_loss():
-    """Tightening a stop can never rescue a trade the original stop took out."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'Weekday': ['Monday'],
-        'Trade': ['#1'],
-        'Direction': ['Buy'],
-        'SL': [3.0],
-        'Pullback': [4.0],
-        'TP': [30.0],
-        'R': [-10.0],
-    })
-
-    result = calculate_sl_reduction_statistics(trades)
-    assert (result['Notation'] == '0W - 1L').all()
-
-
-def test_sl_reduction_win_rate_matches_notation():
-    result = calculate_sl_reduction_statistics(get_sample_data())
-    for _, row in result.iterrows():
-        wins = int(row['Notation'].split('W')[0])
-        assert row['Win Rate'] == f"{wins / row['Trades'] * 100:.1f}%"
-
-
-def test_sl_reduction_zero_matches_the_unreduced_rule():
-    """Row "0 pips" must equal the plain 1:1 rule used elsewhere."""
-    sample = get_sample_data()
-    rows = {r['SL Reduction']: r for _, r in
-            calculate_sl_reduction_statistics(sample).iterrows()}
-    wins = int((
-        (sample['Pullback'] < sample['SL']) & (sample['TP'] >= sample['SL'])
-    ).sum())
-    assert rows['Default']['Notation'] == f"{wins}W - {len(sample) - wins}L"
-
-
-def test_sl_reduction_empty():
-    result = calculate_sl_reduction_statistics(get_empty_data())
-    assert len(result) == len(SL_REDUCTION_PIPS)
-    for _, row in result.iterrows():
-        assert row['Trades'] == 0
-        assert row['Notation'] == '0W - 0L'
-        assert row['Win Rate'] == '0.0%'
-
-
-def test_sl_reduction_is_not_sortable():
-    """Row order is the point of this table, so sorting is off."""
-    stats = calculate_sl_reduction_statistics(get_sample_data())
-    html = _create_sl_sortable_table(stats, "sl-reduction-table", sortable=False)
-    assert "onclick" not in html
-    assert "sortSlRange" not in html
 
 
 def test_sl_buffer_pips_constant():
@@ -1531,15 +1424,6 @@ def test_sl_buffer_columns_and_rows():
     assert list(result['SL Buffer']) == [
         'Default', '1 pip', '2 pips', '3 pips', '4 pips', '5 pips']
     assert (result['Trades'] == 10).all()
-
-
-def test_sl_buffer_zero_row_matches_reduction_zero_row():
-    """Both tables leave the stop alone at 0, so they must agree there."""
-    sample = get_sample_data()
-    buf = calculate_sl_buffer_statistics(sample).iloc[0]
-    red = calculate_sl_reduction_statistics(sample).iloc[0]
-    assert buf['Notation'] == red['Notation']
-    assert buf['Win Rate'] == red['Win Rate']
 
 
 def test_sl_buffer_rescues_a_stopped_out_trade():
@@ -1608,111 +1492,13 @@ def test_sl_buffer_is_not_sortable():
     assert "sortSlRange" not in html
 
 
-def test_sl_buffer_small_sl_threshold_constant():
-    assert SL_BUFFER_SMALL_SL_THRESHOLD == 5.0
 
 
-def test_sl_buffer_small_sl_columns_and_rows():
-    result = calculate_sl_buffer_small_sl_statistics(get_sample_data())
-    assert list(result.columns) == ['SL Buffer', 'Trades', 'Notation', 'Win Rate']
-    assert list(result['SL Buffer']) == [
-        'Default', '1 pip', '2 pips', '3 pips', '4 pips', '5 pips']
-    # Wide-stop trades are left alone, not dropped.
-    assert (result['Trades'] == 10).all()
 
 
-def test_sl_buffer_small_sl_zero_row_matches_the_other_tables():
-    sample = get_sample_data()
-    small = calculate_sl_buffer_small_sl_statistics(sample).iloc[0]
-    plain = calculate_sl_buffer_statistics(sample).iloc[0]
-    assert small['Notation'] == plain['Notation']
-    assert small['Win Rate'] == plain['Win Rate']
 
 
-def test_sl_buffer_small_sl_leaves_wide_stops_alone():
-    """SL 6.0 (>= 5.0) keeps its stop, so padding never rescues it. The same
-    trade in the unconditional table is saved at +1."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'Weekday': ['Monday'],
-        'Trade': ['#1'],
-        'Direction': ['Buy'],
-        'SL': [6.0],
-        'Pullback': [6.5],
-        'TP': [20.0],
-        'R': [-3.0],
-    })
 
-    small = {r['SL Buffer']: r for _, r in
-             calculate_sl_buffer_small_sl_statistics(trades).iterrows()}
-    plain = {r['SL Buffer']: r for _, r in
-             calculate_sl_buffer_statistics(trades).iterrows()}
-
-    assert small['1 pip']['Notation'] == '0W - 1L'   # stop stays 6.0
-    assert small['5 pips']['Notation'] == '0W - 1L'
-    assert plain['1 pip']['Notation'] == '1W - 0L'   # stop widens to 7.0
-
-
-def test_sl_buffer_small_sl_pads_tight_stops():
-    """SL 3.0 (< 5.0) does get the buffer, matching the unconditional table."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01'],
-        'Weekday': ['Monday'],
-        'Trade': ['#1'],
-        'Direction': ['Buy'],
-        'SL': [3.0],
-        'Pullback': [3.5],
-        'TP': [6.0],
-        'R': [-2.0],
-    })
-
-    small = {r['SL Buffer']: r for _, r in
-             calculate_sl_buffer_small_sl_statistics(trades).iterrows()}
-    assert small['Default']['Notation'] == '0W - 1L'
-    assert small['1 pip']['Notation'] == '1W - 0L'
-
-
-def test_sl_buffer_small_sl_threshold_is_exclusive():
-    """A stop of exactly 5.0 is 'wide' and keeps its recorded value."""
-    trades = pd.DataFrame({
-        'Date': ['2026-01-01', '2026-01-02'],
-        'Weekday': ['Monday', 'Tuesday'],
-        'Trade': ['#1', '#1'],
-        'Direction': ['Buy', 'Buy'],
-        'SL': [5.0, 4.9],
-        'Pullback': [5.2, 5.2],
-        'TP': [20.0, 20.0],
-        'R': [-3.0, -3.0],
-    })
-
-    rows = {r['SL Buffer']: r for _, r in
-            calculate_sl_buffer_small_sl_statistics(trades).iterrows()}
-    # +1: the 4.9 stop becomes 5.9 and survives the 5.2 pullback; the 5.0 stop
-    # is untouched and does not.
-    assert rows['1 pip']['Notation'] == '1W - 1L'
-
-
-def test_sl_buffer_small_sl_win_rate_matches_notation():
-    result = calculate_sl_buffer_small_sl_statistics(get_sample_data())
-    for _, row in result.iterrows():
-        wins = int(row['Notation'].split('W')[0])
-        assert row['Win Rate'] == f"{wins / row['Trades'] * 100:.1f}%"
-
-
-def test_sl_buffer_small_sl_empty():
-    result = calculate_sl_buffer_small_sl_statistics(get_empty_data())
-    assert len(result) == len(SL_BUFFER_PIPS)
-    for _, row in result.iterrows():
-        assert row['Trades'] == 0
-        assert row['Notation'] == '0W - 0L'
-
-
-def test_sl_buffer_small_sl_is_not_sortable():
-    """Row order is the point of this table, so sorting is off."""
-    stats = calculate_sl_buffer_small_sl_statistics(get_sample_data())
-    html = _create_sl_sortable_table(stats, "sl-buffer-small-table", sortable=False)
-    assert "onclick" not in html
-    assert "sortSlRange" not in html
 
 
 def test_sl_fixed_pips_constant():
@@ -1735,7 +1521,6 @@ def test_sl_fixed_default_row_matches_the_other_tables():
     default = calculate_sl_fixed_statistics(sample).iloc[0]
     assert default['Fixed SL'] == 'Default'
     assert default['Notation'] == calculate_sl_buffer_statistics(sample).iloc[0]['Notation']
-    assert default['Notation'] == calculate_sl_reduction_statistics(sample).iloc[0]['Notation']
 
 
 def test_sl_fixed_discards_the_recorded_stop():
@@ -1831,14 +1616,12 @@ def test_first_col_width_composes_with_sorting():
 
 
 def test_every_stop_table_opens_with_the_same_default_row():
-    """SL Range, Reducing SL, Adding Buffer, Buffer (SL<5) and Fixed SL all
+    """SL Range, Adding Buffer and Fixed SL all
     start from the recorded stops, so their Default rows must agree."""
     sample = get_sample_data()
     tables = {
         'SL Range': (calculate_sl_statistics(sample), 'SL Range'),
-        'Reducing SL': (calculate_sl_reduction_statistics(sample), 'SL Reduction'),
         'Adding Buffer': (calculate_sl_buffer_statistics(sample), 'SL Buffer'),
-        'Buffer SL<5': (calculate_sl_buffer_small_sl_statistics(sample), 'SL Buffer'),
         'Fixed SL': (calculate_sl_fixed_statistics(sample), 'Fixed SL'),
     }
 
@@ -2519,33 +2302,13 @@ def run_all_tests():
         test_sl_sortable_table_uses_given_id,
         test_sl_sortable_table_sorts_descending,
         test_sl_sortable_table_empty,
-        test_sl_reduction_pips_constant,
-        test_sl_reduction_columns,
-        test_sl_reduction_rows,
-        test_sl_reduction_worked_example,
-        test_sl_reduction_target_shrinks_with_the_stop,
-        test_sl_reduction_stopped_out_trade_stays_a_loss,
-        test_sl_reduction_win_rate_matches_notation,
-        test_sl_reduction_zero_matches_the_unreduced_rule,
-        test_sl_reduction_empty,
-        test_sl_reduction_is_not_sortable,
         test_sl_buffer_pips_constant,
         test_sl_buffer_columns_and_rows,
-        test_sl_buffer_zero_row_matches_reduction_zero_row,
         test_sl_buffer_rescues_a_stopped_out_trade,
         test_sl_buffer_target_moves_out_with_the_stop,
         test_sl_buffer_win_rate_matches_notation,
         test_sl_buffer_empty,
         test_sl_buffer_is_not_sortable,
-        test_sl_buffer_small_sl_threshold_constant,
-        test_sl_buffer_small_sl_columns_and_rows,
-        test_sl_buffer_small_sl_zero_row_matches_the_other_tables,
-        test_sl_buffer_small_sl_leaves_wide_stops_alone,
-        test_sl_buffer_small_sl_pads_tight_stops,
-        test_sl_buffer_small_sl_threshold_is_exclusive,
-        test_sl_buffer_small_sl_win_rate_matches_notation,
-        test_sl_buffer_small_sl_empty,
-        test_sl_buffer_small_sl_is_not_sortable,
         test_sl_fixed_pips_constant,
         test_sl_fixed_columns_and_rows,
         test_sl_fixed_default_row_matches_the_other_tables,

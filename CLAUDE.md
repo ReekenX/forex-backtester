@@ -200,8 +200,8 @@ Sections are declared in `report.py`'s `SECTIONS` list as
 
 ### Conventions for stop tables
 
-The SL tables (`SL Range`, `Reducing SL`, `Adding Buffer`, `Adding Buffer When
-SL < 5`, `Fixed SL`, `Pullback Range`) are a family and must stay consistent:
+The SL tables (`SL Range`, `Adding Buffer`, `Fixed SL`, `Pullback Range`) are
+a family and must stay consistent:
 
 - **One shared win rule.** Every stop scenario goes through
   `_sl_scenario_statistics`, which takes `(label, effective SL)` pairs. Do not

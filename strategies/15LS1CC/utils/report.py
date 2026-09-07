@@ -28,10 +28,8 @@ from utils.confirmation_candle import (
     _create_sl_sortable_table,
     calculate_pullback_statistics,
     calculate_sl_statistics,
-    calculate_sl_buffer_small_sl_statistics,
     calculate_sl_fixed_statistics,
     calculate_sl_buffer_statistics,
-    calculate_sl_reduction_statistics,
     calculate_tp_statistics,
     calculate_three_setups_comparison,
     calculate_weekday_statistics,
@@ -72,21 +70,9 @@ def _sl_section(df: pd.DataFrame) -> str:
     return _create_sl_sortable_table(calculate_sl_statistics(df), "sl-range-stats", sortable=False, first_col_width="50%")
 
 
-def _sl_reduction_section(df: pd.DataFrame) -> str:
-    return _create_sl_sortable_table(
-        calculate_sl_reduction_statistics(df), "sl-reduction-table", sortable=False, first_col_width="50%"
-    )
-
-
 def _sl_buffer_section(df: pd.DataFrame) -> str:
     return _create_sl_sortable_table(
         calculate_sl_buffer_statistics(df), "sl-buffer-table", sortable=False, first_col_width="50%"
-    )
-
-
-def _sl_buffer_small_sl_section(df: pd.DataFrame) -> str:
-    return _create_sl_sortable_table(
-        calculate_sl_buffer_small_sl_statistics(df), "sl-buffer-small-table", sortable=False, first_col_width="50%"
     )
 
 
@@ -149,45 +135,29 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
     (
         "weekday",
         "Weekday",
-        "Weekday Statistics",
+        "Weekday Signals",
         "Win = Pullback &lt; SL AND TP &gt; 0, i.e. the trade survived its stop and finished profitable at any distance.",
         _weekday_section,
     ),
     (
         "sl-range",
         "SL Range",
-        "SL Range Statistics",
+        "SL Range Signals",
         "Win rate per safe-stop band at 1:1. Win = Pullback &lt; SL AND TP &gt;= SL.",
         _sl_section,
     ),
     (
-        "sl-reduction",
-        "Reducing SL",
-        "Reducing SL Statistics",
-        "Every stop shaved by N pips: win = Pullback &lt; SL - N AND TP &gt;= SL - N. "
-        "The broker minimum stop is 1.1 pips.",
-        _sl_reduction_section,
-    ),
-    (
         "sl-buffer",
         "Adding Buffer",
-        "Adding Buffer To SL Statistics",
-        "The mirror of the table above - every stop padded by N pips: "
+        "Adding Buffer To SL Signals",
+        "Every stop padded by N pips: "
         "win = Pullback &lt; SL + N AND TP &gt;= SL + N.",
         _sl_buffer_section,
     ),
     (
-        "sl-buffer-small",
-        "Adding Buffer (SL < 5)",
-        "Adding Buffer To SL When SL < 5 Statistics",
-        "The same buffer, but only on stops under 5 pips - trades with a stop of "
-        "5.0 or wider keep it as recorded. All trades are still scored.",
-        _sl_buffer_small_sl_section,
-    ),
-    (
         "sl-fixed",
         "Fixed SL",
-        "Fixed SL Statistics",
+        "Fixed SL Signals",
         "The recorded stop replaced by one size for every trade, so both the "
         "survival check and the 1:1 target move to it. Default keeps the "
         "recorded stops as a baseline.",
@@ -196,14 +166,14 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
     (
         "tp-range",
         "TP Range",
-        "TP Range Statistics",
+        "TP Range Signals",
         "How far the profitable trades ran.",
         _tp_section,
     ),
     (
         "pullback",
         "Pullback",
-        "Pullback Range Statistics",
+        "Pullback Range Signals",
         "Filling a limit order N pips into the pullback instead of taking the "
         "signal. Half fills at half the stop. M counts winners the limit never "
         "filled, so they are excluded from Trades and Win Rate.",

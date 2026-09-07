@@ -955,7 +955,7 @@ def display_weekday(df: pd.DataFrame):
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Weekday Statistics</h2>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Weekday Signals</h2>"
     display(HTML(title_html))
 
     stats_df = calculate_weekday_statistics(df)
@@ -963,8 +963,13 @@ def display_weekday(df: pd.DataFrame):
     display(HTML(html_table))
 
 
+# Bands overlap on purpose: 0-10 is the union of 0-5 and 5-10, and each is read
+# on its own. Upper bounds are exclusive, so 10+ picks up whatever 0-10 leaves.
 SL_RANGES = [
-    (f"0-{x}", 0, x) for x in range(5, 11)
+    ("0-5 SL", 0, 5),
+    ("0-10 SL", 0, 10),
+    ("5-10 SL", 5, 10),
+    ("10+ pips", 10, float('inf')),
 ]
 
 def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
@@ -1147,7 +1152,7 @@ def display_analysis_sl(df: pd.DataFrame):
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px 10px 0;'>SL Range Statistics</h2>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px 10px 0;'>SL Range Signals</h2>"
     display(HTML(title_html))
 
     stats_df = calculate_sl_statistics(df)
@@ -1156,13 +1161,11 @@ def display_analysis_sl(df: pd.DataFrame):
 
 
 # Pips to shave off the safe stop. 0 means the stop is left as recorded.
-SL_REDUCTION_PIPS = [0, 1, 2, 3, 4]
 
 # Pips to pad the safe stop with. 0 means the stop is left as recorded.
 SL_BUFFER_PIPS = [0, 1, 2, 3, 4, 5]
 
 # Only stops strictly below this get padded in the small-SL buffer table.
-SL_BUFFER_SMALL_SL_THRESHOLD = 5.0
 
 # Stop sizes to substitute for every trade's recorded SL.
 SL_FIXED_PIPS = [3, 4, 5, 6, 7, 8, 9, 10]
@@ -1213,8 +1216,8 @@ def _sl_scenario_statistics(df: pd.DataFrame, scenarios: List[Tuple[str, object]
     return pd.DataFrame(results)
 
 
-def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float], column: str,
-                         apply_below: Optional[float] = None) -> pd.DataFrame:
+def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float],
+                         column: str) -> pd.DataFrame:
     """
     Score every trade at 1:1 with each stop adjustment applied.
 
@@ -1224,60 +1227,25 @@ def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float], column: str,
     Args:
         df: DataFrame with trading data
         shifts: Pip adjustments to apply to every trade's SL
-        column: Name for the leading column (e.g. 'SL Reduction')
-        apply_below: When set, only trades whose SL is strictly below this are
-            adjusted; the rest keep their recorded stop. Every trade is still
-            scored either way, so the Trades count does not change.
+        column: Name for the leading column (e.g. 'SL Buffer')
 
     Returns:
         DataFrame with columns: <column>, Trades, Notation, Win Rate
     """
     scenarios = []
     for shift in shifts:
-        shifted = df['SL'] + shift
-        effective_sl = (
-            shifted if apply_below is None
-            else df['SL'].where(df['SL'] >= apply_below, shifted)
-        )
+        effective_sl = df['SL'] + shift
         label = "Default" if shift == 0 else _pip_label(abs(int(shift)))
         scenarios.append((label, effective_sl))
 
     return _sl_scenario_statistics(df, scenarios, column)
 
 
-def calculate_sl_reduction_statistics(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculate 1:1 win/loss statistics for progressively tighter stops.
-
-    Each row shaves N pips off every trade's safe stop, so a trade wins only if
-    it survives the tighter stop and still reaches a 1:1 target on it.
-
-    Example: SL 3.6, Pullback 1.2. At -1 the stop is 2.6 and the trade
-    survives; at -3 the stop is 0.6, which the 1.2 pullback takes out, so it
-    becomes a loss.
-
-    Reductions that drive the effective stop to zero or below leave no room for
-    any pullback, so those trades count as losses - which is what adopting that
-    reduction as a rule would actually cost. Note the broker minimum stop is
-    1.1 pips, so rows whose effective stop falls under that are informational
-    rather than tradeable.
-
-    Args:
-        df: DataFrame with trading data
-
-    Returns:
-        DataFrame with columns: SL Reduction, Trades, Notation, Win Rate
-    """
-    return _sl_shift_statistics(
-        df, [-pips for pips in SL_REDUCTION_PIPS], 'SL Reduction')
-
-
 def calculate_sl_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate 1:1 win/loss statistics for progressively wider stops.
 
-    The mirror of calculate_sl_reduction_statistics: each row pads every
-    trade's safe stop by N pips. A wider stop survives deeper pullbacks, but
+    Each row pads every trade's safe stop by N pips. A wider stop survives deeper pullbacks, but
     the 1:1 target moves out by the same amount, so a trade whose TP was only
     just enough can drop out.
 
@@ -1292,30 +1260,6 @@ def calculate_sl_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
         DataFrame with columns: SL Buffer, Trades, Notation, Win Rate
     """
     return _sl_shift_statistics(df, SL_BUFFER_PIPS, 'SL Buffer')
-
-
-def calculate_sl_buffer_small_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculate 1:1 win/loss statistics for padding only the tight stops.
-
-    Same as calculate_sl_buffer_statistics, except the buffer is applied only
-    to trades whose safe stop is below SL_BUFFER_SMALL_SL_THRESHOLD pips.
-    Trades at or above that keep their recorded stop, on the reasoning that a
-    stop that is already wide does not need the extra room and would only pay
-    for it with a further-away target.
-
-    Every trade is still scored, so the Trades count matches the other tables.
-
-    Args:
-        df: DataFrame with trading data
-
-    Returns:
-        DataFrame with columns: SL Buffer, Trades, Notation, Win Rate
-    """
-    return _sl_shift_statistics(
-        df, SL_BUFFER_PIPS, 'SL Buffer',
-        apply_below=SL_BUFFER_SMALL_SL_THRESHOLD,
-    )
 
 
 def calculate_sl_fixed_statistics(df: pd.DataFrame) -> pd.DataFrame:
@@ -1337,25 +1281,6 @@ def calculate_sl_fixed_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return _sl_scenario_statistics(df, scenarios, 'Fixed SL')
 
 
-def display_analysis_sl_reduction(df: pd.DataFrame):
-    """
-    Display 1:1 win/loss statistics as the safe stop is tightened.
-
-    Rows read as a progression from Default outwards, so they are not sortable.
-
-    Args:
-        df: DataFrame with trading data
-    """
-    from IPython.display import display, HTML
-
-    title_html = ("<h2 style='color: #e0e0e0; background-color: #1e1e1e; "
-                  "padding: 10px;'>Reducing SL Statistics</h2>")
-    display(HTML(title_html))
-
-    stats_df = calculate_sl_reduction_statistics(df)
-    display(HTML(_create_sl_sortable_table(stats_df, "sl-reduction-table", sortable=False, first_col_width="50%")))
-
-
 def display_analysis_sl_buffer(df: pd.DataFrame):
     """
     Display 1:1 win/loss statistics as the safe stop is padded.
@@ -1368,32 +1293,11 @@ def display_analysis_sl_buffer(df: pd.DataFrame):
     from IPython.display import display, HTML
 
     title_html = ("<h2 style='color: #e0e0e0; background-color: #1e1e1e; "
-                  "padding: 10px;'>Adding Buffer To SL Statistics</h2>")
+                  "padding: 10px;'>Adding Buffer To SL Signals</h2>")
     display(HTML(title_html))
 
     stats_df = calculate_sl_buffer_statistics(df)
     display(HTML(_create_sl_sortable_table(stats_df, "sl-buffer-table", sortable=False, first_col_width="50%")))
-
-
-def display_analysis_sl_buffer_small_sl(df: pd.DataFrame):
-    """
-    Display 1:1 win/loss statistics when only the tight stops are padded.
-
-    Rows read as a progression from Default outwards, so they are not sortable.
-
-    Args:
-        df: DataFrame with trading data
-    """
-    from IPython.display import display, HTML
-
-    threshold = f"{SL_BUFFER_SMALL_SL_THRESHOLD:g}"
-    title_html = ("<h2 style='color: #e0e0e0; background-color: #1e1e1e; "
-                  f"padding: 10px;'>Adding Buffer To SL When SL &lt; {threshold} "
-                  "Statistics</h2>")
-    display(HTML(title_html))
-
-    stats_df = calculate_sl_buffer_small_sl_statistics(df)
-    display(HTML(_create_sl_sortable_table(stats_df, "sl-buffer-small-table", sortable=False, first_col_width="50%")))
 
 
 def display_analysis_sl_fixed(df: pd.DataFrame):
@@ -1408,7 +1312,7 @@ def display_analysis_sl_fixed(df: pd.DataFrame):
     from IPython.display import display, HTML
 
     title_html = ("<h2 style='color: #e0e0e0; background-color: #1e1e1e; "
-                  "padding: 10px;'>Fixed SL Statistics</h2>")
+                  "padding: 10px;'>Fixed SL Signals</h2>")
     display(HTML(title_html))
 
     stats_df = calculate_sl_fixed_statistics(df)
@@ -1551,7 +1455,7 @@ def display_analysis_tp(df: pd.DataFrame):
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>TP Range Statistics</h2>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>TP Range Signals</h2>"
     display(HTML(title_html))
 
     stats_df = calculate_tp_statistics(df)
@@ -1645,7 +1549,7 @@ def calculate_three_setups_comparison(
     Waiter's TP to whole pips. Every win test uses the exact figure.
 
     Halving a small safe stop can land under the 1.1 pip broker minimum; those
-    rows are informational rather than tradeable, as in the Reducing SL table.
+    rows are informational rather than tradeable.
 
     A win adds rrr R, a loss subtracts 1R, and a missed Waiter trade adds
     nothing - its running total carries forward so the column still reads as an
