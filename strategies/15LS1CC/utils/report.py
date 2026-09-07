@@ -467,7 +467,7 @@ def build_report(df: pd.DataFrame, generated_at: str, build_id: str,
 <header style="margin-bottom: 24px;">
     <h1 style="color: {TEXT}; font-size: 22px; margin: 0 0 6px;">15C</h1>
     <p style="color: {TEXT_MUTED}; font-size: 12px; margin: 0;">
-        15-minute Leg Structure, 1-minute Confirmation Candle &middot; EURUSD, London session
+        15 minute entry on breakout (15M continuation strategy) &middot; EURUSD &middot; London session
     </p>
     <p style="color: {TEXT_MUTED}; font-size: 11px; margin: 8px 0 0;">
         Built {html.escape(generated_at)} &middot; build {html.escape(build_id)}
