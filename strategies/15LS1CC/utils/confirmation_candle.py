@@ -1250,7 +1250,8 @@ def display_analysis_sl(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_statistics(df)
-    html_table = _create_sl_sortable_table(stats_df, "sl-range-stats", sortable=False, first_col_width="50%")
+    html_table = _create_sl_sortable_table(
+        stats_df, "sl-range-stats", sortable=False, first_col_width="40%")
     display(HTML(html_table))
 
 
@@ -1424,7 +1425,8 @@ def display_analysis_sl_fixed(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_sl_fixed_statistics(df)
-    display(HTML(_create_sl_sortable_table(stats_df, "sl-fixed-table")))
+    display(HTML(_create_sl_sortable_table(
+        stats_df, "sl-fixed-table", first_col_width="40%")))
 
 
 PULLBACK_ENTRY_PIPS = [0, 1, 2, 3]

@@ -327,11 +327,17 @@ def test_htf_alignment_is_in_the_nav():
 
 
 def test_analysis_tables_pin_their_first_column():
-    """Weekday and 4H Alignment pin the label column to 40% so they line up
-    with each other."""
+    """Every Signal/Strategy table pins its label column to 40% so the four
+    line up with each other."""
     page = build_report(get_sample_data(), 'now', 'abc123')
 
-    for anchor, label in (('weekday', 'Day'), ('htf-alignment', '4H Alignment')):
+    tables = (
+        ('weekday', 'Day'),
+        ('htf-alignment', '4H Alignment'),
+        ('sl-range', 'SL Range'),
+        ('sl-fixed', 'Fixed SL'),
+    )
+    for anchor, label in tables:
         start = page.index(f'id="{anchor}"')
         section = page[start:start + 4000]
         assert f'<th style="width: 40%;">{label}</th>' in section, f'{anchor} not pinned'
@@ -452,15 +458,15 @@ def test_stop_tables_are_not_sortable_but_others_are():
 
 
 def test_stop_tables_share_a_pinned_first_column():
-    """The two stop tables pin their label column so they line up with each
-    other; the other tables keep auto sizing."""
+    """Adding Buffer keeps the family's 50% label column - SL Range and Fixed
+    SL moved to 40% with the other Signal/Strategy tables. Pullback keeps auto
+    sizing."""
     page = build_report(get_sample_data(), 'now', 'abc123')
 
-    for table_id in ('sl-range-stats', 'sl-buffer-table'):
-        start = page.index(f'id="{table_id}"')
-        head = page[start:start + 400]
-        assert 'table-layout: fixed' in head, f'{table_id} not fixed-layout'
-        assert 'style="width: 50%;"' in head, f'{table_id} first column not pinned'
+    start = page.index('id="sl-buffer-table"')
+    head = page[start:start + 400]
+    assert 'table-layout: fixed' in head, 'sl-buffer-table not fixed-layout'
+    assert 'style="width: 50%;"' in head, 'sl-buffer-table first column not pinned'
 
     start = page.index('id="pullback-analysis"')
     assert 'table-layout: fixed' not in page[start:start + 400]

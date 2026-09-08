@@ -73,7 +73,9 @@ def _htf_alignment_section(df: pd.DataFrame) -> str:
 
 
 def _sl_section(df: pd.DataFrame) -> str:
-    return _create_sl_sortable_table(calculate_sl_statistics(df), "sl-range-stats", sortable=False, first_col_width="50%")
+    return _create_sl_sortable_table(
+        calculate_sl_statistics(df), "sl-range-stats", sortable=False,
+        first_col_width="40%")
 
 
 def _sl_buffer_section(df: pd.DataFrame) -> str:
@@ -84,7 +86,8 @@ def _sl_buffer_section(df: pd.DataFrame) -> str:
 
 def _sl_fixed_section(df: pd.DataFrame) -> str:
     return _create_sl_sortable_table(
-        calculate_sl_fixed_statistics(df), "sl-fixed-table"
+        calculate_sl_fixed_statistics(df), "sl-fixed-table",
+        first_col_width="40%"
     )
 
 

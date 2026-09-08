@@ -247,8 +247,12 @@ a family and must stay consistent:
   `_sl_scenario_statistics` emits that shape via `with_signal=True`, so the win
   rule stays in one place - do not compute it in the caller.
 - **Row order carries meaning**, so these tables are rendered with
-  `sortable=False` and `first_col_width="50%"` to keep them aligned with each
-  other.
+  `sortable=False`. `Fixed SL Analysis` is the exception - its rows are stop
+  sizes to compare, so it stays click-to-sort.
+- **Label column width follows the table's shape, not the family.** The
+  Signal/Strategy tables (`Weekday`, `4H Alignment`, `SL Range`, `Fixed SL`)
+  pin `first_col_width="40%"` so all four line up; `Adding Buffer` keeps the
+  older `50%`. `Pullback Range` is unpinned.
 
 ## Previewing Lab Data
 
