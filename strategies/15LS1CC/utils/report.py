@@ -163,8 +163,11 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
     (
         "sl-range",
         "SL Range",
-        "SL Range Signals",
-        "Win rate per safe-stop band at 1:1. Win = Pullback &lt; SL AND TP &gt;= SL.",
+        "SL Range Analysis",
+        "Win rate per safe-stop band, under the same two readings as the weekday "
+        "table: <b>Signal</b> = TP &gt; 0 (the idea was right, stop ignored), "
+        "<b>Strategy</b> = Pullback &lt; SL AND TP &gt;= SL (what trading the band "
+        "at 1:1 would have returned).",
         _sl_section,
     ),
     (

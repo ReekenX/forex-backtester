@@ -105,9 +105,9 @@ the two. The gap between them is the cost of entry timing - directionally
 correct calls that the recorded stop could not hold onto. A wide gap points at
 the entry, not at the idea.
 
-Report tables state which rule they use. `Weekday Analysis` and `4H Alignment
-Analysis` show both side by side; the SL family uses Strategy only, named in
-each note.
+Report tables state which rule they use. `Weekday Analysis`, `4H Alignment
+Analysis` and `SL Range Analysis` show both side by side; the remaining SL
+tables use Strategy only, named in each note.
 
 ## Development Flow for New Features
 
@@ -235,7 +235,11 @@ a family and must stay consistent:
   `test_every_stop_table_opens_with_the_same_default_row` pins that.
 - **Columns are `<label>, Trades, Notation, Win Rate`**, with `Notation` as
   `"12W - 3L"` and `Win Rate` as `"52.7%"` in separate columns - never combined
-  into one cell.
+  into one cell. `SL Range Analysis` is the one exception: it carries
+  `<label>, Trades, Signal, Strategy` like the weekday and 4H tables, each cell
+  combined as `"12W - 3L (52.7%)"` by `_format_wl`. Its `Strategy` column is
+  still the family's shared win rule, which is what
+  `test_every_stop_table_opens_with_the_same_default_row` compares against.
 - **Row order carries meaning**, so these tables are rendered with
   `sortable=False` and `first_col_width="50%"` to keep them aligned with each
   other.

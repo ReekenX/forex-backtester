@@ -1383,9 +1383,13 @@ def test_sl_ranges_constant():
 
 
 def test_sl_statistics_columns():
-    """Label, Trades, then Notation and Win Rate as separate columns."""
-    result = calculate_sl_statistics(get_sample_data())
-    assert list(result.columns) == ['SL Range', 'Trades', 'Notation', 'Win Rate']
+    """Label and Trades, then one column per reading of a trade - the same
+    shape as the weekday and 4H tables."""
+    sample = get_sample_data()
+    result = calculate_sl_statistics(sample)
+    assert list(result.columns) == ['SL Range', 'Trades', 'Signal', 'Strategy']
+    assert list(result.columns)[1:] == list(
+        calculate_weekday_statistics(sample).columns)[1:]
 
 
 def test_sl_statistics_win_needs_a_full_1_1_target():
@@ -1402,8 +1406,9 @@ def test_sl_statistics_win_needs_a_full_1_1_target():
     })
 
     rows = {r['SL Range']: r for _, r in calculate_sl_statistics(trades).iterrows()}
-    assert rows['0-5 SL']['Notation'] == '1W - 1L'
-    assert rows['0-5 SL']['Win Rate'] == '50.0%'
+    # Both reached a target, so Signal counts both; only the 4-pip TP clears 1:1.
+    assert rows['0-5 SL']['Signal'] == '2W - 0L (100.0%)'
+    assert rows['0-5 SL']['Strategy'] == '1W - 1L (50.0%)'
 
 
 def test_sl_statistics_all_ranges_present():
@@ -1443,14 +1448,14 @@ def test_sl_statistics_notation():
     result = calculate_sl_statistics(sample)
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
-    assert rows['0-5 SL']['Notation'] == '3W - 4L'
-    assert rows['0-5 SL']['Win Rate'] == '42.9%'
-    assert rows['0-10 SL']['Notation'] == '6W - 4L'
-    assert rows['0-10 SL']['Win Rate'] == '60.0%'
-    assert rows['5-10 SL']['Notation'] == '3W - 0L'
-    assert rows['5-10 SL']['Win Rate'] == '100.0%'
-    assert rows['10+ pips']['Notation'] == '0W - 0L'
-    assert rows['10+ pips']['Win Rate'] == '0.0%'
+    assert rows['0-5 SL']['Signal'] == '3W - 4L (42.9%)'
+    assert rows['0-5 SL']['Strategy'] == '3W - 4L (42.9%)'
+    assert rows['0-10 SL']['Signal'] == '6W - 4L (60.0%)'
+    assert rows['0-10 SL']['Strategy'] == '6W - 4L (60.0%)'
+    assert rows['5-10 SL']['Signal'] == '3W - 0L (100.0%)'
+    assert rows['5-10 SL']['Strategy'] == '3W - 0L (100.0%)'
+    assert rows['10+ pips']['Signal'] == '0W - 0L (0.0%)'
+    assert rows['10+ pips']['Strategy'] == '0W - 0L (0.0%)'
 
 
 def test_sl_statistics_bands_partition_the_trades():
@@ -1480,8 +1485,10 @@ def test_sl_statistics_requires_surviving_stop():
 
     rows = {r['SL Range']: r for _, r in calculate_sl_statistics(trades).iterrows()}
     assert rows['0-5 SL']['Trades'] == 1
-    assert rows['0-5 SL']['Notation'] == '0W - 1L'
-    assert rows['0-5 SL']['Win Rate'] == '0.0%'
+    # The idea was right and TP was reached, so Signal counts it; the stop went
+    # first, so Strategy does not. This is the late-entry case.
+    assert rows['0-5 SL']['Signal'] == '1W - 0L (100.0%)'
+    assert rows['0-5 SL']['Strategy'] == '0W - 1L (0.0%)'
 
 
 def test_sl_statistics_survivor_wins():
@@ -1498,8 +1505,8 @@ def test_sl_statistics_survivor_wins():
     })
 
     rows = {r['SL Range']: r for _, r in calculate_sl_statistics(trades).iterrows()}
-    assert rows['0-5 SL']['Notation'] == '1W - 0L'
-    assert rows['0-5 SL']['Win Rate'] == '100.0%'
+    assert rows['0-5 SL']['Signal'] == '1W - 0L (100.0%)'
+    assert rows['0-5 SL']['Strategy'] == '1W - 0L (100.0%)'
 
 
 def test_sl_statistics_empty():
@@ -1508,8 +1515,8 @@ def test_sl_statistics_empty():
     assert len(result) == len(SL_RANGES) + 1
     for _, row in result.iterrows():
         assert row['Trades'] == 0
-        assert row['Notation'] == '0W - 0L'
-        assert row['Win Rate'] == '0.0%'
+        assert row['Signal'] == '0W - 0L (0.0%)'
+        assert row['Strategy'] == '0W - 0L (0.0%)'
 
 
 def test_sl_statistics_large_sl():
@@ -1529,11 +1536,14 @@ def test_sl_statistics_large_sl():
     rows = {row['SL Range']: row for _, row in result.iterrows()}
 
     assert rows['Default']['Trades'] == 2
-    assert rows['Default']['Notation'] == '1W - 1L'
+    # Both reached TP 20; the SL 15 trade was stopped out at 16 first.
+    assert rows['Default']['Signal'] == '2W - 0L (100.0%)'
+    assert rows['Default']['Strategy'] == '1W - 1L (50.0%)'
     for label in ['0-5 SL', '0-10 SL', '5-10 SL']:
         assert rows[label]['Trades'] == 0
     assert rows['10+ pips']['Trades'] == 2
-    assert rows['10+ pips']['Notation'] == '1W - 1L'
+    assert rows['10+ pips']['Signal'] == '2W - 0L (100.0%)'
+    assert rows['10+ pips']['Strategy'] == '1W - 1L (50.0%)'
 
 
 def test_sl_statistics_no_tp_is_loss():
@@ -1550,14 +1560,23 @@ def test_sl_statistics_no_tp_is_loss():
     })
 
     rows = {r['SL Range']: r for _, r in calculate_sl_statistics(trades).iterrows()}
-    assert rows['0-5 SL']['Notation'] == '0W - 1L'
-    assert rows['0-10 SL']['Notation'] == '0W - 1L'
+    for label in ('0-5 SL', '0-10 SL'):
+        assert rows[label]['Signal'] == '0W - 1L (0.0%)'
+        assert rows[label]['Strategy'] == '0W - 1L (0.0%)'
 
 
 def test_sl_sortable_table_notation_headers_clickable():
-    """With sortable on, only the Win Rate column is click-to-sort."""
-    sample = get_sample_data()
-    stats = calculate_sl_statistics(sample)
+    """With sortable on, only columns carrying a percentage are click-to-sort.
+
+    Built from an explicit frame rather than calculate_sl_statistics, whose
+    columns now carry a percentage in every result cell.
+    """
+    stats = pd.DataFrame({
+        'SL Range': ['Default', '0-5 SL'],
+        'Trades': [10, 7],
+        'Notation': ['6W - 4L', '3W - 4L'],
+        'Win Rate': ['60.0%', '42.9%'],
+    })
     html = _create_sl_sortable_table(stats, "sl-range-stats", sortable=True)
 
     for idx, col in enumerate(stats.columns):
@@ -1858,7 +1877,14 @@ def test_every_stop_table_opens_with_the_same_default_row():
     for name, (result, column) in tables.items():
         first = result.iloc[0]
         assert first[column] == 'Default', f'{name} does not open with Default'
-        seen[name] = (first['Trades'], first['Notation'], first['Win Rate'])
+        # SL Range reports Signal/Strategy in one cell each; the rest keep
+        # Notation and Win Rate apart. Compare on the combined form so the
+        # shared rule stays pinned across both shapes.
+        if 'Strategy' in result.columns:
+            seen[name] = (first['Trades'], first['Strategy'])
+        else:
+            seen[name] = (first['Trades'],
+                          f"{first['Notation']} ({first['Win Rate']})")
 
     assert len(set(seen.values())) == 1, f'Default rows disagree: {seen}'
     assert seen['SL Range'][0] == len(sample)

@@ -1065,20 +1065,23 @@ SL_RANGES = [
 
 def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate win/loss statistics for SL pip ranges at 1:1 RRR.
+    Calculate per-SL-band statistics under both readings of a trade.
 
-    Win: Pullback < SL AND TP >= SL - the trade survived its stop and reached
-    a 1:1 target. Skipping the survival check would score trades that were
-    stopped out before running to target as wins - the data marks those with a
-    negative R - and inflate every win rate. This matches _calculate_stats.
+    Signal: TP > 0 - the trade idea was right and price reached a target, stop
+    ignored. Strategy: Pullback < SL AND TP >= SL - what trading the band at
+    1:1 would actually have returned. Same pair as the weekday and 4H tables.
+
+    Reading a band on both tells you whether a stop size is losing trades that
+    were directionally right: a wide Signal-to-Strategy gap in one band is an
+    entry problem inside that band, not a bad band.
+
+    The first row, "Default", covers every trade with no band filter.
 
     Args:
         df: DataFrame with trading data
 
-    The first row, "Default", covers every trade with no band filter.
-
     Returns:
-        DataFrame with columns: SL Range, Trades, Notation, Win Rate
+        DataFrame with columns: SL Range, Trades, Signal, Strategy
     """
     results = []
 
@@ -1093,17 +1096,17 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
         )
         total = len(range_trades)
 
-        wins = len(range_trades[
+        signals = len(range_trades[range_trades['TP'] > 0]) if total else 0
+        strategy = len(range_trades[
             (range_trades['Pullback'] < range_trades['SL'])
             & (range_trades['TP'] >= range_trades['SL'])
         ]) if total else 0
-        win_rate = (wins / total * 100) if total > 0 else 0.0
 
         results.append({
             'SL Range': label,
             'Trades': total,
-            'Notation': f"{wins}W - {total - wins}L",
-            'Win Rate': f"{win_rate:.1f}%",
+            'Signal': _format_wl(signals, total - signals, total),
+            'Strategy': _format_wl(strategy, total - strategy, total),
         })
 
     return pd.DataFrame(results)
@@ -1243,7 +1246,7 @@ def display_analysis_sl(df: pd.DataFrame):
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px 10px 0;'>SL Range Signals</h2>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px 10px 0;'>SL Range Analysis</h2>"
     display(HTML(title_html))
 
     stats_df = calculate_sl_statistics(df)
