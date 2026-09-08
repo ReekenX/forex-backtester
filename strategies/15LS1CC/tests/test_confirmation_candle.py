@@ -1051,10 +1051,10 @@ def test_weekday_order_constant():
 
 
 def test_weekday_statistics_columns():
-    """Test that weekday statistics has expected columns."""
+    """Day and Trades, then one column per reading of a trade."""
     sample = get_sample_data()
     result = calculate_weekday_statistics(sample)
-    assert list(result.columns) == ['Day', 'Trades', 'Notation', 'Win Rate']
+    assert list(result.columns) == ['Day', 'Trades', 'Signal', 'Strategy']
 
 
 def test_weekday_statistics_all_days_present():
@@ -1078,62 +1078,92 @@ def test_weekday_statistics_trade_counts():
     assert counts['Friday'] == 1
 
 
-def test_weekday_statistics_notation_and_win_rate():
-    """Win condition: Pullback < SL AND TP > 0.
-
-    Monday: #1 PB=3.5 SL=3.5 TP=0 => L, #2 PB=0.8 SL=1.1 TP=12 => W, #3 PB=2.1 SL=2.0 TP=0 => L
-    Tuesday: #1 PB=1.5 SL=4.0 TP=10 => W, #2 PB=3.0 SL=3.0 TP=0 => L
-    Thursday: #1 PB=3.0 SL=6.0 TP=15 => W, #2 PB=7.0 SL=8.0 TP=10 => W
-    Friday: #1 PB=0.5 SL=1.5 TP=5 => W
-    """
-    sample = get_sample_data()
-    result = calculate_weekday_statistics(sample)
+def test_weekday_statistics_signal_ignores_the_stop():
+    """Signal counts any trade with a TP, so Monday's idx 2 (Pullback 2.1 >
+    SL 2.0) is still a loss on TP 0, while Thursday's idx 8 (Pullback 7.0 <
+    SL 8.0, TP 10) wins. Sample TP per day: Mon 0/12/0, Tue 10/0, Wed 8/0,
+    Thu 15/10, Fri 5."""
+    result = calculate_weekday_statistics(get_sample_data())
     rows = {row['Day']: row for _, row in result.iterrows()}
 
-    assert rows['Monday']['Notation'] == '1W - 2L'
-    assert rows['Monday']['Win Rate'] == '33.3%'
-    assert rows['Tuesday']['Notation'] == '1W - 1L'
-    assert rows['Tuesday']['Win Rate'] == '50.0%'
-    assert rows['Thursday']['Notation'] == '2W - 0L'
-    assert rows['Thursday']['Win Rate'] == '100.0%'
-    assert rows['Friday']['Notation'] == '1W - 0L'
-    assert rows['Friday']['Win Rate'] == '100.0%'
+    assert rows['Monday']['Signal'] == '1W - 2L (33.3%)'
+    assert rows['Tuesday']['Signal'] == '1W - 1L (50.0%)'
+    assert rows['Wednesday']['Signal'] == '1W - 1L (50.0%)'
+    assert rows['Thursday']['Signal'] == '2W - 0L (100.0%)'
+    assert rows['Friday']['Signal'] == '1W - 0L (100.0%)'
 
 
-def test_weekday_statistics_stopped_out_is_a_loss():
-    """A trade whose Pullback reaches its SL is a loss regardless of TP."""
+def test_weekday_statistics_strategy_needs_a_full_1_1_target():
+    """Strategy also demands Pullback < SL and TP >= SL. Thursday's idx 8
+    (SL 8.0, TP 10) clears 1:1; Wednesday's idx 5 (SL 5.0, TP 8) clears it too."""
+    result = calculate_weekday_statistics(get_sample_data())
+    rows = {row['Day']: row for _, row in result.iterrows()}
+
+    assert rows['Monday']['Strategy'] == '1W - 2L (33.3%)'
+    assert rows['Tuesday']['Strategy'] == '1W - 1L (50.0%)'
+    assert rows['Wednesday']['Strategy'] == '1W - 1L (50.0%)'
+    assert rows['Thursday']['Strategy'] == '2W - 0L (100.0%)'
+    assert rows['Friday']['Strategy'] == '1W - 0L (100.0%)'
+
+
+def test_weekday_statistics_strategy_is_a_subset_of_signal():
+    """Every Strategy win is a Signal win, so its count can never exceed it."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-12', '2026-01-12', '2026-01-12'],
+        'Weekday': ['Monday', 'Monday', 'Monday'],
+        'Trade': ['#1', '#2', '#3'],
+        '4H': ['Buy', 'Buy', 'Buy'],
+        'Direction': ['Buy', 'Buy', 'Buy'],
+        # #1 wins both. #2 reached target but the stop went first. #3 survived
+        # its stop but never reached 1:1.
+        'SL': [3.0, 3.0, 3.0],
+        'Pullback': [1.0, 4.0, 1.0],
+        'TP': [10.0, 10.0, 2.0],
+        'R': [3.3, -3.3, 0.7],
+    })
+
+    rows = {r['Day']: r for _, r in calculate_weekday_statistics(trades).iterrows()}
+    assert rows['Monday']['Signal'] == '3W - 0L (100.0%)'
+    assert rows['Monday']['Strategy'] == '1W - 2L (33.3%)'
+
+
+def test_weekday_statistics_late_entry_shows_only_in_signal():
+    """The case the two columns exist to separate: right idea, stop taken out
+    first. Signal counts it, Strategy does not."""
     trades = pd.DataFrame({
         'Date': ['2026-01-12'],
         'Weekday': ['Monday'],
         'Trade': ['#1'],
+        '4H': ['Buy'],
         'Direction': ['Buy'],
-        'SL': [3.0],
-        'Pullback': [4.0],
+        'SL': [2.1],
+        'Pullback': [3.4],
         'TP': [10.0],
-        'R': [-3.0],
+        'R': [-4.8],
     })
 
     rows = {r['Day']: r for _, r in calculate_weekday_statistics(trades).iterrows()}
-    assert rows['Monday']['Notation'] == '0W - 1L'
-    assert rows['Monday']['Win Rate'] == '0.0%'
+    assert rows['Monday']['Signal'] == '1W - 0L (100.0%)'
+    assert rows['Monday']['Strategy'] == '0W - 1L (0.0%)'
 
 
-def test_weekday_statistics_no_tp_is_a_loss():
-    """A trade that survived its stop but never went profitable is a loss."""
+def test_weekday_statistics_no_tp_is_a_loss_in_both():
+    """TP 0 fails both rules regardless of how shallow the pullback was."""
     trades = pd.DataFrame({
         'Date': ['2026-01-12'],
         'Weekday': ['Monday'],
         'Trade': ['#1'],
+        '4H': ['Buy'],
         'Direction': ['Buy'],
         'SL': [3.0],
-        'Pullback': [1.0],
+        'Pullback': [0.5],
         'TP': [0.0],
-        'R': [0],
+        'R': [0.0],
     })
 
     rows = {r['Day']: r for _, r in calculate_weekday_statistics(trades).iterrows()}
-    assert rows['Monday']['Notation'] == '0W - 1L'
-    assert rows['Monday']['Win Rate'] == '0.0%'
+    assert rows['Monday']['Signal'] == '0W - 1L (0.0%)'
+    assert rows['Monday']['Strategy'] == '0W - 1L (0.0%)'
 
 
 def test_weekday_statistics_empty():
@@ -1143,16 +1173,17 @@ def test_weekday_statistics_empty():
     assert len(result) == 5
     for _, row in result.iterrows():
         assert row['Trades'] == 0
-        assert row['Notation'] == '0W - 0L'
-        assert row['Win Rate'] == '0.0%'
+        assert row['Signal'] == '0W - 0L (0.0%)'
+        assert row['Strategy'] == '0W - 0L (0.0%)'
 
 
-def test_weekday_statistics_single_day():
-    """Test weekday statistics when only one day has trades."""
+def test_weekday_statistics_days_without_trades():
+    """A day with no trades reads as zeros, not as a missing row."""
     trades = pd.DataFrame({
         'Date': ['2026-01-12', '2026-01-12'],
         'Weekday': ['Monday', 'Monday'],
         'Trade': ['#1', '#2'],
+        '4H': ['Buy', 'Buy'],
         'Direction': ['Buy', 'Buy'],
         'SL': [3.0, 3.0],
         'Pullback': [1.0, 4.0],
@@ -1164,19 +1195,16 @@ def test_weekday_statistics_single_day():
     rows = {row['Day']: row for _, row in result.iterrows()}
 
     assert rows['Monday']['Trades'] == 2
-    assert rows['Monday']['Notation'] == '1W - 1L'
-    assert rows['Monday']['Win Rate'] == '50.0%'
+    assert rows['Monday']['Signal'] == '2W - 0L (100.0%)'
+    assert rows['Monday']['Strategy'] == '1W - 1L (50.0%)'
     assert rows['Tuesday']['Trades'] == 0
-    assert rows['Tuesday']['Notation'] == '0W - 0L'
+    assert rows['Tuesday']['Signal'] == '0W - 0L (0.0%)'
 
 
 def test_htf_alignment_columns():
-    """Same column shape as the weekday table, so the two read alike."""
-    sample = get_sample_data()
-    result = calculate_htf_alignment_statistics(sample)
+    """Label, Trades, then Notation and Win Rate as separate columns."""
+    result = calculate_htf_alignment_statistics(get_sample_data())
     assert list(result.columns) == ['4H Alignment', 'Trades', 'Notation', 'Win Rate']
-    assert list(result.columns)[1:] == list(
-        calculate_weekday_statistics(sample).columns)[1:]
 
 
 def test_htf_alignment_rows():
@@ -1282,12 +1310,9 @@ def test_sl_ranges_constant():
 
 
 def test_sl_statistics_columns():
-    """Same column shape as the weekday table."""
-    sample = get_sample_data()
-    result = calculate_sl_statistics(sample)
+    """Label, Trades, then Notation and Win Rate as separate columns."""
+    result = calculate_sl_statistics(get_sample_data())
     assert list(result.columns) == ['SL Range', 'Trades', 'Notation', 'Win Rate']
-    assert list(result.columns)[1:] == list(
-        calculate_weekday_statistics(sample).columns)[1:]
 
 
 def test_sl_statistics_win_needs_a_full_1_1_target():
@@ -2410,11 +2435,13 @@ def run_all_tests():
         test_weekday_statistics_columns,
         test_weekday_statistics_all_days_present,
         test_weekday_statistics_trade_counts,
-        test_weekday_statistics_notation_and_win_rate,
-        test_weekday_statistics_stopped_out_is_a_loss,
-        test_weekday_statistics_no_tp_is_a_loss,
+        test_weekday_statistics_signal_ignores_the_stop,
+        test_weekday_statistics_strategy_needs_a_full_1_1_target,
+        test_weekday_statistics_strategy_is_a_subset_of_signal,
+        test_weekday_statistics_late_entry_shows_only_in_signal,
+        test_weekday_statistics_no_tp_is_a_loss_in_both,
         test_weekday_statistics_empty,
-        test_weekday_statistics_single_day,
+        test_weekday_statistics_days_without_trades,
         test_htf_alignment_columns,
         test_htf_alignment_rows,
         test_htf_alignment_default_matches_every_trade,
@@ -2429,7 +2456,7 @@ def run_all_tests():
         test_sl_statistics_all_ranges_present,
         test_sl_statistics_trade_counts,
         test_sl_statistics_notation,
-        test_sl_statistics_cumulative_bands,
+        test_sl_statistics_bands_partition_the_trades,
         test_sl_statistics_requires_surviving_stop,
         test_sl_statistics_survivor_wins,
         test_sl_statistics_empty,

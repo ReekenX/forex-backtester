@@ -295,7 +295,7 @@ def test_render_error_then_recover(tmp_path):
 
     render_to_file(get_sample_data(), out, 'now')
     assert 'Build failed' not in out.read_text()
-    assert 'Weekday Signals' in out.read_text()
+    assert 'Weekday Analysis' in out.read_text()
 
 
 def test_htf_alignment_section_follows_the_weekday_section():

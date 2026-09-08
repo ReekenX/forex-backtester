@@ -80,12 +80,33 @@ Each strategy keeps its data inside its `strategies/<name>/` directory: `data.cs
 6. If Pullback is higher than SL, it means that overall trade could have been profitable but a higher SL was needed than "safe stop"
 7. R column (if not empty) is a number of how many R's this trade achieved (e.g., 10 pips for TP and 3 pips for SL would have achieved 10/3=3 R)
 8. Minimum broker SL is 1.1 pips
-9. Win condition: a trade must BOTH survive its stop and reach the target - `Pullback < SL AND TP >= RRR x SL`. Checking only the TP leg scores trades that were stopped out before running to target as wins (the data marks those with a negative R) and inflates every win rate. When a stop is adjusted, both halves use the adjusted value: `Pullback < effective SL AND TP >= RRR x effective SL`
+9. Win condition: a trade must BOTH survive its stop and reach the target - `Pullback < SL AND TP >= RRR x SL`. Checking only the TP leg scores trades that were stopped out before running to target as wins (the data marks those with a negative R) and inflates every win rate. When a stop is adjusted, both halves use the adjusted value: `Pullback < effective SL AND TP >= RRR x effective SL`. The one deliberate exception is the `Signal` column, which asks a different question - see "Signal vs Strategy" below
 10. When a trade is entered, only the SL column is known. Pullback and TP are only learned after the trade is finished. Therefore, Pullback and TP columns must not be used for strategy filtering (e.g., "take a trade when Pullback is smaller than SL" does not make sense because Pullback is unknown at entry time)
 
 **Example 1**: SL 3.1 pips, Pullback 2.4 pips and TP 10 pips. When entering a position, safe stop loss was 3.1 pips away from entry. Then price at some point went 2.4 pips against the entry but later recovered and shot 10 pips from entry. Total reward (R) was 10/3.1=3R.
 
 **Example 2**: SL 2.1 pips, Pullback 3.4 pips and TP 10 pips. This trade would be a loss, but only if the safe stop had been higher - it would have been a winner.
+
+## Signal vs Strategy
+
+Two different questions can be asked of the same trade, and they give different
+win rates. Keep them apart:
+
+- **Signal** - `TP > 0`. Was the trade idea right? Price reached a target, so
+  the direction was correct. The stop is deliberately ignored, which means this
+  counts trades whose `Pullback` exceeded `SL`: the idea worked, but the entry
+  was too early to survive the move against it. Example 2 above is one of these.
+- **Strategy** - `Pullback < SL AND TP >= SL` (at 1:1). Would trading it have
+  made money? The trade had to survive its stop *and* reach the target. This is
+  the tradeable number.
+
+Strategy is always a subset of Signal, so its win rate is always the lower of
+the two. The gap between them is the cost of entry timing - directionally
+correct calls that the recorded stop could not hold onto. A wide gap points at
+the entry, not at the idea.
+
+Report tables state which rule they use. `Weekday Analysis` shows both side by
+side; the SL family and `4H Alignment` use one rule each, named in their note.
 
 ## Development Flow for New Features
 

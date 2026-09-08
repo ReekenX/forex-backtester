@@ -922,16 +922,24 @@ def _format_wl(wins: int, losses: int, total: int) -> str:
 
 def calculate_weekday_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate win/loss statistics for each weekday (Monday-Friday).
+    Calculate per-weekday win/loss statistics under both readings of a trade.
 
-    Win: Pullback < SL AND TP > 0 - the trade survived its stop and finished
-    profitable.
+    Signal: TP > 0 - the trade idea was right and price reached a target. The
+    stop is ignored on purpose, so this counts trades whose Pullback exceeded
+    SL: the direction was correct but the entry was too early to survive it.
+
+    Strategy: Pullback < SL AND TP >= SL - what trading it at 1:1 would
+    actually have returned. The trade had to survive its stop AND reach a 1:1
+    target, so it is always a subset of Signal.
+
+    The gap between the two columns is the cost of entry timing: signals that
+    were directionally right but unreachable with the recorded stop.
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: Day, Trades, Notation, Win Rate
+        DataFrame with columns: Day, Trades, Signal, Strategy
     """
     results = []
 
@@ -939,18 +947,17 @@ def calculate_weekday_statistics(df: pd.DataFrame) -> pd.DataFrame:
         day_trades = df[df['Weekday'] == day]
         total = len(day_trades)
 
-        wins = len(day_trades[
-            (day_trades['Pullback'] < day_trades['SL']) &
-            (day_trades['TP'] > 0)
+        signals = len(day_trades[day_trades['TP'] > 0]) if total else 0
+        strategy = len(day_trades[
+            (day_trades['Pullback'] < day_trades['SL'])
+            & (day_trades['TP'] >= day_trades['SL'])
         ]) if total else 0
-        losses = total - wins
-        win_rate = (wins / total * 100) if total > 0 else 0.0
 
         results.append({
             'Day': day,
             'Trades': total,
-            'Notation': f"{wins}W - {losses}L",
-            'Win Rate': f"{win_rate:.1f}%",
+            'Signal': _format_wl(signals, total - signals, total),
+            'Strategy': _format_wl(strategy, total - strategy, total),
         })
 
     return pd.DataFrame(results)
@@ -958,14 +965,14 @@ def calculate_weekday_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
 def display_weekday(df: pd.DataFrame):
     """
-    Display win/loss statistics broken down by weekday.
+    Display per-weekday statistics under both the Signal and Strategy rules.
 
     Args:
         df: DataFrame with trading data
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Weekday Signals</h2>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>Weekday Analysis</h2>"
     display(HTML(title_html))
 
     stats_df = calculate_weekday_statistics(df)
@@ -982,8 +989,7 @@ def calculate_htf_alignment_statistics(df: pd.DataFrame) -> pd.DataFrame:
     tradeable filter - unlike Pullback or TP.
 
     Win: Pullback < SL AND TP > 0 - the trade survived its stop and finished
-    profitable, the same rule as the weekday table so the two can be read
-    against each other.
+    profitable at any distance.
 
     The first row, "Default", covers every trade with no alignment filter.
 

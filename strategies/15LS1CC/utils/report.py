@@ -140,8 +140,13 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
     (
         "weekday",
         "Weekday",
-        "Weekday Signals",
-        "Win = Pullback &lt; SL AND TP &gt; 0, i.e. the trade survived its stop and finished profitable at any distance.",
+        "Weekday Analysis",
+        "Two readings of the same trades. <b>Signal</b> = TP &gt; 0: the idea was "
+        "right and price reached a target, stop ignored - so it includes trades "
+        "whose Pullback exceeded SL, where the direction was correct but the entry "
+        "was too early. <b>Strategy</b> = Pullback &lt; SL AND TP &gt;= SL: what "
+        "trading it at 1:1 would actually have returned. The gap between them is "
+        "the cost of entry timing.",
         _weekday_section,
     ),
     (
@@ -149,7 +154,7 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "4H Alignment",
         "4H Alignment Signals",
         "Trades split by whether they ran with the 4H trend or against it. "
-        "Same win rule as the weekday table: Win = Pullback &lt; SL AND TP &gt; 0.",
+        "Win = Pullback &lt; SL AND TP &gt; 0.",
         _htf_alignment_section,
     ),
     (
