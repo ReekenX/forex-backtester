@@ -1038,6 +1038,51 @@ def test_buffer_stats_with_float_rrr_loss():
     assert stats['Notation'] == '0W – 1L'
 
 
+def test_create_html_table_pins_the_first_column():
+    """first_col_width pins the label column and switches to fixed layout, so
+    the percentage is actually honoured."""
+    df = pd.DataFrame({'Day': ['Monday'], 'Trades': [3], 'Signal': ['1W - 2L (33.3%)']})
+    html = create_html_table(df, first_col_width='40%')
+
+    assert 'style="table-layout: fixed;"' in html
+    assert '<th style="width: 40%;">Day</th>' in html
+    assert '<th>Trades</th>' in html
+
+
+def test_create_html_table_without_a_pinned_first_column():
+    """Left off, the table keeps auto sizing and carries no width style."""
+    df = pd.DataFrame({'Day': ['Monday'], 'Trades': [3]})
+    html = create_html_table(df)
+
+    assert 'table-layout: fixed' not in html
+    assert 'width: 40%' not in html
+
+
+def test_strategy_result_column_is_not_the_strategy_name_column():
+    """strategy-col is the 300px strategy-NAME column and leads its row. A
+    "Strategy" result column further right must not inherit that width."""
+    df = pd.DataFrame({
+        'Day': ['Monday'],
+        'Trades': [3],
+        'Signal': ['1W - 2L (33.3%)'],
+        'Strategy': ['1W - 2L (33.3%)'],
+    })
+    html = create_html_table(df)
+
+    assert '<th>Strategy</th>' in html
+    assert 'class="strategy-col"' not in html.split('</style>')[-1]
+
+
+def test_leading_strategy_column_keeps_its_width():
+    """The Strategies tables lead with the strategy name, which still gets it."""
+    df = pd.DataFrame({'Strategy': ['All Trades'], 'Trades': [3]})
+    html = create_html_table(df)
+
+    body = html.split('</style>')[-1]
+    assert '<th class="strategy-col">Strategy</th>' in body
+    assert '<td class="strategy-col">All Trades</td>' in body
+
+
 def test_format_wl():
     """Test _format_wl output format."""
     assert _format_wl(3, 1, 4) == '3W - 1L (75.0%)'
@@ -2458,6 +2503,10 @@ def run_all_tests():
         test_buffer_stats_empty_has_trades_zero,
         test_buffer_stats_with_float_rrr,
         test_buffer_stats_with_float_rrr_loss,
+        test_create_html_table_pins_the_first_column,
+        test_create_html_table_without_a_pinned_first_column,
+        test_strategy_result_column_is_not_the_strategy_name_column,
+        test_leading_strategy_column_keeps_its_width,
         test_format_wl,
         test_weekday_order_constant,
         test_weekday_statistics_columns,

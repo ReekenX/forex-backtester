@@ -229,7 +229,8 @@ def _calculate_stats(trades: pd.DataFrame, strategy_name: str, rrr_ratio: int = 
     }
 
 
-def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None) -> str:
+def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
+                      first_col_width: Optional[str] = None) -> str:
     """
     Create a dark-mode HTML table with styled formatting.
 
@@ -238,6 +239,8 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None) -> str:
         sort_id: When set, gives the table this DOM id and makes every column
             whose cells carry a percentage (e.g. a "Win Rate" of "23.4%")
             click-to-sort by that percentage, descending only.
+        first_col_width: When set, pins the label column to this width (e.g.
+            "40%") and switches the table to fixed layout so it is honoured.
 
     Returns:
         HTML string with styled table
@@ -325,17 +328,24 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None) -> str:
     """
 
     id_attr = f' id="{sort_id}"' if sort_id else ""
-    html += f'<table class="analysis-table"{id_attr}>\n        <thead>\n            <tr>\n'
+    table_style = ' style="table-layout: fixed;"' if first_col_width else ""
+    html += (f'<table class="analysis-table"{id_attr}{table_style}>'
+             '\n        <thead>\n            <tr>\n')
 
     for idx, col in enumerate(df.columns):
+        width_style = (f' style="width: {first_col_width};"'
+                       if idx == 0 and first_col_width else "")
         if col in sortable_cols:
             html += (
-                f'<th class="sortable" title="Sort by win rate (desc)" '
+                f'<th class="sortable"{width_style} title="Sort by win rate (desc)" '
                 f'onclick="sortAnalysisTable(\'{sort_id}\', {idx}, this)">{col} ↓</th>'
             )
         else:
-            cls = ' class="strategy-col"' if col == "Strategy" else ""
-            html += f"<th{cls}>{col}</th>"
+            # strategy-col is the 300px strategy-NAME column of the Strategies
+            # tables, where it leads the row. A "Strategy" result column further
+            # right is a different thing and must not inherit that width.
+            cls = ' class="strategy-col"' if col == "Strategy" and idx == 0 else ""
+            html += f"<th{cls}{width_style}>{col}</th>"
     html += """
             </tr>
         </thead>
@@ -344,11 +354,11 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None) -> str:
 
     for _, row in df.iterrows():
         html += "            <tr>\n"
-        for col in df.columns:
+        for col_idx, col in enumerate(df.columns):
             value = row[col]
             css_class = ""
 
-            if col == "Strategy":
+            if col == "Strategy" and col_idx == 0:
                 css_class = "strategy-col"
             elif col == "Edge" or col.startswith("Edge "):
                 try:
@@ -976,7 +986,7 @@ def display_weekday(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_weekday_statistics(df)
-    html_table = create_html_table(stats_df)
+    html_table = create_html_table(stats_df, first_col_width="40%")
     display(HTML(html_table))
 
 
@@ -1040,7 +1050,8 @@ def display_htf_alignment(df: pd.DataFrame):
     title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>4H Alignment Analysis</h2>"
     display(HTML(title_html))
 
-    display(HTML(create_html_table(calculate_htf_alignment_statistics(df))))
+    display(HTML(create_html_table(
+        calculate_htf_alignment_statistics(df), first_col_width="40%")))
 
 
 # Bands overlap on purpose: 0-10 is the union of 0-5 and 5-10, and each is read

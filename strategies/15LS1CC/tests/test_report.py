@@ -326,6 +326,17 @@ def test_htf_alignment_is_in_the_nav():
     assert '>4H Alignment<' in page
 
 
+def test_analysis_tables_pin_their_first_column():
+    """Weekday and 4H Alignment pin the label column to 40% so they line up
+    with each other."""
+    page = build_report(get_sample_data(), 'now', 'abc123')
+
+    for anchor, label in (('weekday', 'Day'), ('htf-alignment', '4H Alignment')):
+        start = page.index(f'id="{anchor}"')
+        section = page[start:start + 4000]
+        assert f'<th style="width: 40%;">{label}</th>' in section, f'{anchor} not pinned'
+
+
 def test_no_duplicate_dom_ids():
     """A section anchor must never collide with a table's sort id: the sort
     script does getElementById(tableId) and would get the <section> instead."""

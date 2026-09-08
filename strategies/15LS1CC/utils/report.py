@@ -64,11 +64,12 @@ POLL_INTERVAL_MS = 1000
 
 
 def _weekday_section(df: pd.DataFrame) -> str:
-    return create_html_table(calculate_weekday_statistics(df))
+    return create_html_table(calculate_weekday_statistics(df), first_col_width="40%")
 
 
 def _htf_alignment_section(df: pd.DataFrame) -> str:
-    return create_html_table(calculate_htf_alignment_statistics(df))
+    return create_html_table(
+        calculate_htf_alignment_statistics(df), first_col_width="40%")
 
 
 def _sl_section(df: pd.DataFrame) -> str:
