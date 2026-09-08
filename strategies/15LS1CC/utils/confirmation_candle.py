@@ -982,14 +982,16 @@ def display_weekday(df: pd.DataFrame):
 
 def calculate_htf_alignment_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate win/loss statistics by 4H trend alignment.
+    Calculate 4H trend alignment statistics under both readings of a trade.
 
     "Aligned" means the trade was taken in the same direction as the 4H trend;
     "Against" means it fought it. Both are known at entry, so either is a
     tradeable filter - unlike Pullback or TP.
 
-    Win: Pullback < SL AND TP > 0 - the trade survived its stop and finished
-    profitable at any distance.
+    Signal: TP > 0 - the trade idea was right and price reached a target, stop
+    ignored. Strategy: Pullback < SL AND TP >= SL - what trading it at 1:1
+    would actually have returned. Same pair as the weekday table, so a filter
+    can be judged on the idea and on the tradeable result separately.
 
     The first row, "Default", covers every trade with no alignment filter.
 
@@ -997,7 +999,7 @@ def calculate_htf_alignment_statistics(df: pd.DataFrame) -> pd.DataFrame:
         df: DataFrame with trading data, including a "4H" column
 
     Returns:
-        DataFrame with columns: 4H Alignment, Trades, Notation, Win Rate
+        DataFrame with columns: 4H Alignment, Trades, Signal, Strategy
     """
     results = []
 
@@ -1011,16 +1013,16 @@ def calculate_htf_alignment_statistics(df: pd.DataFrame) -> pd.DataFrame:
     for label, trades in groups:
         total = len(trades)
 
-        wins = len(trades[
-            (trades['Pullback'] < trades['SL']) & (trades['TP'] > 0)
+        signals = len(trades[trades['TP'] > 0]) if total else 0
+        strategy = len(trades[
+            (trades['Pullback'] < trades['SL']) & (trades['TP'] >= trades['SL'])
         ]) if total else 0
-        win_rate = (wins / total * 100) if total > 0 else 0.0
 
         results.append({
             '4H Alignment': label,
             'Trades': total,
-            'Notation': f"{wins}W - {total - wins}L",
-            'Win Rate': f"{win_rate:.1f}%",
+            'Signal': _format_wl(signals, total - signals, total),
+            'Strategy': _format_wl(strategy, total - strategy, total),
         })
 
     return pd.DataFrame(results)
@@ -1028,14 +1030,14 @@ def calculate_htf_alignment_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
 def display_htf_alignment(df: pd.DataFrame):
     """
-    Display win/loss statistics broken down by 4H trend alignment.
+    Display 4H alignment under both the Signal and Strategy rules.
 
     Args:
         df: DataFrame with trading data
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>4H Alignment Signals</h2>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>4H Alignment Analysis</h2>"
     display(HTML(title_html))
 
     display(HTML(create_html_table(calculate_htf_alignment_statistics(df))))

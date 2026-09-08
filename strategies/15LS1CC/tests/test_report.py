@@ -315,7 +315,7 @@ def test_htf_alignment_section_renders_its_rows():
     start = page.index('id="htf-alignment"')
     section = page[start:page.index('id="sl-range"')]
 
-    assert '4H Alignment Signals' in page
+    assert '4H Alignment Analysis' in page
     for label in ('Default', 'Aligned', 'Against'):
         assert f'<td>{label}</td>' in section, f'{label} row missing'
 

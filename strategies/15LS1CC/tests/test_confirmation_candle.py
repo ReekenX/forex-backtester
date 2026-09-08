@@ -1202,9 +1202,13 @@ def test_weekday_statistics_days_without_trades():
 
 
 def test_htf_alignment_columns():
-    """Label, Trades, then Notation and Win Rate as separate columns."""
-    result = calculate_htf_alignment_statistics(get_sample_data())
-    assert list(result.columns) == ['4H Alignment', 'Trades', 'Notation', 'Win Rate']
+    """Label and Trades, then one column per reading of a trade - the same
+    shape as the weekday table so the two can be read together."""
+    sample = get_sample_data()
+    result = calculate_htf_alignment_statistics(sample)
+    assert list(result.columns) == ['4H Alignment', 'Trades', 'Signal', 'Strategy']
+    assert list(result.columns)[1:] == list(
+        calculate_weekday_statistics(sample).columns)[1:]
 
 
 def test_htf_alignment_rows():
@@ -1214,13 +1218,14 @@ def test_htf_alignment_rows():
 
 
 def test_htf_alignment_default_matches_every_trade():
-    """Default applies no filter, so it must equal the whole dataset scored at
-    the weekday table's rule."""
+    """Default applies no filter, so it must score the whole dataset."""
     sample = get_sample_data()
     default = calculate_htf_alignment_statistics(sample).iloc[0]
     assert default['Trades'] == len(sample)
-    assert default['Notation'] == '6W - 4L'
-    assert default['Win Rate'] == '60.0%'
+    # Sample TP > 0 on idx 1,3,5,7,8,9; all six also clear 1:1 on a surviving
+    # stop, so the two columns agree here.
+    assert default['Signal'] == '6W - 4L (60.0%)'
+    assert default['Strategy'] == '6W - 4L (60.0%)'
 
 
 def test_htf_alignment_splits_the_trades():
@@ -1234,36 +1239,59 @@ def test_htf_alignment_splits_the_trades():
 
 
 def test_htf_alignment_notation_and_win_rate():
-    """Sample winners (Pullback < SL AND TP > 0) are idx 1,3,5,7,8,9. Of those,
-    1, 5, 7 and 9 ran with the 4H trend and 3 and 8 fought it."""
+    """Sample winners are idx 1,3,5,7,8,9. Of those, 1, 5, 7 and 9 ran with the
+    4H trend and 3 and 8 fought it."""
     result = calculate_htf_alignment_statistics(get_sample_data())
     rows = {row['4H Alignment']: row for _, row in result.iterrows()}
 
-    assert rows['Aligned']['Notation'] == '4W - 3L'
-    assert rows['Aligned']['Win Rate'] == '57.1%'
-    assert rows['Against']['Notation'] == '2W - 1L'
-    assert rows['Against']['Win Rate'] == '66.7%'
+    assert rows['Aligned']['Signal'] == '4W - 3L (57.1%)'
+    assert rows['Aligned']['Strategy'] == '4W - 3L (57.1%)'
+    assert rows['Against']['Signal'] == '2W - 1L (66.7%)'
+    assert rows['Against']['Strategy'] == '2W - 1L (66.7%)'
 
 
-def test_htf_alignment_stopped_out_is_a_loss():
-    """A trade that lost its stop before running to target is a loss even with
-    a far-away TP, on both sides of the split."""
+def test_htf_alignment_late_entry_shows_only_in_signal():
+    """The case the two columns separate: right idea, stop taken out first.
+    Signal counts it on both sides of the split, Strategy does not."""
     trades = pd.DataFrame({
         'Date': ['2026-01-12', '2026-01-13'],
         'Weekday': ['Monday', 'Tuesday'],
         'Trade': ['#1', '#1'],
         '4H': ['Buy', 'Buy'],
         'Direction': ['Buy', 'Sell'],
-        'SL': [3.0, 3.0],
-        'Pullback': [4.0, 4.0],
-        'TP': [20.0, 20.0],
-        'R': [-6.0, -6.0],
+        'SL': [2.1, 2.1],
+        'Pullback': [3.4, 3.4],
+        'TP': [10.0, 10.0],
+        'R': [-4.8, -4.8],
     })
 
     rows = {r['4H Alignment']: r
             for _, r in calculate_htf_alignment_statistics(trades).iterrows()}
-    assert rows['Aligned']['Notation'] == '0W - 1L'
-    assert rows['Against']['Notation'] == '0W - 1L'
+    assert rows['Aligned']['Signal'] == '1W - 0L (100.0%)'
+    assert rows['Aligned']['Strategy'] == '0W - 1L (0.0%)'
+    assert rows['Against']['Signal'] == '1W - 0L (100.0%)'
+    assert rows['Against']['Strategy'] == '0W - 1L (0.0%)'
+
+
+def test_htf_alignment_strategy_needs_a_full_1_1_target():
+    """A surviving trade whose TP falls short of its stop is a Signal win but
+    not a Strategy win."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-12'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        '4H': ['Buy'],
+        'Direction': ['Buy'],
+        'SL': [4.0],
+        'Pullback': [1.0],
+        'TP': [3.0],
+        'R': [0.0],
+    })
+
+    rows = {r['4H Alignment']: r
+            for _, r in calculate_htf_alignment_statistics(trades).iterrows()}
+    assert rows['Aligned']['Signal'] == '1W - 0L (100.0%)'
+    assert rows['Aligned']['Strategy'] == '0W - 1L (0.0%)'
 
 
 def test_htf_alignment_all_one_side():
@@ -1283,10 +1311,10 @@ def test_htf_alignment_all_one_side():
 
     rows = {r['4H Alignment']: r
             for _, r in calculate_htf_alignment_statistics(trades).iterrows()}
-    assert rows['Aligned']['Notation'] == '1W - 0L'
+    assert rows['Aligned']['Signal'] == '1W - 0L (100.0%)'
     assert rows['Against']['Trades'] == 0
-    assert rows['Against']['Notation'] == '0W - 0L'
-    assert rows['Against']['Win Rate'] == '0.0%'
+    assert rows['Against']['Signal'] == '0W - 0L (0.0%)'
+    assert rows['Against']['Strategy'] == '0W - 0L (0.0%)'
 
 
 def test_htf_alignment_empty():
@@ -1294,8 +1322,8 @@ def test_htf_alignment_empty():
     assert len(result) == 3
     for _, row in result.iterrows():
         assert row['Trades'] == 0
-        assert row['Notation'] == '0W - 0L'
-        assert row['Win Rate'] == '0.0%'
+        assert row['Signal'] == '0W - 0L (0.0%)'
+        assert row['Strategy'] == '0W - 0L (0.0%)'
 
 
 def test_sl_ranges_constant():
@@ -2447,7 +2475,8 @@ def run_all_tests():
         test_htf_alignment_default_matches_every_trade,
         test_htf_alignment_splits_the_trades,
         test_htf_alignment_notation_and_win_rate,
-        test_htf_alignment_stopped_out_is_a_loss,
+        test_htf_alignment_late_entry_shows_only_in_signal,
+        test_htf_alignment_strategy_needs_a_full_1_1_target,
         test_htf_alignment_all_one_side,
         test_htf_alignment_empty,
         test_sl_ranges_constant,

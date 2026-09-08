@@ -152,9 +152,11 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
     (
         "htf-alignment",
         "4H Alignment",
-        "4H Alignment Signals",
+        "4H Alignment Analysis",
         "Trades split by whether they ran with the 4H trend or against it. "
-        "Win = Pullback &lt; SL AND TP &gt; 0.",
+        "Same two readings as the weekday table: <b>Signal</b> = TP &gt; 0 (the "
+        "idea was right, stop ignored), <b>Strategy</b> = Pullback &lt; SL AND "
+        "TP &gt;= SL (what trading it at 1:1 would have returned).",
         _htf_alignment_section,
     ),
     (

@@ -105,8 +105,9 @@ the two. The gap between them is the cost of entry timing - directionally
 correct calls that the recorded stop could not hold onto. A wide gap points at
 the entry, not at the idea.
 
-Report tables state which rule they use. `Weekday Analysis` shows both side by
-side; the SL family and `4H Alignment` use one rule each, named in their note.
+Report tables state which rule they use. `Weekday Analysis` and `4H Alignment
+Analysis` show both side by side; the SL family uses Strategy only, named in
+each note.
 
 ## Development Flow for New Features
 
