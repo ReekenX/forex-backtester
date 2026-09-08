@@ -337,6 +337,27 @@ def test_analysis_tables_pin_their_first_column():
         assert f'<th style="width: 40%;">{label}</th>' in section, f'{anchor} not pinned'
 
 
+def test_fixed_sl_section_follows_sl_range():
+    """Fixed SL reads against the SL bands, so it sits directly below them and
+    ahead of the buffer table."""
+    page = build_report(get_sample_data(), 'now', 'abc123')
+
+    sl_range = page.index('id="sl-range"')
+    fixed = page.index('id="sl-fixed"')
+    buffer_ = page.index('id="sl-buffer"')
+    assert sl_range < fixed < buffer_
+
+
+def test_fixed_sl_nav_order_matches_the_sections():
+    """The nav is built from the same list, so it must reorder with it."""
+    page = build_report(get_sample_data(), 'now', 'abc123')
+    nav = page[:page.index('id="weekday"')]
+
+    assert (nav.index('href="#sl-range"')
+            < nav.index('href="#sl-fixed"')
+            < nav.index('href="#sl-buffer"'))
+
+
 def test_no_duplicate_dom_ids():
     """A section anchor must never collide with a table's sort id: the sort
     script does getElementById(tableId) and would get the <section> instead."""

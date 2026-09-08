@@ -1755,8 +1755,11 @@ def test_sl_fixed_pips_constant():
 
 
 def test_sl_fixed_columns_and_rows():
-    result = calculate_sl_fixed_statistics(get_sample_data())
-    assert list(result.columns) == ['Fixed SL', 'Trades', 'Notation', 'Win Rate']
+    sample = get_sample_data()
+    result = calculate_sl_fixed_statistics(sample)
+    assert list(result.columns) == ['Fixed SL', 'Trades', 'Signal', 'Strategy']
+    assert list(result.columns)[1:] == list(
+        calculate_weekday_statistics(sample).columns)[1:]
     assert list(result['Fixed SL']) == [
         'Default', '3 pips', '4 pips', '5 pips', '6 pips', '7 pips',
         '8 pips', '9 pips', '10 pips']
@@ -1767,8 +1770,10 @@ def test_sl_fixed_default_row_matches_the_other_tables():
     """Default keeps the recorded stops, so it must equal the 0-shift rows."""
     sample = get_sample_data()
     default = calculate_sl_fixed_statistics(sample).iloc[0]
+    buffer_default = calculate_sl_buffer_statistics(sample).iloc[0]
     assert default['Fixed SL'] == 'Default'
-    assert default['Notation'] == calculate_sl_buffer_statistics(sample).iloc[0]['Notation']
+    assert default['Strategy'] == (
+        f"{buffer_default['Notation']} ({buffer_default['Win Rate']})")
 
 
 def test_sl_fixed_discards_the_recorded_stop():
@@ -1787,10 +1792,12 @@ def test_sl_fixed_discards_the_recorded_stop():
     })
 
     rows = {r['Fixed SL']: r for _, r in calculate_sl_fixed_statistics(trades).iterrows()}
-    assert rows['Default']['Notation'] == '0W - 1L'  # TP 6 < SL 20
-    assert rows['3 pips']['Notation'] == '0W - 1L'   # pullback 4 >= stop 3
-    assert rows['5 pips']['Notation'] == '1W - 0L'   # survives, TP 6 >= 5
-    assert rows['7 pips']['Notation'] == '0W - 1L'   # TP 6 < target 7
+    assert rows['Default']['Strategy'] == '0W - 1L (0.0%)'   # TP 6 < SL 20
+    assert rows['3 pips']['Strategy'] == '0W - 1L (0.0%)'    # pullback 4 >= stop 3
+    assert rows['5 pips']['Strategy'] == '1W - 0L (100.0%)'  # survives, TP 6 >= 5
+    assert rows['7 pips']['Strategy'] == '0W - 1L (0.0%)'    # TP 6 < target 7
+    # The stop cannot change whether a target was reached, so Signal is flat.
+    assert {r['Signal'] for r in rows.values()} == {'1W - 0L (100.0%)'}
 
 
 def test_sl_fixed_is_the_same_stop_for_every_trade():
@@ -1808,15 +1815,35 @@ def test_sl_fixed_is_the_same_stop_for_every_trade():
     })
 
     rows = {r['Fixed SL']: r for _, r in calculate_sl_fixed_statistics(trades).iterrows()}
-    assert rows['Default']['Notation'] == '1W - 1L'  # 10>=2 wins, 10<12 loses
-    assert rows['5 pips']['Notation'] == '2W - 0L'   # both survive and clear 5
+    assert rows['Default']['Strategy'] == '1W - 1L (50.0%)'   # 10>=2 wins, 10<12 loses
+    assert rows['5 pips']['Strategy'] == '2W - 0L (100.0%)'   # both survive and clear 5
 
 
 def test_sl_fixed_win_rate_matches_notation():
+    """The percentage in each cell agrees with the W/L counts beside it."""
+    import re
+
     result = calculate_sl_fixed_statistics(get_sample_data())
     for _, row in result.iterrows():
-        wins = int(row['Notation'].split('W')[0])
-        assert row['Win Rate'] == f"{wins / row['Trades'] * 100:.1f}%"
+        for col in ('Signal', 'Strategy'):
+            wins, losses, pct = re.match(
+                r'(\d+)W - (\d+)L \((\d+\.\d)%\)', row[col]).groups()
+            assert int(wins) + int(losses) == row['Trades']
+            assert pct == f"{int(wins) / row['Trades'] * 100:.1f}"
+
+
+def test_sl_fixed_signal_is_a_stop_independent_ceiling():
+    """Signal repeats down the table and no Strategy row can beat it."""
+    import re
+
+    result = calculate_sl_fixed_statistics(get_sample_data())
+    assert result['Signal'].nunique() == 1
+
+    def wins(cell):
+        return int(re.match(r'(\d+)W', cell).group(1))
+
+    ceiling = wins(result['Signal'].iloc[0])
+    assert all(wins(c) <= ceiling for c in result['Strategy'])
 
 
 def test_sl_fixed_empty():
@@ -1824,17 +1851,18 @@ def test_sl_fixed_empty():
     assert len(result) == len(SL_FIXED_PIPS) + 1
     for _, row in result.iterrows():
         assert row['Trades'] == 0
-        assert row['Notation'] == '0W - 0L'
+        assert row['Signal'] == '0W - 0L (0.0%)'
+        assert row['Strategy'] == '0W - 0L (0.0%)'
 
 
 def test_sl_fixed_sortable_win_rate_only():
+    """Both result columns carry a percentage, so both are click-to-sort; the
+    label and Trades columns are not."""
     stats = calculate_sl_fixed_statistics(get_sample_data())
     html = _create_sl_sortable_table(stats, "sl-fixed-table")
     for idx, col in enumerate(stats.columns):
-        if col == 'Win Rate':
-            assert f"sortSlRange('sl-fixed-table', {idx}, this)" in html
-        else:
-            assert f"sortSlRange('sl-fixed-table', {idx}, this)" not in html
+        clickable = f"sortSlRange('sl-fixed-table', {idx}, this)" in html
+        assert clickable == (col in ('Signal', 'Strategy')), col
 
 
 def test_first_col_width_fixes_the_table_layout():
@@ -2585,6 +2613,7 @@ def run_all_tests():
         test_sl_fixed_discards_the_recorded_stop,
         test_sl_fixed_is_the_same_stop_for_every_trade,
         test_sl_fixed_win_rate_matches_notation,
+        test_sl_fixed_signal_is_a_stop_independent_ceiling,
         test_sl_fixed_empty,
         test_sl_fixed_sortable_win_rate_only,
         test_first_col_width_fixes_the_table_layout,

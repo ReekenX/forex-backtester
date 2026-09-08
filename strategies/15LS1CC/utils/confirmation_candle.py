@@ -1271,7 +1271,8 @@ def _pip_label(pips: int) -> str:
 
 
 def _sl_scenario_statistics(df: pd.DataFrame, scenarios: List[Tuple[str, object]],
-                            column: str) -> pd.DataFrame:
+                            column: str,
+                            with_signal: bool = False) -> pd.DataFrame:
     """
     Score every trade at 1:1 under each stop scenario.
 
@@ -1286,26 +1287,35 @@ def _sl_scenario_statistics(df: pd.DataFrame, scenarios: List[Tuple[str, object]
         df: DataFrame with trading data
         scenarios: (label, effective SL) pairs. The effective SL is either a
             per-trade Series or a single number applied to every trade.
-        column: Name for the leading column (e.g. 'SL Reduction')
+        column: Name for the leading column (e.g. 'Fixed SL')
+        with_signal: Emit `<column>, Trades, Signal, Strategy` instead of
+            `<column>, Trades, Notation, Win Rate`, matching the weekday and
+            SL Range tables. Signal (TP > 0) does not depend on the stop, so it
+            is the same on every row - it is the ceiling no stop size beats,
+            and each row's Strategy says how close that stop gets to it.
 
     Returns:
-        DataFrame with columns: <column>, Trades, Notation, Win Rate
+        DataFrame with columns: <column>, Trades, Notation, Win Rate - or
+        <column>, Trades, Signal, Strategy when with_signal is set.
     """
     total = len(df)
+    signals = int((df['TP'] > 0).sum()) if total else 0
     results = []
 
     for label, effective_sl in scenarios:
         wins = int((
             (df['Pullback'] < effective_sl) & (df['TP'] >= effective_sl)
         ).sum()) if total else 0
-        win_rate = (wins / total * 100) if total > 0 else 0.0
 
-        results.append({
-            column: label,
-            'Trades': total,
-            'Notation': f"{wins}W - {total - wins}L",
-            'Win Rate': f"{win_rate:.1f}%",
-        })
+        row = {column: label, 'Trades': total}
+        if with_signal:
+            row['Signal'] = _format_wl(signals, total - signals, total)
+            row['Strategy'] = _format_wl(wins, total - wins, total)
+        else:
+            win_rate = (wins / total * 100) if total > 0 else 0.0
+            row['Notation'] = f"{wins}W - {total - wins}L"
+            row['Win Rate'] = f"{win_rate:.1f}%"
+        results.append(row)
 
     return pd.DataFrame(results)
 
@@ -1367,12 +1377,16 @@ def calculate_sl_fixed_statistics(df: pd.DataFrame) -> pd.DataFrame:
     Args:
         df: DataFrame with trading data
 
+    Signal (TP > 0) is the same on every row - the stop cannot change whether
+    price reached a target - so it reads as the ceiling, and each row's
+    Strategy says how much of that ceiling the stop size actually captures.
+
     Returns:
-        DataFrame with columns: Fixed SL, Trades, Notation, Win Rate
+        DataFrame with columns: Fixed SL, Trades, Signal, Strategy
     """
     scenarios: List[Tuple[str, object]] = [('Default', df['SL'])]
     scenarios.extend((_pip_label(pips), float(pips)) for pips in SL_FIXED_PIPS)
-    return _sl_scenario_statistics(df, scenarios, 'Fixed SL')
+    return _sl_scenario_statistics(df, scenarios, 'Fixed SL', with_signal=True)
 
 
 def display_analysis_sl_buffer(df: pd.DataFrame):
@@ -1406,7 +1420,7 @@ def display_analysis_sl_fixed(df: pd.DataFrame):
     from IPython.display import display, HTML
 
     title_html = ("<h2 style='color: #e0e0e0; background-color: #1e1e1e; "
-                  "padding: 10px;'>Fixed SL Signals</h2>")
+                  "padding: 10px;'>Fixed SL Analysis</h2>")
     display(HTML(title_html))
 
     stats_df = calculate_sl_fixed_statistics(df)

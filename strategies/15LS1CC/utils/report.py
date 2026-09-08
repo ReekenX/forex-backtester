@@ -171,21 +171,23 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         _sl_section,
     ),
     (
+        "sl-fixed",
+        "Fixed SL",
+        "Fixed SL Analysis",
+        "The recorded stop replaced by one size for every trade, so both the "
+        "survival check and the 1:1 target move to it. Default keeps the "
+        "recorded stops as a baseline. <b>Signal</b> (TP &gt; 0) does not depend "
+        "on the stop, so it repeats down the table as the ceiling; "
+        "<b>Strategy</b> says how much of that ceiling each stop size captures.",
+        _sl_fixed_section,
+    ),
+    (
         "sl-buffer",
         "Adding Buffer",
         "Adding Buffer To SL Signals",
         "Every stop padded by N pips: "
         "win = Pullback &lt; SL + N AND TP &gt;= SL + N.",
         _sl_buffer_section,
-    ),
-    (
-        "sl-fixed",
-        "Fixed SL",
-        "Fixed SL Signals",
-        "The recorded stop replaced by one size for every trade, so both the "
-        "survival check and the 1:1 target move to it. Default keeps the "
-        "recorded stops as a baseline.",
-        _sl_fixed_section,
     ),
     (
         "tp-range",
