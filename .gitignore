@@ -2,3 +2,7 @@
 
 # Rendered lab reports (build artifacts)
 labs/build/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
