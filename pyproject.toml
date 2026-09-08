@@ -19,6 +19,10 @@ pytest = "^9.0.1"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["strategies"]
+# Both strategies ship a tests/test_report.py. Without importlib mode pytest
+# imports test modules by basename and refuses the second one as a duplicate,
+# so a repo-wide run collects nothing.
+addopts = "--import-mode=importlib"
 
 [build-system]
 requires = ["poetry-core"]

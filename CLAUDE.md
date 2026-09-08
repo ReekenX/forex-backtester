@@ -18,7 +18,11 @@ strategies/<name>/
 
 Notebooks live in `labs/<name>.ipynb` and import from their strategy's utils package via `sys.path.insert(0, '../strategies/<name>')`.
 
-15LS1CC additionally renders to a static HTML page. `strategies/15LS1CC/utils/report.py` holds the page-building logic and `labs/render.py` is a thin entry point, mirroring the notebook/module split. Output goes to `labs/build/` (gitignored). See "Rendering the HTML Report" below.
+Both strategies additionally render to a static HTML page, from the same
+template. `strategies/<name>/utils/report.py` holds the page-building logic and
+`labs/render.py` (15LS1CC) / `labs/render_5OB.py` (5OB1CC) are thin entry
+points, mirroring the notebook/module split. Output goes to `labs/build/`
+(gitignored). See "Rendering the HTML Report" below.
 
 Current strategies:
 - **5OB1CC** - 5-minute Order Block, 1-minute Confirmation Candle (`strategies/5OB1CC/`)
@@ -53,7 +57,7 @@ Each strategy keeps its data inside its `strategies/<name>/` directory: `data.cs
 - **EMA**: EMA signal (Buy or Sell)
 - **SL**: Stop Loss value (distance to safe stop when trade signal was received)
 - **Pullback**: Pullback value (if equal to `SL` column - this trade was a loss)
-- **TP**: Take Profit value (any value above 0 or empty means that this trade was profitable)
+- **TP**: Take Profit value in pips. A blank cell and a 0 both mean the trade was not profitable, so `TP > 0` is the Signal rule; `load_data` fills the blanks with 0 so both read the same way
 - **Extra**: Extra pips needed to make this trade profitable
 - **BOS/CH**: Market structure type (BOS - Break of Structure; CH - Change of Character)
 - **30M Leg**: 30-minute timeframe leg analysis
@@ -142,6 +146,7 @@ When building new analysis features, follow this three-file pattern within the s
 - **5OB1CC**: `labs/5OB1CC.ipynb`, `strategies/5OB1CC/utils/hours.py`, `strategies/5OB1CC/tests/test_hours.py`
 - **15LS1CC**: `labs/15LS1CC.ipynb`, `strategies/15LS1CC/utils/confirmation_candle.py`, `strategies/15LS1CC/tests/test_confirmation_candle.py`
 - **15LS1CC HTML report**: `labs/render.py`, `strategies/15LS1CC/utils/report.py`, `strategies/15LS1CC/tests/test_report.py`
+- **5OB1CC HTML report**: `labs/render_5OB.py`, `strategies/5OB1CC/utils/report.py`, `strategies/5OB1CC/utils/order_block.py`, `strategies/5OB1CC/tests/test_report.py`, `strategies/5OB1CC/tests/test_order_block.py`
 
 ## Acceptance Criteria
 
@@ -198,8 +203,14 @@ All analysis tables should follow this standardized column format:
 
 ## Rendering the HTML Report
 
-`labs/render.py` builds `labs/build/15C.html` from `v5_data.csv`. Pair it with a
-file watcher for the normal working loop:
+Two pages, one template, one output directory:
+
+| Strategy | Entry point | Page | Source CSV |
+| --- | --- | --- | --- |
+| 15LS1CC | `labs/render.py` | `labs/build/15C.html` | `v5_data.csv` |
+| 5OB1CC | `labs/render_5OB.py` | `labs/build/5OB.html` | `data.csv` |
+
+Pair either with a file watcher for the normal working loop:
 
 ```bash
 brew install watchexec   # one-off
@@ -207,9 +218,43 @@ brew install watchexec   # one-off
 poetry run python labs/render.py                                    # render once
 watchexec -w strategies/15LS1CC -e py,csv -- poetry run python labs/render.py
 poetry run python labs/render.py out.html --no-reload               # frozen snapshot
+
+poetry run python labs/render_5OB.py                                # or: make report-5ob
+watchexec -w strategies/5OB1CC -e py,csv -- poetry run python labs/render_5OB.py
 ```
 
+`make report` / `report-5ob`, `open` / `open-5ob` and `watch` / `watch-5ob`
+wrap those. `make serve` serves both pages out of `labs/build`.
+
 `watchexec` is event-driven (OS filesystem notifications), not a polling timer.
+
+Because both pages land in `labs/build`, their live-reload sidecars are named
+apart - `build-id.txt` / `build-id.js` for 15C, `build-id-5ob.txt` /
+`build-id-5ob.js` for 5OB. A shared name would have each page reload on the
+other's data. Their sessionStorage sort and scroll keys are namespaced the same
+way. `test_build_id_sidecars_do_not_collide_with_the_15c_page` pins this.
+
+### How the two pages differ
+
+Same shell, same tables, same win rule; the data dictates the rest.
+
+- **5OB1CC has no `R` column**, so `order_block.load_data` derives it as
+  `TP / SL`, signed negative when `Pullback >= SL` - the convention the
+  15LS1CC sheet exports. The R Distribution charts read that derived column.
+- **5OB1CC has no `4H` column.** Its `EMA Alignment Analysis` is the
+  counterpart: `EMA == Direction` is "Aligned", the rest is "Against".
+- **5OB1CC carries four extra entry-time filters**, so each gets a
+  Signal/Strategy table in the grouping block below Weekday: `Hour`
+  (click-to-sort, Lithuanian time), `EMA Alignment`, `Structure` (`BOS/CH`) and
+  `30M Leg`. All four are known before the trade is taken, so they are
+  legitimate filters - unlike `Pullback` or `TP`.
+- **`Range`, `Strength` and `Extra` are read by nothing.** They are populated
+  on roughly 25 of 1102 rows, which is too thin to bucket.
+- **A blank `Pullback` loads as 0**, same as a blank `TP` - so those trades
+  score as having run clean off the entry. Five rows in the current export are
+  like that.
+- **The Three Setups trade log carries an `Hour` column** that 15C has no data
+  for, and runs to one row per trade (1102 today, against 15C's 90).
 
 ### Conventions for report sections
 
@@ -231,7 +276,8 @@ Sections are declared in `report.py`'s `SECTIONS` list as
 ### Conventions for stop tables
 
 The SL tables (`SL Range`, `Adding Buffer`, `Fixed SL`, `Pullback`) are
-a family and must stay consistent:
+a family and must stay consistent. Both pages have this family, each in its own
+module - keep a change to one in step with the other:
 
 - **One shared win rule.** Every stop scenario goes through
   `_sl_scenario_statistics`, which takes `(label, effective SL)` pairs. Do not
@@ -245,7 +291,8 @@ a family and must stay consistent:
   `"12W - 3L"` and `Win Rate` as `"52.7%"` in separate columns - never combined
   into one cell. `SL Range Analysis` and `Fixed SL Analysis` are the
   exceptions: they carry `<label>, Trades, Signal, Strategy` like the weekday
-  and 4H tables, each cell combined as `"12W - 3L (52.7%)"` by `_format_wl`.
+  and alignment tables, each cell combined as `"12W - 3L (52.7%)"` by
+  `_format_wl`.
   Their `Strategy` column is still the family's shared win rule, which is what
   `test_every_stop_table_opens_with_the_same_default_row` compares against.
   `_sl_scenario_statistics` emits that shape via `with_signal=True`, so the win
@@ -254,9 +301,12 @@ a family and must stay consistent:
   `sortable=False`. `Fixed SL Analysis` is the exception - its rows are stop
   sizes to compare, so it stays click-to-sort.
 - **Label column width is `40%` everywhere except `Adding Buffer`**, which
-  still carries the older `50%`. `Weekday`, `4H Alignment`, `SL Range`,
+  still carries the older `50%`. `Weekday`, the alignment tables, `SL Range`,
   `Fixed SL`, `TP Range` and `Pullback` all pin `first_col_width="40%"` so they
   line up down the page.
+- **Table ids are not shared between the pages.** 15C's SL Range table is
+  `sl-range-stats`; 5OB's is `sl-range-table`. Each page's ids only have to be
+  unique within that page, so do not assume a test on one applies to the other.
 
 ## Previewing Lab Data
 
@@ -283,7 +333,26 @@ Each lab notebook has a corresponding utils module inside its strategy directory
 3. Use pandas display options for readable terminal output
 
 For 15LS1CC, `poetry run python labs/render.py` renders every table at once and
-is usually faster than calling functions one by one.
+is usually faster than calling functions one by one. For 5OB1CC's report tables,
+`labs/render_5OB.py` does the same - and `strategies/5OB1CC/utils/order_block.py`
+is the module behind them:
+
+```bash
+# 5OB1CC report tables
+poetry run python -c "
+import sys; sys.path.insert(0, 'strategies/5OB1CC')
+import pandas as pd
+from utils.order_block import load_data, calculate_hour_statistics
+
+df = load_data('strategies/5OB1CC/data.csv')
+pd.set_option('display.max_rows', None)
+pd.set_option('display.width', 200)
+print(calculate_hour_statistics(df).to_string(index=False))
+"
+```
+
+The 5OB1CC notebook's other modules (`hours.py`, `ema.py`, `tables.py`, ...)
+predate the report and are untouched by it.
 
 ## Acceptance Criteria for Lab Changes
 
@@ -297,3 +366,15 @@ On top of the test rules above, a change to 15LS1CC analysis is not done until:
    when the data or the win rule changes
 4. `git diff --stat strategies/15LS1CC/v5_data.csv` is empty, in case a test or a
    manual check wrote to it
+
+A change to the 5OB1CC report is not done until:
+
+1. `poetry run python labs/render_5OB.py` succeeds and the affected table is
+   correct
+2. `poetry run python -m pytest strategies/5OB1CC/tests/ -v` passes - that suite
+   covers the older notebook modules too, so a shared-CSV change shows up there
+3. `git diff --stat strategies/5OB1CC/data.csv` is empty
+4. The page was looked at in a browser, not just asserted on as a string
+
+The 5OB1CC notebook (`labs/5OB1CC.ipynb`) does not import the report modules, so
+a report-only change does not need it re-executed.
