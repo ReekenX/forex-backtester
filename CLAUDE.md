@@ -230,7 +230,7 @@ Sections are declared in `report.py`'s `SECTIONS` list as
 
 ### Conventions for stop tables
 
-The SL tables (`SL Range`, `Adding Buffer`, `Fixed SL`, `Pullback Range`) are
+The SL tables (`SL Range`, `Adding Buffer`, `Fixed SL`, `Pullback`) are
 a family and must stay consistent:
 
 - **One shared win rule.** Every stop scenario goes through
@@ -253,10 +253,10 @@ a family and must stay consistent:
 - **Row order carries meaning**, so these tables are rendered with
   `sortable=False`. `Fixed SL Analysis` is the exception - its rows are stop
   sizes to compare, so it stays click-to-sort.
-- **Label column width follows the table's shape, not the family.** The
-  Signal/Strategy tables (`Weekday`, `4H Alignment`, `SL Range`, `Fixed SL`)
-  pin `first_col_width="40%"` so all four line up; `Adding Buffer` keeps the
-  older `50%`. `Pullback Range` is unpinned.
+- **Label column width is `40%` everywhere except `Adding Buffer`**, which
+  still carries the older `50%`. `Weekday`, `4H Alignment`, `SL Range`,
+  `Fixed SL`, `TP Range` and `Pullback` all pin `first_col_width="40%"` so they
+  line up down the page.
 
 ## Previewing Lab Data
 

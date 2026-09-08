@@ -96,7 +96,9 @@ def _tp_section(df: pd.DataFrame) -> str:
 
 
 def _pullback_section(df: pd.DataFrame) -> str:
-    return _create_sl_sortable_table(calculate_pullback_statistics(df), "pullback-analysis")
+    return _create_sl_sortable_table(
+        calculate_pullback_statistics(df), "pullback-analysis",
+        first_col_width="40%")
 
 
 def _three_setups_section(df: pd.DataFrame) -> str:
@@ -192,21 +194,21 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         _tp_section,
     ),
     (
+        "pullback",
+        "Pullback",
+        "Pullback Analysis",
+        "Filling a limit order N pips into the pullback instead of taking the "
+        "signal. Half fills at half the stop. M counts winners the limit never "
+        "filled, so they are excluded from Trades and Win Rate.",
+        _pullback_section,
+    ),
+    (
         "sl-buffer",
         "Adding Buffer",
         "Adding Buffer To SL Signals",
         "Every stop padded by N pips: "
         "win = Pullback &lt; SL + N AND TP &gt;= SL + N.",
         _sl_buffer_section,
-    ),
-    (
-        "pullback",
-        "Pullback",
-        "Pullback Range Signals",
-        "Filling a limit order N pips into the pullback instead of taking the "
-        "signal. Half fills at half the stop. M counts winners the limit never "
-        "filled, so they are excluded from Trades and Win Rate.",
-        _pullback_section,
     ),
     (
         "r-distribution",

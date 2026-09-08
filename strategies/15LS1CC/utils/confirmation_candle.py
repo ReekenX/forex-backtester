@@ -1516,7 +1516,8 @@ def display_analysis_pullback(df: pd.DataFrame):
     display(HTML(title_html))
 
     stats_df = calculate_pullback_statistics(df)
-    html_table = _create_sl_sortable_table(stats_df, "pullback-analysis")
+    html_table = _create_sl_sortable_table(
+        stats_df, "pullback-analysis", first_col_width="40%")
     display(HTML(html_table))
 
 
