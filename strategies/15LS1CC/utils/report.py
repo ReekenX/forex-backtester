@@ -92,7 +92,7 @@ def _sl_fixed_section(df: pd.DataFrame) -> str:
 
 
 def _tp_section(df: pd.DataFrame) -> str:
-    return create_html_table(calculate_tp_statistics(df))
+    return create_html_table(calculate_tp_statistics(df), first_col_width="40%")
 
 
 def _pullback_section(df: pd.DataFrame) -> str:
@@ -185,19 +185,19 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         _sl_fixed_section,
     ),
     (
+        "tp-range",
+        "TP Range",
+        "TP Range Analysis",
+        "How far the profitable trades ran.",
+        _tp_section,
+    ),
+    (
         "sl-buffer",
         "Adding Buffer",
         "Adding Buffer To SL Signals",
         "Every stop padded by N pips: "
         "win = Pullback &lt; SL + N AND TP &gt;= SL + N.",
         _sl_buffer_section,
-    ),
-    (
-        "tp-range",
-        "TP Range",
-        "TP Range Signals",
-        "How far the profitable trades ran.",
-        _tp_section,
     ),
     (
         "pullback",

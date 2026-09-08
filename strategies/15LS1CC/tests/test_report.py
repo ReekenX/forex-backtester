@@ -364,6 +364,26 @@ def test_fixed_sl_nav_order_matches_the_sections():
             < nav.index('href="#sl-buffer"'))
 
 
+def test_tp_range_section_sits_above_adding_buffer():
+    """TP Range reads with the SL bands above it, ahead of the buffer table."""
+    page = build_report(get_sample_data(), 'now', 'abc123')
+    assert page.index('id="sl-fixed"') < page.index('id="tp-range"') < page.index('id="sl-buffer"')
+
+    nav = page[:page.index('id="weekday"')]
+    assert nav.index('href="#tp-range"') < nav.index('href="#sl-buffer"')
+
+
+def test_tp_range_pins_its_first_column():
+    """Pinned to 40% like the Signal/Strategy tables, though it keeps its own
+    distribution columns."""
+    page = build_report(get_sample_data(), 'now', 'abc123')
+    section = page[page.index('id="tp-range"'):page.index('id="sl-buffer"')]
+    assert '<th style="width: 40%;">TP Range</th>' in section
+    # Deliberately no Signal/Strategy split - see "Signal vs Strategy" in
+    # CLAUDE.md: every trade here already has TP > 0.
+    assert list(re.findall(r'<th[^>]*>([^<]*)</th>', section)) == ['TP Range', 'Trades']
+
+
 def test_no_duplicate_dom_ids():
     """A section anchor must never collide with a table's sort id: the sort
     script does getElementById(tableId) and would get the <section> instead."""

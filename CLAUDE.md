@@ -109,6 +109,10 @@ Report tables state which rule they use. `Weekday Analysis`, `4H Alignment
 Analysis`, `SL Range Analysis` and `Fixed SL Analysis` show both side by side;
 the remaining SL tables use Strategy only, named in each note.
 
+`TP Range Analysis` deliberately keeps neither column: it buckets trades that
+already have `TP > 0`, so a Signal column would read 100% on every row. It is a
+distribution, not a win rate.
+
 In the stop-scenario tables Signal does not depend on the stop, so it repeats
 down every row. That is the point: it is the ceiling no stop size can beat, and
 each row's Strategy says how much of it that stop captures.

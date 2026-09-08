@@ -1558,18 +1558,18 @@ def calculate_tp_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
 def display_analysis_tp(df: pd.DataFrame):
     """
-    Display win/loss statistics broken down by TP pip range.
+    Display how far the profitable trades ran, by TP pip range.
 
     Args:
         df: DataFrame with trading data
     """
     from IPython.display import display, HTML
 
-    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>TP Range Signals</h2>"
+    title_html = "<h2 style='color: #e0e0e0; background-color: #1e1e1e; padding: 10px;'>TP Range Analysis</h2>"
     display(HTML(title_html))
 
     stats_df = calculate_tp_statistics(df)
-    html_table = create_html_table(stats_df)
+    html_table = create_html_table(stats_df, first_col_width="40%")
     display(HTML(html_table))
 
 
