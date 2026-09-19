@@ -81,7 +81,7 @@ Each strategy keeps its data inside its `strategies/<name>/` directory: `data.cs
 - **Weekday**: Day of the week
 - **Trade**: Trade identifier. The export wraps a computed figure under the column name in the same header cell (`Trade\n69`), so `load_data` normalises every header to its first line
 - **Direction**: Trade direction (Buy or Sell)
-- **30M**: The setup that produced the signal - `30M High Continuation`, `30M High Reversal`, `30M Low Continuation` or `30M Low Reversal`. `load_data` strips the repeated `30M ` prefix into a `Setup` column and splits it into `Side` (High/Low) and `Type` (Continuation/Reversal). All three are known at entry, so all three are tradeable filters
+- **30M**: The setup that produced the signal - `30M High Continuation`, `30M High Reversal`, `30M Low Continuation` or `30M Low Reversal`. `load_data` strips the repeated `30M ` prefix into a `Setup` column and splits out its `Type` (Continuation/Reversal). Both are known at entry, so both are tradeable filters
 - **SL**: Stop Loss in pips
 - **Pullback**: Pullback in pips
 - **TP**: Take Profit in pips (empty = not profitable)
@@ -296,9 +296,13 @@ Same shell, same tables, same win rule; the data dictates the rest.
 
 - **It derives `R` the same way 5OB does**, `TP / SL` signed negative when
   `Pullback >= SL`, because its export has no `R` column either.
-- **Its grouping block is `Setup`, `30M Side`, `Setup Type` and `Direction`.**
-  The first three are the `30M` label read whole and then in halves; all four
-  are known at entry. `Setup` is click-to-sort, the rest are not.
+- **Its grouping block is one table, `Setup`.** It carries three levels of
+  the same split: `Default`, then a row per setup, then `Continuation` and
+  `Reversal` pooling the setups that end the same way. Those last two overlap
+  the setup rows, so the `Trades` column does not sum - each block covers every
+  trade once. The setup is known at entry, so it is a tradeable filter, and the
+  table is click-to-sort. There is no High/Low table and no Direction table -
+  neither split said anything on its own.
 - **It has no `4H`, `EMA` or `Hour` column**, so none of those tables exist.
   The Three Setups trade log carries `Setup` where 5OB's carries `Hour`.
 - **Everything from the `Signal` column rightwards is dropped at load** - see

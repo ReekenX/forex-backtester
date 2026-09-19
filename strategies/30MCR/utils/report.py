@@ -30,16 +30,13 @@ from utils.continuation_reversal import (
     THREE_SETUPS_RRR,
     _calculate_stats_with_buffer,
     calculate_buffer_statistics,
-    calculate_direction_statistics,
     calculate_pullback_statistics,
     calculate_setup_statistics,
-    calculate_side_statistics,
     calculate_sl_buffer_statistics,
     calculate_sl_fixed_statistics,
     calculate_sl_statistics,
     calculate_three_setups_comparison,
     calculate_tp_statistics,
-    calculate_type_statistics,
     calculate_weekday_statistics,
     create_html_table,
     create_r_histogram_combined,
@@ -90,21 +87,6 @@ def _setup_section(df: pd.DataFrame) -> str:
     return create_html_table(
         calculate_setup_statistics(df), sort_id="setup-table",
         first_col_width="40%")
-
-
-def _side_section(df: pd.DataFrame) -> str:
-    return create_html_table(
-        calculate_side_statistics(df), first_col_width="40%")
-
-
-def _type_section(df: pd.DataFrame) -> str:
-    return create_html_table(
-        calculate_type_statistics(df), first_col_width="40%")
-
-
-def _direction_section(df: pd.DataFrame) -> str:
-    return create_html_table(
-        calculate_direction_statistics(df), first_col_width="40%")
 
 
 def _sl_section(df: pd.DataFrame) -> str:
@@ -200,34 +182,12 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "Trades split by what the 30-minute structure did before the signal, "
         "the same two readings as the weekday table. The setup is known before "
         "the trade is taken, so it is a tradeable filter. Default is every "
-        "trade, and the Signal and Strategy headers are click-to-sort.",
+        "trade, the four setups are one row each, and the last two rows pool "
+        "them by type - continuation through the level against reversal off "
+        "it, read without the level. Those overlap the setup rows, so the "
+        "column does not sum. The Signal and Strategy headers are "
+        "click-to-sort.",
         _setup_section,
-    ),
-    (
-        "side",
-        "30M Side",
-        "30M Side Analysis",
-        "The setup label read on its own first half: the 30-minute high "
-        "against the 30-minute low, whatever price then did there. Same Signal "
-        "and Strategy pair as the weekday table.",
-        _side_section,
-    ),
-    (
-        "setup-type",
-        "Setup Type",
-        "Setup Type Analysis",
-        "The other half of the label - continuation through the level against "
-        "reversal off it, the C and R of the strategy's name. Same Signal and "
-        "Strategy pair as the weekday table.",
-        _type_section,
-    ),
-    (
-        "direction",
-        "Direction",
-        "Direction Analysis",
-        "Buys against sells. Same Signal and Strategy pair as the weekday "
-        "table.",
-        _direction_section,
     ),
     (
         "sl-range",

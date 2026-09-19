@@ -61,7 +61,6 @@ def get_sample_data():
         'TP': [34.0, 0.0, 31.0, 9.0, 17.0, 7.0],
         'R': [7.727, 0.0, -11.923, 3.0, 3.953, 1.207],
         'Setup': setups,
-        'Side': [s.split()[0] for s in setups],
         'Type': [s.split()[-1] for s in setups],
     })
 
@@ -128,6 +127,7 @@ def test_build_report_renders_data_values():
     html = build_report(get_sample_data(), '2025-02-06 10:00:00', 'abc123')
     assert 'Monday' in html
     assert 'High Continuation' in html
+    assert '>Reversal<' in html  # the pooled type row
     assert '2025-02-03' in html
 
 
@@ -333,11 +333,10 @@ def test_render_error_then_recover(tmp_path):
 # --- section order and table conventions ----------------------------------
 
 def test_grouping_sections_lead_the_page_in_order():
-    """Weekday first, then this export's entry-time filters, then the stop
-    tables - the 15C page's order with 30MCR's own filters in the middle."""
+    """Weekday first, then this export's one entry-time filter, then the stop
+    tables - the 15C page's order with 30MCR's own filter in the middle."""
     anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
-    assert anchors[:6] == ['weekday', 'setup', 'side', 'setup-type',
-                           'direction', 'sl-range']
+    assert anchors[:3] == ['weekday', 'setup', 'sl-range']
 
 
 def test_nav_order_matches_the_sections():
@@ -357,16 +356,15 @@ def _section_html(anchor, df=None):
 def test_signal_strategy_tables_pin_their_first_column():
     """Weekday, the grouping tables, SL Range, Fixed SL, TP Range and Pullback
     all pin 40% so they line up down the page."""
-    for anchor in ('weekday', 'setup', 'side', 'setup-type', 'direction',
-                   'sl-range', 'sl-fixed', 'tp-range', 'pullback'):
+    for anchor in ('weekday', 'setup', 'sl-range', 'sl-fixed',
+                   'tp-range', 'pullback'):
         html = _section_html(anchor)
         assert 'width: 40%' in html, anchor
         assert 'table-layout: fixed' in html, anchor
 
 
 def test_grouping_tables_carry_both_readings():
-    for anchor in ('weekday', 'setup', 'side', 'setup-type', 'direction',
-                   'sl-range', 'sl-fixed'):
+    for anchor in ('weekday', 'setup', 'sl-range', 'sl-fixed'):
         html = _section_html(anchor)
         assert '>Signal<' in html or 'Signal ↓' in html, anchor
         assert '>Strategy<' in html or 'Strategy ↓' in html, anchor

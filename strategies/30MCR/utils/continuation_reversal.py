@@ -24,9 +24,8 @@ as 0 and `TP > 0` is the Signal rule here exactly as it is on the other pages.
 
 The 30M column names the setup that produced the signal, e.g.
 "30M Low Reversal". It is known before the trade is taken, so it is a tradeable
-filter, and it splits two ways on its own: High/Low is which side of the
-30-minute structure price was at, Continuation/Reversal is what it did there.
-Each of the three gets a Signal/Strategy table.
+filter. Its Continuation/Reversal half is pooled in the same table, so the
+setup can be read with the level and without it.
 """
 
 import math
@@ -58,7 +57,6 @@ SETUP_ORDER = [
     'Low Reversal',
 ]
 
-SIDE_ORDER = ['High', 'Low']
 TYPE_ORDER = ['Continuation', 'Reversal']
 
 # Everything from this column rightwards is the spreadsheet's scratch work.
@@ -100,7 +98,7 @@ def load_data(filepath: str = DEFAULT_CSV) -> pd.DataFrame:
         filepath: Path to the CSV file
 
     Returns:
-        Cleaned DataFrame with added R, Setup, Side and Type columns
+        Cleaned DataFrame with added R, Setup and Type columns
     """
     df = pd.read_csv(filepath)
     df.columns = [_normalise_header(col) for col in df.columns]
@@ -120,7 +118,6 @@ def load_data(filepath: str = DEFAULT_CSV) -> pd.DataFrame:
              if SETUP_COLUMN in df.columns else pd.Series("", index=df.index))
     df["Setup"] = setup.str.replace(f"^{re.escape(SETUP_PREFIX)}", "",
                                     regex=True)
-    df["Side"] = df["Setup"].str.split().str[0].fillna("")
     df["Type"] = df["Setup"].str.split().str[-1].fillna("")
 
     return df
@@ -424,14 +421,20 @@ def _ordered_labels(values: pd.Series, preferred: List[str]) -> List[str]:
 
 def calculate_setup_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Per-setup Signal and Strategy win rates.
+    Per-setup Signal and Strategy win rates, with the type totals under them.
 
     The setup - "High Continuation", "Low Reversal" and so on - is what the
     30-minute structure did before the signal, so it is known at entry and is
-    a tradeable filter. The first row, "Default", covers every trade.
+    a tradeable filter.
+
+    Three levels of the same split share the table, widest first within each
+    block: "Default" is every trade, the four setups are one row each, and
+    "Continuation" and "Reversal" pool the two setups that end the same way -
+    the C and R of the strategy's name, read without the level. The type rows
+    overlap the setup rows on purpose, so the column does not sum.
 
     Args:
-        df: DataFrame with trading data, including a "Setup" column
+        df: DataFrame with trading data, including Setup and Type columns
 
     Returns:
         DataFrame with columns: Setup, Trades, Signal, Strategy
@@ -441,67 +444,12 @@ def calculate_setup_statistics(df: pd.DataFrame) -> pd.DataFrame:
         (label, df[df['Setup'] == label])
         for label in _ordered_labels(df['Setup'], SETUP_ORDER)
     )
-    return _signal_strategy_rows(groups, 'Setup')
-
-
-def calculate_side_statistics(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    The setup split by which side of the 30-minute structure price was at.
-
-    Half of the setup label read on its own: does the page's edge sit with
-    30M highs or 30M lows, whatever price then did there?
-
-    Args:
-        df: DataFrame with trading data, including a "Side" column
-
-    Returns:
-        DataFrame with columns: 30M Side, Trades, Signal, Strategy
-    """
-    groups: List[Tuple[str, pd.DataFrame]] = [('Default', df)]
-    groups.extend(
-        (label, df[df['Side'] == label])
-        for label in _ordered_labels(df['Side'], SIDE_ORDER)
-    )
-    return _signal_strategy_rows(groups, '30M Side')
-
-
-def calculate_type_statistics(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    The setup split by what price did at that level.
-
-    The other half of the label: continuation through the level against
-    reversal off it - the C and R of the strategy's name.
-
-    Args:
-        df: DataFrame with trading data, including a "Type" column
-
-    Returns:
-        DataFrame with columns: Setup Type, Trades, Signal, Strategy
-    """
-    groups: List[Tuple[str, pd.DataFrame]] = [('Default', df)]
     groups.extend(
         (label, df[df['Type'] == label])
         for label in _ordered_labels(df['Type'], TYPE_ORDER)
     )
-    return _signal_strategy_rows(groups, 'Setup Type')
+    return _signal_strategy_rows(groups, 'Setup')
 
-
-def calculate_direction_statistics(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Buy against sell, under both readings of a trade.
-
-    Args:
-        df: DataFrame with trading data
-
-    Returns:
-        DataFrame with columns: Direction, Trades, Signal, Strategy
-    """
-    groups: List[Tuple[str, pd.DataFrame]] = [('Default', df)]
-    groups.extend(
-        (label, df[df['Direction'] == label])
-        for label in _ordered_labels(df['Direction'], ['Buy', 'Sell'])
-    )
-    return _signal_strategy_rows(groups, 'Direction')
 
 # ---------------------------------------------------------------------------
 # Stop tables

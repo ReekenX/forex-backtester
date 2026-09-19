@@ -17,7 +17,6 @@ from utils.continuation_reversal import (  # noqa: E402
     PULLBACK_ENTRY_PIPS,
     RRR_RATIOS,
     SETUP_ORDER,
-    SIDE_ORDER,
     SL_BUFFER_PIPS,
     SL_FIXED_PIPS,
     SL_RANGES,
@@ -32,17 +31,14 @@ from utils.continuation_reversal import (  # noqa: E402
     _pip_cell,
     _whole_pip_cell,
     calculate_buffer_statistics,
-    calculate_direction_statistics,
     calculate_pullback_statistics,
     calculate_r_counts,
     calculate_setup_statistics,
-    calculate_side_statistics,
     calculate_sl_buffer_statistics,
     calculate_sl_fixed_statistics,
     calculate_sl_statistics,
     calculate_three_setups_comparison,
     calculate_tp_statistics,
-    calculate_type_statistics,
     calculate_weekday_statistics,
     create_html_table,
     create_r_histogram_combined,
@@ -63,7 +59,7 @@ def get_sample_data():
 
     Row 2 is the stopped-out winner-that-wasn't: Pullback 6.0 >= SL 5.0 with a
     TP of 20, so Signal counts it and Strategy does not. All four setups are
-    present so the setup, side and type tables each have both of their groups.
+    present so the setup and type tables each have every group.
     """
     setups = ['High Continuation', 'High Reversal', 'Low Continuation',
               'Low Reversal', 'High Continuation', 'Low Reversal',
@@ -81,7 +77,6 @@ def get_sample_data():
         'TP': [16.0, 20.0, 0.0, 25.0, 3.0, 0.0, 35.0, 0.0, 9.0, 12.0],
         'R': [4.0, -4.0, 0.0, 3.571, 1.0, 0.0, 5.833, 0.0, 1.125, 2.182],
         'Setup': setups,
-        'Side': [s.split()[0] for s in setups],
         'Type': [s.split()[-1] for s in setups],
     })
 
@@ -156,14 +151,13 @@ def test_load_data_signs_r_negative_when_the_stop_was_hit():
 
 
 def test_load_data_splits_the_setup_label():
-    """Setup drops the repeated '30M ' prefix; Side and Type are its halves."""
+    """Setup drops the repeated '30M ' prefix; Type is its second half."""
     df = load_data(CSV_PATH)
     assert set(df['Setup']) <= set(SETUP_ORDER)
-    assert set(df['Side']) <= set(SIDE_ORDER)
     assert set(df['Type']) <= set(TYPE_ORDER)
     row = df.iloc[0]
     assert row['30M'] == f"30M {row['Setup']}"
-    assert row['Setup'] == f"{row['Side']} {row['Type']}"
+    assert row['Setup'].endswith(row['Type'])
 
 
 def test_load_data_matches_the_sheets_own_headline_rates():
@@ -211,16 +205,30 @@ def test_signal_counts_the_stopped_out_winner_and_strategy_does_not():
     assert row['Strategy'] == '0W - 1L (0.0%)'
 
 
-def test_setup_statistics_opens_with_default_and_lists_every_setup():
+def test_setup_statistics_lists_default_then_setups_then_types():
+    """One table, widest first: every trade, each setup, then the two type
+    totals pooled across the setups that end the same way."""
     result = calculate_setup_statistics(get_sample_data())
-    assert list(result['Setup']) == ['Default'] + SETUP_ORDER
+    assert list(result['Setup']) == ['Default'] + SETUP_ORDER + TYPE_ORDER
     assert result.iloc[0]['Trades'] == 10
     assert list(result.columns) == ['Setup', 'Trades', 'Signal', 'Strategy']
 
 
-def test_setup_rows_sum_to_the_default_row():
-    result = calculate_setup_statistics(get_sample_data())
-    assert result.iloc[1:]['Trades'].sum() == result.iloc[0]['Trades']
+def test_setup_rows_and_type_rows_each_sum_to_the_default_row():
+    """The two blocks overlap - each covers every trade once - so the column
+    itself does not sum, and neither block may lose a trade."""
+    result = calculate_setup_statistics(get_sample_data()).set_index('Setup')
+    total = result.loc['Default', 'Trades']
+    assert result.loc[SETUP_ORDER, 'Trades'].sum() == total
+    assert result.loc[TYPE_ORDER, 'Trades'].sum() == total
+
+
+def test_setup_type_rows_pool_their_setups():
+    """Continuation is High Continuation plus Low Continuation."""
+    result = calculate_setup_statistics(get_sample_data()).set_index('Setup')
+    assert (result.loc['High Continuation', 'Trades']
+            + result.loc['Low Continuation', 'Trades']
+            == result.loc['Continuation', 'Trades'])
 
 
 def test_setup_statistics_keeps_an_unlisted_label():
@@ -228,36 +236,17 @@ def test_setup_statistics_keeps_an_unlisted_label():
     sample = get_sample_data()
     sample.loc[0, 'Setup'] = 'Mid Sweep'
     result = calculate_setup_statistics(sample)
-    assert 'Mid Sweep' in list(result['Setup'])
+    labels = list(result['Setup'])
+    assert 'Mid Sweep' in labels
     assert result[result['Setup'] == 'Mid Sweep'].iloc[0]['Trades'] == 1
-
-
-def test_side_statistics_splits_high_from_low():
-    result = calculate_side_statistics(get_sample_data())
-    assert list(result['30M Side']) == ['Default'] + SIDE_ORDER
-    counts = dict(zip(result['30M Side'], result['Trades']))
-    assert counts['High'] + counts['Low'] == counts['Default'] == 10
-
-
-def test_type_statistics_splits_continuation_from_reversal():
-    result = calculate_type_statistics(get_sample_data())
-    assert list(result['Setup Type']) == ['Default'] + TYPE_ORDER
-    counts = dict(zip(result['Setup Type'], result['Trades']))
-    assert counts['Continuation'] + counts['Reversal'] == counts['Default']
-
-
-def test_direction_statistics_splits_buys_from_sells():
-    result = calculate_direction_statistics(get_sample_data())
-    assert list(result['Direction']) == ['Default', 'Buy', 'Sell']
-    counts = dict(zip(result['Direction'], result['Trades']))
-    assert counts['Buy'] + counts['Sell'] == counts['Default']
+    # Appended after the known setups, and still ahead of the type rows.
+    assert labels.index('Mid Sweep') > labels.index(SETUP_ORDER[-1])
+    assert labels.index('Mid Sweep') < labels.index(TYPE_ORDER[0])
 
 
 def test_grouping_tables_handle_an_empty_dataset():
     empty = get_empty_data()
-    for fn in (calculate_weekday_statistics, calculate_setup_statistics,
-               calculate_side_statistics, calculate_type_statistics,
-               calculate_direction_statistics):
+    for fn in (calculate_weekday_statistics, calculate_setup_statistics):
         result = fn(empty)
         assert (result['Trades'] == 0).all()
         assert (result['Signal'] == '0W - 0L (0.0%)').all()
