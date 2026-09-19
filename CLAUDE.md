@@ -18,15 +18,17 @@ strategies/<name>/
 
 Notebooks live in `labs/<name>.ipynb` and import from their strategy's utils package via `sys.path.insert(0, '../strategies/<name>')`.
 
-Both strategies additionally render to a static HTML page, from the same
+Every strategy additionally renders to a static HTML page, from the same
 template. `strategies/<name>/utils/report.py` holds the page-building logic and
-`labs/render.py` (15LS1CC) / `labs/render_5OB.py` (5OB1CC) are thin entry
-points, mirroring the notebook/module split. Output goes to `labs/build/`
-(gitignored). See "Rendering the HTML Report" below.
+`labs/render.py` (15LS1CC) / `labs/render_5OB.py` (5OB1CC) /
+`labs/render_30MCR.py` (30MCR) are thin entry points, mirroring the
+notebook/module split. Output goes to `labs/build/` (gitignored). See
+"Rendering the HTML Report" below. 30MCR is report-only - it has no notebook.
 
 Current strategies:
 - **5OB1CC** - 5-minute Order Block, 1-minute Confirmation Candle (`strategies/5OB1CC/`)
 - **15LS1CC** - 15-minute Leg Structure, 1-minute Confirmation Candle (`strategies/15LS1CC/`)
+- **30MCR** - 30-minute Continuation/Reversal (`strategies/30MCR/`)
 
 ## Background About Trades
 
@@ -44,7 +46,7 @@ Prop firm rules are:
 
 ### Data Format
 
-Each strategy keeps its data inside its `strategies/<name>/` directory: `data.csv` for 5OB1CC, `v5_data.csv` for 15LS1CC. The 15LS1CC file is a 15-minute timeframe export; a one-minute export will land beside it under its own name.
+Each strategy keeps its data inside its `strategies/<name>/` directory: `data.csv` for 5OB1CC, `v5_data.csv` for 15LS1CC, `trades.csv` for 30MCR. The 15LS1CC file is a 15-minute timeframe export; a one-minute export will land beside it under its own name.
 
 #### 5OB1CC Data Format (strategies/5OB1CC/data.csv)
 - **Date**: Trading date (YYYY-MM-DD format)
@@ -73,6 +75,30 @@ Each strategy keeps its data inside its `strategies/<name>/` directory: `data.cs
 - **Pullback**: Pullback in pips
 - **TP**: Take Profit in pips (empty = not profitable)
 - **R**: Risk-reward achieved, exported with an "R" suffix (e.g. `7R`). Negative when the trade was stopped out before reaching that target (e.g. `-6R` means 6R was available but Pullback exceeded SL). The spreadsheet export labels this column with a computed win-rate cell (e.g. `47.3%`) instead of `R`, so `load_data` renames the trailing column.
+
+#### 30MCR Data Format (strategies/30MCR/trades.csv)
+- **Date**: Trading date (YYYY-MM-DD format)
+- **Weekday**: Day of the week
+- **Trade**: Trade identifier. The export wraps a computed figure under the column name in the same header cell (`Trade\n69`), so `load_data` normalises every header to its first line
+- **Direction**: Trade direction (Buy or Sell)
+- **30M**: The setup that produced the signal - `30M High Continuation`, `30M High Reversal`, `30M Low Continuation` or `30M Low Reversal`. `load_data` strips the repeated `30M ` prefix into a `Setup` column and splits it into `Side` (High/Low) and `Type` (Continuation/Reversal). All three are known at entry, so all three are tradeable filters
+- **SL**: Stop Loss in pips
+- **Pullback**: Pullback in pips
+- **TP**: Take Profit in pips (empty = not profitable)
+
+Everything from the `Signal` column rightwards (`Signal`, `WR`, `+1pip WR`,
+`3 pips SL`, `4 pips SL`, `5 pips SL`, `Attributes`) is the spreadsheet's own
+scratch work - precomputed win rates and R totals for stop scenarios the page
+recomputes itself - and `load_data` drops it. Those header figures are still a
+useful cross-check: the sheet's `Signal 50.7%` and `WR 37.7%` are exactly what
+`calculate_setup_statistics`'s Default row reports, and its `+1pip WR 44.9%`
+and `5 pips SL 44.9%` match Adding Buffer and Fixed SL. The one place the sheet
+disagrees is its `4 pips SL 42%` against this page's 40.6%: one trade recorded
+`SL 3.8, Pullback 4.0` survives a 4-pip stop in the sheet and not here, because
+the project's win rule is `Pullback < SL`, strictly.
+
+There is no R column, so `load_data` derives it as `TP / SL`, signed negative
+when `Pullback >= SL` - the convention the 15LS1CC sheet exports.
 
 ## Trading Data CSV Fields
 
@@ -147,6 +173,7 @@ When building new analysis features, follow this three-file pattern within the s
 - **15LS1CC**: `labs/15LS1CC.ipynb`, `strategies/15LS1CC/utils/confirmation_candle.py`, `strategies/15LS1CC/tests/test_confirmation_candle.py`
 - **15LS1CC HTML report**: `labs/render.py`, `strategies/15LS1CC/utils/report.py`, `strategies/15LS1CC/tests/test_report.py`
 - **5OB1CC HTML report**: `labs/render_5OB.py`, `strategies/5OB1CC/utils/report.py`, `strategies/5OB1CC/utils/order_block.py`, `strategies/5OB1CC/tests/test_report.py`, `strategies/5OB1CC/tests/test_order_block.py`
+- **30MCR HTML report**: `labs/render_30MCR.py`, `strategies/30MCR/utils/report.py`, `strategies/30MCR/utils/continuation_reversal.py`, `strategies/30MCR/tests/test_report.py`, `strategies/30MCR/tests/test_continuation_reversal.py`
 
 ## Acceptance Criteria
 
@@ -203,38 +230,47 @@ All analysis tables should follow this standardized column format:
 
 ## Rendering the HTML Report
 
-Two pages, one template, one output directory:
+Three pages, one template, one output directory:
 
 | Strategy | Entry point | Page | Source CSV |
 | --- | --- | --- | --- |
+| 30MCR | `labs/render_30MCR.py` | `labs/build/30MCR.html` | `trades.csv` |
 | 15LS1CC | `labs/render.py` | `labs/build/15C.html` | `v5_data.csv` |
 | 5OB1CC | `labs/render_5OB.py` | `labs/build/5OB.html` | `data.csv` |
 
-Pair either with a file watcher for the normal working loop:
+Pair any of them with a file watcher for the normal working loop:
 
 ```bash
 brew install watchexec   # one-off
 
-poetry run python labs/render.py                                    # render once
+poetry run python labs/render_30MCR.py                              # or: make report
+watchexec -w strategies/30MCR -e py,csv -- poetry run python labs/render_30MCR.py
+poetry run python labs/render_30MCR.py out.html --no-reload         # frozen snapshot
+
+poetry run python labs/render.py                                    # or: make report-15c
 watchexec -w strategies/15LS1CC -e py,csv -- poetry run python labs/render.py
-poetry run python labs/render.py out.html --no-reload               # frozen snapshot
 
 poetry run python labs/render_5OB.py                                # or: make report-5ob
 watchexec -w strategies/5OB1CC -e py,csv -- poetry run python labs/render_5OB.py
 ```
 
-`make report` / `report-5ob`, `open` / `open-5ob` and `watch` / `watch-5ob`
-wrap those. `make serve` serves both pages out of `labs/build`.
+The bare `make report` / `open` / `watch` targets follow the strategy under
+active work - 30MCR - and every page keeps an explicit target of its own:
+`report-15c` / `open-15c` / `watch-15c` and `report-5ob` / `open-5ob` /
+`watch-5ob`. `make serve` serves all three pages out of `labs/build`.
 
 `watchexec` is event-driven (OS filesystem notifications), not a polling timer.
 
-Because both pages land in `labs/build`, their live-reload sidecars are named
-apart - `build-id.txt` / `build-id.js` for 15C, `build-id-5ob.txt` /
-`build-id-5ob.js` for 5OB. A shared name would have each page reload on the
-other's data. Their sessionStorage sort and scroll keys are namespaced the same
-way. `test_build_id_sidecars_do_not_collide_with_the_15c_page` pins this.
+Because all three pages land in `labs/build`, their live-reload sidecars are
+named apart - `build-id.txt` / `build-id.js` for 15C, `build-id-5ob.txt` /
+`build-id-5ob.js` for 5OB, `build-id-30mcr.txt` / `build-id-30mcr.js` for
+30MCR. A shared name would have each page reload on another's data. Their
+sessionStorage sort and scroll keys are namespaced the same way.
+`test_build_id_sidecars_do_not_collide_with_the_15c_page` (5OB) and
+`test_build_id_sidecars_do_not_collide_with_the_other_pages` (30MCR) pin
+this.
 
-### How the two pages differ
+### How the pages differ
 
 Same shell, same tables, same win rule; the data dictates the rest.
 
@@ -255,6 +291,21 @@ Same shell, same tables, same win rule; the data dictates the rest.
   like that.
 - **The Three Setups trade log carries an `Hour` column** that 15C has no data
   for, and runs to one row per trade (1102 today, against 15C's 90).
+
+30MCR, against the same 15C baseline:
+
+- **It derives `R` the same way 5OB does**, `TP / SL` signed negative when
+  `Pullback >= SL`, because its export has no `R` column either.
+- **Its grouping block is `Setup`, `30M Side`, `Setup Type` and `Direction`.**
+  The first three are the `30M` label read whole and then in halves; all four
+  are known at entry. `Setup` is click-to-sort, the rest are not.
+- **It has no `4H`, `EMA` or `Hour` column**, so none of those tables exist.
+  The Three Setups trade log carries `Setup` where 5OB's carries `Hour`.
+- **Everything from the `Signal` column rightwards is dropped at load** - see
+  the data format above, including the one place the sheet's own figures and
+  this page's disagree.
+- **Headers are normalised to their first line** before anything reads them:
+  the export wraps a computed figure under the column name in the same cell.
 
 ### Conventions for report sections
 
@@ -354,6 +405,23 @@ print(calculate_hour_statistics(df).to_string(index=False))
 The 5OB1CC notebook's other modules (`hours.py`, `ema.py`, `tables.py`, ...)
 predate the report and are untouched by it.
 
+30MCR has no notebook at all, so `labs/render_30MCR.py` is the whole loop -
+and `strategies/30MCR/utils/continuation_reversal.py` is the module behind it:
+
+```bash
+# 30MCR report tables
+poetry run python -c "
+import sys; sys.path.insert(0, 'strategies/30MCR')
+import pandas as pd
+from utils.continuation_reversal import load_data, calculate_setup_statistics
+
+df = load_data('strategies/30MCR/trades.csv')
+pd.set_option('display.max_rows', None)
+pd.set_option('display.width', 200)
+print(calculate_setup_statistics(df).to_string(index=False))
+"
+```
+
 ## Acceptance Criteria for Lab Changes
 
 On top of the test rules above, a change to 15LS1CC analysis is not done until:
@@ -376,5 +444,13 @@ A change to the 5OB1CC report is not done until:
 3. `git diff --stat strategies/5OB1CC/data.csv` is empty
 4. The page was looked at in a browser, not just asserted on as a string
 
+A change to the 30MCR report is not done until:
+
+1. `poetry run python labs/render_30MCR.py` succeeds and the affected table is
+   correct
+2. `poetry run python -m pytest strategies/30MCR/tests/ -v` passes
+3. `git diff --stat strategies/30MCR/trades.csv` is empty
+4. The page was looked at in a browser, not just asserted on as a string
+
 The 5OB1CC notebook (`labs/5OB1CC.ipynb`) does not import the report modules, so
-a report-only change does not need it re-executed.
+a report-only change does not need it re-executed. 30MCR has no notebook.
