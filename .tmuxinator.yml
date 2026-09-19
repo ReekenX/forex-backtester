@@ -16,4 +16,4 @@ windows:
   - git: tig
   - webserver:
       - alias run="make watch"
-      - echo open labs/build/15LS1CC.html
+      - make watch
