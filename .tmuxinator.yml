@@ -9,10 +9,12 @@ on_project_start:
 
 windows:
   - editor:
-      - alias run="nvim README.md"
+      - alias run="nvim ."
+      - nvim .
   - shell:
   - claude:
-      - alias run="while true; do tmux rename-window -t\${TMUX_PANE} 'claude'; clear; claude --dangerously-skip-permissions; tmux rename-window -t\${TMUX_PANE} '🔴 claude'; sleep 1; done"
+      - alias run="claude --dangerously-skip-permissions"
+      - claude --dangerously-skip-permissions
   - git: tig
   - webserver:
       - alias run="make watch"
