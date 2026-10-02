@@ -37,7 +37,7 @@ import pandas as pd
 RRR_RATIOS = [1, 2, 3]
 
 # Extra pip buffer values to test in the Strategies tables
-BUFFER_PIPS = [0, 1, 2, 3]
+BUFFER_PIPS = [0, 1]
 
 WEEKDAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 

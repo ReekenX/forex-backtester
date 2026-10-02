@@ -409,6 +409,7 @@ def test_buffer_statistics_scores_every_rrr():
     result = calculate_buffer_statistics(get_sample_data(), ['All Trades'])
     assert set(result['RRR']) == {f'1:{r}' for r in RRR_RATIOS}
     assert set(result['Buffer']) == {f'+{b}' for b in BUFFER_PIPS}
+    assert BUFFER_PIPS == [0, 1]
 
 
 def test_buffer_statistics_carry_no_sl_gate_columns():
