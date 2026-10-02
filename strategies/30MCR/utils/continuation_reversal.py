@@ -631,6 +631,7 @@ def calculate_tp_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
 
 PULLBACK_ENTRY_PIPS = [0, 1, 2, 3]
+PULLBACK_BUFFER_PIPS = 1
 
 
 def _format_wml(wins: int, missed: int, losses: int) -> str:
@@ -647,12 +648,18 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
     threshold to each trade's own stop: "Half" fills when the pullback reached
     at least half the SL.
 
+    Every level except Default then repeats with the stop padded by
+    PULLBACK_BUFFER_PIPS, scored with the Adding Buffer rule. The fill
+    threshold does not move - "Half" still means half the recorded SL - so
+    each buffered row differs from its plain twin by the stop alone.
+
     Every row splits the whole dataset three ways:
 
-        winner = Pullback < SL AND TP >= SL
+        winner = Pullback < SL + buffer AND TP >= SL + buffer
         W = tapped winners (winner AND the limit filled)
         M = missed winners (winner, but the pullback never reached the limit)
-        L = losers - not winners whatever the pullback, so the same every row
+        L = losers - not winners whatever the pullback, so the same on every
+            row that shares a buffer
 
     The first row, "Default", is the 0-pip level: no limit order, every trade
     taken at the signal, so nothing is missed. It matches the Default row of
@@ -670,13 +677,20 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
     ]
     levels.append(('Half', df['Pullback'] >= df['SL'] / 2))
 
-    winner = (df['Pullback'] < df['SL']) & (df['TP'] >= df['SL'])
-    losses = int((~winner).sum())
-    results = []
+    buffer = PULLBACK_BUFFER_PIPS
+    rows = [(label, tapped, 0) for label, tapped in levels]
+    rows.extend(
+        (f"{label} + {_pip_label(buffer)} buffer", tapped, buffer)
+        for label, tapped in levels[1:]
+    )
 
-    for label, tapped in levels:
+    results = []
+    for label, tapped, pad in rows:
+        effective_sl = df['SL'] + pad
+        winner = (df['Pullback'] < effective_sl) & (df['TP'] >= effective_sl)
         wins = int((tapped & winner).sum())
         missed = int((~tapped & winner).sum())
+        losses = int((~winner).sum())
         results.append({
             'Pullback': label,
             'Trades': _format_wml(wins, missed, losses),

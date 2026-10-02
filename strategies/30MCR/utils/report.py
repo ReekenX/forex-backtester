@@ -222,10 +222,12 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "Pullback",
         "Pullback Analysis",
         "Filling a limit order N pips into the pullback instead of taking the "
-        "signal. Half fills at half the stop. <b>W</b> = winners that pulled "
+        "signal. Half fills at half the stop. <b>+ 1 pip buffer</b> rows pad "
+        "the stop by a pip (win = Pullback &lt; SL + 1 AND TP &gt;= SL + 1); "
+        "the limit stays put. <b>W</b> = winners that pulled "
         "back far enough to tap the limit, <b>M</b> = winners missed because "
         "the limit was never tapped, <b>L</b> = losers whatever the pullback "
-        "(win = Pullback &lt; SL AND TP &gt;= SL).",
+        "(plain rows: win = Pullback &lt; SL AND TP &gt;= SL).",
         _pullback_section,
     ),
     (

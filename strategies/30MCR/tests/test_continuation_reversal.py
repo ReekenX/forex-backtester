@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 
 from utils.continuation_reversal import (  # noqa: E402
     BUFFER_PIPS,
+    PULLBACK_BUFFER_PIPS,
     PULLBACK_ENTRY_PIPS,
     RRR_RATIOS,
     SETUP_ORDER,
@@ -355,18 +356,24 @@ def _wml(cell):
 def test_pullback_statistics_lists_every_level():
     result = calculate_pullback_statistics(get_sample_data())
     assert result.iloc[0]['Pullback'] == 'Default'
-    assert list(result['Pullback'])[-1] == 'Half'
-    assert len(result) == len(PULLBACK_ENTRY_PIPS) + 1
+    assert list(result['Pullback'])[4:] == [
+        'Half', '1 pip + 1 pip buffer', '2 pips + 1 pip buffer',
+        '3 pips + 1 pip buffer', 'Half + 1 pip buffer']
+    assert len(result) == 2 * len(PULLBACK_ENTRY_PIPS) + 1
+    assert PULLBACK_BUFFER_PIPS == 1
     assert list(result.columns) == ['Pullback', 'Trades']
 
 
 def test_pullback_rows_split_every_trade_into_tapped_missed_and_lost():
     """Each row covers the whole dataset once, and losers do not depend on
-    the limit - they lose whatever the pullback."""
+    the limit - they lose whatever the pullback, for a given buffer."""
     sample = get_sample_data()
-    rows = [_wml(c) for c in calculate_pullback_statistics(sample)['Trades']]
+    result = calculate_pullback_statistics(sample)
+    rows = [_wml(c) for c in result['Trades']]
     assert all(sum(row) == len(sample) for row in rows)
-    assert len({losses for _, _, losses in rows}) == 1
+    buffered = result['Pullback'].str.endswith('buffer')
+    assert len({row[2] for row, b in zip(rows, buffered) if not b}) == 1
+    assert len({row[2] for row, b in zip(rows, buffered) if b}) == 1
 
 
 def test_pullback_counts_match_the_sample():
@@ -381,6 +388,18 @@ def test_pullback_counts_match_the_sample():
     assert result['2 pips'] == '3W - 3M - 4L'
     assert result['3 pips'] == '2W - 4M - 4L'
     assert result['Half'] == '2W - 4M - 4L'
+
+
+def test_pullback_buffer_rows_pad_the_stop_but_not_the_limit():
+    """At SL + 1 the winners are rows 1, 4, 7, 9, 10 with pullbacks 1.0,
+    3.5, 2.0, 4.0, 1.5; row 5 drops out because TP 3 < SL 3 + 1. Half still
+    reads the recorded SL, so only 3.5 (SL 7) and 4.0 (SL 8) tap it."""
+    result = calculate_pullback_statistics(
+        get_sample_data()).set_index('Pullback')['Trades']
+    assert result['1 pip + 1 pip buffer'] == '5W - 0M - 5L'
+    assert result['2 pips + 1 pip buffer'] == '3W - 2M - 5L'
+    assert result['3 pips + 1 pip buffer'] == '2W - 3M - 5L'
+    assert result['Half + 1 pip buffer'] == '2W - 3M - 5L'
 
 
 # --- Strategies tables ----------------------------------------------------

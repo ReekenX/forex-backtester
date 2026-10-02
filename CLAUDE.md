@@ -355,7 +355,10 @@ module - keep a change to one in step with the other:
   30MCR's `Pullback Analysis` is a third shape: `Pullback, Trades`, with
   `Trades` as `"25W - 12M - 11L"` - winners whose pullback tapped the limit,
   winners it missed, and losers, which lose whatever the pullback and so read
-  the same on every row. Each row covers every trade once.
+  the same on every row that shares a stop. Each row covers every trade once.
+  Every level but Default repeats as `<level> + 1 pip buffer`: the stop is
+  padded as in `Adding Buffer`, the limit (including Half's recorded-SL / 2)
+  stays put.
 - **Row order carries meaning**, so these tables are rendered with
   `sortable=False`. `Fixed SL Analysis` is the exception - its rows are stop
   sizes to compare, so it stays click-to-sort.
