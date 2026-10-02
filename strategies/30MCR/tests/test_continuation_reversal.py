@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 from utils.continuation_reversal import (  # noqa: E402
     BUFFER_PIPS,
     PULLBACK_BUFFER_PIPS,
+    TREND_FILTERS,
     PULLBACK_ENTRY_PIPS,
     RRR_RATIOS,
     SETUP_ORDER,
@@ -412,15 +413,30 @@ def test_buffer_statistics_scores_every_rrr():
     assert BUFFER_PIPS == [0, 1]
 
 
-def test_buffer_statistics_carry_no_sl_gate_columns():
-    """Every trade is scored - there is no Min/Max SL gate, so each strategy,
-    RRR and buffer appears once and covers the whole sample."""
+def test_buffer_statistics_carry_trend_after_buffer():
+    """There is no Min/Max SL gate, so each strategy, buffer, trend and RRR
+    appears once, and All covers the whole sample."""
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
-    assert list(result.columns) == ['Strategy', 'Buffer', 'RRR', 'Trades',
-                                    'Notation', 'Win Rate']
-    assert not result.duplicated(['Strategy', 'Buffer', 'RRR']).any()
-    assert (result['Trades'] == len(sample)).all()
+    assert list(result.columns) == ['Strategy', 'Buffer', 'Trend', 'RRR',
+                                    'Trades', 'Notation', 'Win Rate']
+    assert not result.duplicated(['Strategy', 'Buffer', 'Trend', 'RRR']).any()
+    assert set(result['Trend']) == set(TREND_FILTERS)
+    assert (result[result['Trend'] == 'All']['Trades'] == len(sample)).all()
+
+
+def test_buffer_statistics_trend_keeps_only_its_setups():
+    """Reversal is High Reversal + Low Reversal: rows 2, 4, 6, 7, 10. Of
+    those, 4, 7 and 10 survive their stop and reach 1:1."""
+    result = calculate_buffer_statistics(get_sample_data(), ['All Trades'])
+    row = result[(result['Trend'] == 'Reversal') & (result['Buffer'] == '+0')
+                 & (result['RRR'] == '1:1')].iloc[0]
+    assert row['Trades'] == 5
+    assert row['Notation'] == '3W – 2L'
+    cont = result[(result['Trend'] == 'Continuation')
+                  & (result['Buffer'] == '+0') & (result['RRR'] == '1:1')]
+    assert cont.iloc[0]['Trades'] == 5
+    assert cont.iloc[0]['Notation'] == '3W – 2L'
 
 
 def test_fixed_and_max_sl_strategies_run_without_a_buffer():

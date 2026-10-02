@@ -39,6 +39,10 @@ RRR_RATIOS = [1, 2, 3]
 # Extra pip buffer values to test in the Strategies tables
 BUFFER_PIPS = [0, 1]
 
+# Setup types the Strategies tables filter on. "All" keeps every trade; the
+# rest keep the setups that end that way, e.g. Reversal = High + Low Reversal.
+TREND_FILTERS = ['All', 'Continuation', 'Reversal']
+
 WEEKDAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 
 # Column naming the setup, and the prefix its values repeat on every row.
@@ -755,8 +759,14 @@ def _buffers_for(strategy_name: str) -> List[float]:
     return BUFFER_PIPS
 
 
+def _apply_trend(df: pd.DataFrame, trend: str) -> pd.DataFrame:
+    """Keep only trades of one setup type ('All' keeps every trade)."""
+    return df if trend == 'All' else df[df['Type'] == trend]
+
+
 def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
-                                 buffer: float, rrr_ratio: float = 1) -> Dict:
+                                 buffer: float, rrr_ratio: float = 1,
+                                 trend: str = 'All') -> Dict:
     """
     Score a filtered set of trades with extra pips added to every SL.
 
@@ -771,6 +781,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
         return {
             "Strategy": strategy_name,
             "Buffer": f"+{buffer}",
+            "Trend": trend,
             "RRR": rrr_label,
             "Trades": 0,
             "Notation": "0W – 0L",
@@ -789,6 +800,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
     return {
         "Strategy": strategy_name,
         "Buffer": f"+{buffer}",
+        "Trend": trend,
         "RRR": rrr_label,
         "Trades": total_trades,
         "Notation": f"{wins}W – {losses}L",
@@ -797,7 +809,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
 
 
 def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
-    """Sort by Strategy (natural order, numbers numerically) then RRR ascending."""
+    """Sort by Strategy (natural order, numbers numerically), Trend, then RRR."""
     if result_df.empty:
         return result_df
 
@@ -815,6 +827,7 @@ def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
         result_df.index,
         key=lambda i: (
             strategy_key(result_df.at[i, 'Strategy']),
+            TREND_FILTERS.index(result_df.at[i, 'Trend']),
             rrr_key(result_df.at[i, 'RRR']),
         ),
     )
@@ -824,14 +837,17 @@ def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
 def calculate_buffer_statistics(df: pd.DataFrame,
                                 strategy_names: Optional[List[str]] = None) -> pd.DataFrame:
     """
-    Score every strategy across SL buffers and every RRR.
+    Score every strategy across SL buffers, setup trends and every RRR.
+
+    Trend filters on the setup type, which is known at entry, so it is a
+    tradeable filter. The strategy's stop rule runs on the trend's trades.
 
     Args:
         df: DataFrame with trading data
         strategy_names: Restrict to these strategy names (default: all)
 
     Returns:
-        DataFrame with one row per strategy / RRR / buffer combination
+        DataFrame with one row per strategy / buffer / trend / RRR combination
     """
     strategies = get_buffer_strategies()
     if strategy_names is not None:
@@ -839,11 +855,12 @@ def calculate_buffer_statistics(df: pd.DataFrame,
 
     results = []
     for strategy_name, filter_func in strategies:
-        filtered_df = filter_func(df)
-        for rrr in RRR_RATIOS:
-            for buffer in _buffers_for(strategy_name):
-                results.append(_calculate_stats_with_buffer(
-                    filtered_df, strategy_name, buffer, rrr))
+        for trend in TREND_FILTERS:
+            filtered_df = filter_func(_apply_trend(df, trend))
+            for rrr in RRR_RATIOS:
+                for buffer in _buffers_for(strategy_name):
+                    results.append(_calculate_stats_with_buffer(
+                        filtered_df, strategy_name, buffer, rrr, trend))
 
     return _sort_strategy_rows(pd.DataFrame(results))
 

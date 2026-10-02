@@ -305,7 +305,9 @@ Same shell, same tables, same win rule; the data dictates the rest.
   neither split said anything on its own.
 - **It has no `4H`, `EMA` or `Hour` column**, so none of those tables exist.
 - **It has no Three Setups trade log.** The page ends on the Strategies
-  tables, and those test buffers of `+0` and `+1` only.
+  tables, and those test buffers of `+0` and `+1` only. Their `Trend`
+  column (`All`, `Continuation`, `Reversal`) filters on the setup's `Type`
+  before the stop rule runs, so `Reversal` is High + Low Reversal only.
 - **Everything from the `Signal` column rightwards is dropped at load** - see
   the data format above, including the one place the sheet's own figures and
   this page's disagree.
