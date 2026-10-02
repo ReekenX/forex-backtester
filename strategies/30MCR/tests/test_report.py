@@ -134,7 +134,7 @@ def test_build_report_renders_data_values():
 def test_build_report_empty_dataset():
     html = build_report(get_empty_data(), '2025-02-06 10:00:00', 'abc123')
     assert html.startswith('<!DOCTYPE html>')
-    assert 'No data' in html
+    assert '0W - 0L (0.0%)' in html
 
 
 # --- summary cards --------------------------------------------------------
@@ -434,18 +434,9 @@ def test_buffer_statistics_feed_the_strategies_tables():
     assert set(stats['Strategy']) == set(names)
 
 
-def test_three_setups_section_follows_the_last_strategies_table():
+def test_strategies_tables_close_the_page():
+    """The Three Setups trade log was removed, so the last Strategies table
+    is the final section."""
     anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
-    assert anchors[-1] == 'three-setups'
-    assert anchors[-2] == f'strategies-1-{RRR_RATIOS[-1]}'
-
-
-def test_three_setups_section_renders_a_row_per_trade():
-    html = _section_html('three-setups')
-    assert html.count('<tr>') == len(get_sample_data()) + 2  # two header rows
-
-
-def test_three_setups_table_id_differs_from_its_anchor():
-    html = build_report(get_sample_data(), '2025-02-06 10:00:00', 'abc123')
-    assert 'id="three-setups"' in html
-    assert 'id="three-setups-table"' in html
+    assert anchors[-1] == f'strategies-1-{RRR_RATIOS[-1]}'
+    assert 'three-setups' not in anchors

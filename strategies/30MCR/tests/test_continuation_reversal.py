@@ -21,16 +21,12 @@ from utils.continuation_reversal import (  # noqa: E402
     SL_BUFFER_PIPS,
     SL_FIXED_PIPS,
     SL_RANGES,
-    THREE_SETUPS_COLUMNS,
-    THREE_SETUPS_RRR,
     TP_RANGES,
     TYPE_ORDER,
     WEEKDAY_ORDER,
     _calculate_stats_with_buffer,
     _format_wl,
     _normalise_header,
-    _pip_cell,
-    _whole_pip_cell,
     calculate_buffer_statistics,
     calculate_pullback_statistics,
     calculate_r_counts,
@@ -38,14 +34,12 @@ from utils.continuation_reversal import (  # noqa: E402
     calculate_sl_buffer_statistics,
     calculate_sl_fixed_statistics,
     calculate_sl_statistics,
-    calculate_three_setups_comparison,
     calculate_tp_statistics,
     calculate_weekday_statistics,
     create_html_table,
     create_r_histogram_combined,
     create_r_histogram_exact,
     create_sortable_table,
-    create_three_setups_table,
     get_buffer_strategies,
     load_data,
 )
@@ -478,71 +472,6 @@ def test_cumulative_histogram_never_falls_below_the_exact_one():
     sample = get_sample_data()
     raw = calculate_r_counts(sample)
     assert raw.loc[1:].sum() >= raw[1]
-
-
-# --- three setups ---------------------------------------------------------
-
-def test_three_setups_has_a_row_per_trade_in_recorded_order():
-    sample = get_sample_data()
-    result = calculate_three_setups_comparison(sample)
-    assert len(result) == len(sample)
-    assert list(result['Date']) == list(sample['Date'])
-    assert list(result.columns) == [key for _, _, key in THREE_SETUPS_COLUMNS]
-
-
-def test_three_setups_carries_the_setup_instead_of_an_hour():
-    """This export has no Hour, and the setup is the column worth reading
-    beside each trade."""
-    headers = [header for _, header, _ in THREE_SETUPS_COLUMNS]
-    assert 'Setup' in headers
-    assert 'Hour' not in headers
-    result = calculate_three_setups_comparison(get_sample_data())
-    assert result.iloc[0]['Setup'] == 'High Continuation'
-
-
-def test_three_setups_outcome_is_cumulative_r():
-    result = calculate_three_setups_comparison(get_sample_data())
-    outcomes = [int(v.rstrip('R')) for v in result['Regular Outcome']]
-    steps = {b - a for a, b in zip(outcomes, outcomes[1:])}
-    assert steps <= {THREE_SETUPS_RRR, -1}
-
-
-def test_waiter_leaves_unfilled_trades_blank():
-    """Row 5 pulled back 0.5 against a 3 pip stop, so a 1.5 pip limit never
-    filled: the Waiter cells stay empty and its running total carries over."""
-    result = calculate_three_setups_comparison(get_sample_data())
-    unfilled = result.iloc[4]
-    assert unfilled['Waiter SL'] == ''
-    assert unfilled['Waiter Pullback'] == ''
-    assert unfilled['Waiter ROI'] == result.iloc[3]['Waiter ROI']
-
-
-def test_aggressive_halves_the_stop():
-    result = calculate_three_setups_comparison(get_sample_data())
-    assert result.iloc[0]['Aggressive SL'] == '2'  # 4.0 / 2
-
-
-def test_pip_cells_round_half_up_and_trim_zeros():
-    assert _pip_cell(2.75) == '2.8'
-    assert _pip_cell(2.15) == '2.2'
-    assert _pip_cell(34.0) == '34'
-    assert _pip_cell(None) == ''
-    assert _whole_pip_cell(16.5) == '17'
-    assert _whole_pip_cell(None) == ''
-
-
-def test_three_setups_table_renders_grouped_headers():
-    stats = calculate_three_setups_comparison(get_sample_data())
-    html = create_three_setups_table(stats, 'three-setups-table')
-    assert 'id="three-setups-table"' in html
-    for group in ('Regular', 'Aggressive', 'Waiter'):
-        assert f'>{group}</th>' in html
-    assert html.count('<tr>') == len(stats) + 2  # two header rows
-
-
-def test_three_setups_table_handles_an_empty_dataset():
-    stats = calculate_three_setups_comparison(get_empty_data())
-    assert 'No data' in create_three_setups_table(stats, 'x')
 
 
 # --- table rendering ------------------------------------------------------

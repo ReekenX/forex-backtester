@@ -304,7 +304,8 @@ Same shell, same tables, same win rule; the data dictates the rest.
   table is click-to-sort. There is no High/Low table and no Direction table -
   neither split said anything on its own.
 - **It has no `4H`, `EMA` or `Hour` column**, so none of those tables exist.
-  The Three Setups trade log carries `Setup` where 5OB's carries `Hour`.
+- **It has no Three Setups trade log.** The page ends on the Strategies
+  tables.
 - **Everything from the `Signal` column rightwards is dropped at load** - see
   the data format above, including the one place the sheet's own figures and
   this page's disagree.
