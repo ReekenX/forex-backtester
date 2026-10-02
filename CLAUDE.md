@@ -352,6 +352,10 @@ module - keep a change to one in step with the other:
   `test_every_stop_table_opens_with_the_same_default_row` compares against.
   `_sl_scenario_statistics` emits that shape via `with_signal=True`, so the win
   rule stays in one place - do not compute it in the caller.
+  30MCR's `Pullback Analysis` is a third shape: `Pullback, Trades`, with
+  `Trades` as `"25W - 12M - 11L"` - winners whose pullback tapped the limit,
+  winners it missed, and losers, which lose whatever the pullback and so read
+  the same on every row. Each row covers every trade once.
 - **Row order carries meaning**, so these tables are rendered with
   `sortable=False`. `Fixed SL Analysis` is the exception - its rows are stop
   sizes to compare, so it stays click-to-sort.

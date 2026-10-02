@@ -107,7 +107,7 @@ def _tp_section(df: pd.DataFrame) -> str:
 
 def _pullback_section(df: pd.DataFrame) -> str:
     return create_sortable_table(
-        calculate_pullback_statistics(df), "pullback-table",
+        calculate_pullback_statistics(df), "pullback-table", sortable=False,
         first_col_width="40%")
 
 
@@ -222,8 +222,10 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "Pullback",
         "Pullback Analysis",
         "Filling a limit order N pips into the pullback instead of taking the "
-        "signal. Half fills at half the stop. M counts winners the limit never "
-        "filled, so they are excluded from Trades and Win Rate.",
+        "signal. Half fills at half the stop. <b>W</b> = winners that pulled "
+        "back far enough to tap the limit, <b>M</b> = winners missed because "
+        "the limit was never tapped, <b>L</b> = losers whatever the pullback "
+        "(win = Pullback &lt; SL AND TP &gt;= SL).",
         _pullback_section,
     ),
     (

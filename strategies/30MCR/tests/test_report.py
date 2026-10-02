@@ -379,11 +379,11 @@ def test_tp_range_keeps_neither_win_rate_column():
 
 
 def test_stop_tables_are_not_sortable_but_others_are():
-    """Row order carries meaning in SL Range and Adding Buffer. Fixed SL is
-    the exception - its rows are stop sizes to compare."""
-    for anchor in ('sl-range', 'sl-buffer'):
+    """Row order carries meaning in SL Range, Adding Buffer and Pullback.
+    Fixed SL is the exception - its rows are stop sizes to compare."""
+    for anchor in ('sl-range', 'sl-buffer', 'pullback'):
         assert 'class="sortable"' not in _section_html(anchor), anchor
-    for anchor in ('setup', 'sl-fixed', 'pullback'):
+    for anchor in ('setup', 'sl-fixed'):
         assert 'class="sortable"' in _section_html(anchor), anchor
 
 

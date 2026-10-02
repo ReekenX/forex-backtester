@@ -313,17 +313,20 @@ def test_every_stop_table_opens_with_the_same_default_row():
     for name, (result, column) in tables.items():
         first = result.iloc[0]
         assert first[column] == 'Default', f'{name} does not open with Default'
-        # SL Range and Fixed SL report Signal/Strategy in one cell each; the
-        # rest keep Notation and Win Rate apart. Compare on the combined form
-        # so the shared rule stays pinned across both shapes.
+        # SL Range and Fixed SL report Signal/Strategy in one cell each;
+        # Adding Buffer keeps Notation and Win Rate apart; Pullback only
+        # carries a W - M - L split. Compare on W/L counts so the shared rule
+        # stays pinned across every shape.
         if 'Strategy' in result.columns:
-            seen[name] = (first['Trades'], first['Strategy'])
+            seen[name] = (first['Trades'], first['Strategy'].split(' (')[0])
+        elif 'Notation' in result.columns:
+            seen[name] = (first['Trades'], first['Notation'])
         else:
-            # Pullback's Default notation carries a 0M suffix - nothing is
-            # missed when every trade is taken at the signal.
-            notation = first['Notation'].replace(' - 0M', '')
-            seen[name] = (first['Trades'],
-                          f"{notation} ({first['Win Rate']})")
+            # Nothing is missed when every trade is taken at the signal.
+            wins, missed, losses = first['Trades'].split(' - ')
+            assert missed == '0M'
+            seen[name] = (int(wins[:-1]) + int(losses[:-1]),
+                          f'{wins} - {losses}')
 
     assert len(set(seen.values())) == 1, f'Default rows disagree: {seen}'
     assert seen['SL Range'][0] == len(sample)
@@ -344,23 +347,40 @@ def test_tp_bands_hold_each_trade_once():
     assert counted == int((get_sample_data()['TP'] > 0).sum())
 
 
+def _wml(cell):
+    """Split '1W - 2M - 3L' into (1, 2, 3)."""
+    return tuple(int(part[:-1]) for part in cell.split(' - '))
+
+
 def test_pullback_statistics_lists_every_level():
     result = calculate_pullback_statistics(get_sample_data())
     assert result.iloc[0]['Pullback'] == 'Default'
     assert list(result['Pullback'])[-1] == 'Half'
     assert len(result) == len(PULLBACK_ENTRY_PIPS) + 1
-    assert list(result.columns) == ['Pullback', 'Trades', 'Notation', 'Win Rate']
+    assert list(result.columns) == ['Pullback', 'Trades']
 
 
-def test_pullback_excludes_winners_the_limit_never_filled():
-    """Row 5 pulled back 0.5 pips, so a 3 pip limit never fills - it is an M,
-    not a loss, and it must stay out of Trades and Win Rate."""
-    result = calculate_pullback_statistics(get_sample_data()).set_index('Pullback')
-    default_trades = result.loc['Default', 'Trades']
-    deep = result.loc['3 pips']
-    wins, losses, missed = (int(p[:-1]) for p in deep['Notation'].split(' - '))
-    assert deep['Trades'] == wins + losses < default_trades
-    assert missed > 0
+def test_pullback_rows_split_every_trade_into_tapped_missed_and_lost():
+    """Each row covers the whole dataset once, and losers do not depend on
+    the limit - they lose whatever the pullback."""
+    sample = get_sample_data()
+    rows = [_wml(c) for c in calculate_pullback_statistics(sample)['Trades']]
+    assert all(sum(row) == len(sample) for row in rows)
+    assert len({losses for _, _, losses in rows}) == 1
+
+
+def test_pullback_counts_match_the_sample():
+    """Winners are rows 1, 4, 5, 7, 9, 10 with pullbacks 1.0, 3.5, 0.5, 2.0,
+    4.0, 1.5; the other four lose. A 2 pip limit is tapped by 3.5, 2.0 and
+    4.0 and misses 1.0, 0.5 and 1.5. Half the stop is tapped exactly by 3.5
+    (SL 7) and 4.0 (SL 8)."""
+    result = calculate_pullback_statistics(
+        get_sample_data()).set_index('Pullback')['Trades']
+    assert result['Default'] == '6W - 0M - 4L'
+    assert result['1 pip'] == '5W - 1M - 4L'
+    assert result['2 pips'] == '3W - 3M - 4L'
+    assert result['3 pips'] == '2W - 4M - 4L'
+    assert result['Half'] == '2W - 4M - 4L'
 
 
 # --- Strategies tables ----------------------------------------------------

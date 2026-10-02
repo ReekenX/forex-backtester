@@ -633,15 +633,9 @@ def calculate_tp_statistics(df: pd.DataFrame) -> pd.DataFrame:
 PULLBACK_ENTRY_PIPS = [0, 1, 2, 3]
 
 
-def _format_wlm(wins: int, losses: int, missed: int) -> str:
-    """Format winners/losers/missed-winners into '1W - 2L - 3M'."""
-    return f"{wins}W - {losses}L - {missed}M"
-
-
-def _entered_win_rate(wins: int, losses: int) -> str:
-    """Win rate over ENTERED trades only; missed winners never filled."""
-    entered = wins + losses
-    return f"{(wins / entered * 100) if entered > 0 else 0.0:.1f}%"
+def _format_wml(wins: int, missed: int, losses: int) -> str:
+    """Format tapped winners/missed winners/losers into '1W - 2M - 3L'."""
+    return f"{wins}W - {missed}M - {losses}L"
 
 
 def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
@@ -653,22 +647,22 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
     threshold to each trade's own stop: "Half" fills when the pullback reached
     at least half the SL.
 
+    Every row splits the whole dataset three ways:
+
+        winner = Pullback < SL AND TP >= SL
+        W = tapped winners (winner AND the limit filled)
+        M = missed winners (winner, but the pullback never reached the limit)
+        L = losers - not winners whatever the pullback, so the same every row
+
     The first row, "Default", is the 0-pip level: no limit order, every trade
     taken at the signal, so nothing is missed. It matches the Default row of
     the other stop tables.
-
-        winner = Pullback < SL AND TP >= SL
-        W = entered winners; L = entered - W; M = missed winners (winners whose
-        pullback never reached the fill threshold, so the limit never filled)
-
-    Missed winners are excluded from Trades and Win Rate because those trades
-    were never entered.
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: Pullback, Trades, Notation, Win Rate
+        DataFrame with columns: Pullback, Trades
     """
     levels = [
         ('Default' if n == 0 else _pip_label(n), df['Pullback'] >= n)
@@ -677,19 +671,15 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
     levels.append(('Half', df['Pullback'] >= df['SL'] / 2))
 
     winner = (df['Pullback'] < df['SL']) & (df['TP'] >= df['SL'])
+    losses = int((~winner).sum())
     results = []
 
-    for label, entered in levels:
-        entered_total = int(entered.sum())
-        wins = int((entered & winner).sum())
-        losses = entered_total - wins
-        missed = int((~entered & winner).sum())
-
+    for label, tapped in levels:
+        wins = int((tapped & winner).sum())
+        missed = int((~tapped & winner).sum())
         results.append({
             'Pullback': label,
-            'Trades': entered_total,
-            'Notation': _format_wlm(wins, losses, missed),
-            'Win Rate': _entered_win_rate(wins, losses),
+            'Trades': _format_wml(wins, missed, losses),
         })
 
     return pd.DataFrame(results)
