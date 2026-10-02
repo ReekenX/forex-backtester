@@ -495,6 +495,9 @@ SL_BUFFER_PIPS = [0, 1, 2, 3, 4, 5]
 # Stop sizes to substitute for every trade's recorded SL.
 SL_FIXED_PIPS = [3, 4, 5, 6, 7, 8, 9, 10]
 
+# Caps for the Max SL table, widest first.
+SL_MAX_PIPS = [9, 8, 7, 6, 5]
+
 
 def _pip_label(pips: int) -> str:
     """Render a pip count for a table cell: '0 pips', '1 pip', '2 pips'."""
@@ -589,6 +592,29 @@ def calculate_sl_fixed_statistics(df: pd.DataFrame) -> pd.DataFrame:
     scenarios: List[Tuple[str, object]] = [('Default', df['SL'])]
     scenarios.extend((_pip_label(pips), float(pips)) for pips in SL_FIXED_PIPS)
     return _sl_scenario_statistics(df, scenarios, 'Fixed SL', with_signal=True)
+
+
+def calculate_sl_max_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    1:1 win/loss statistics with the recorded stop capped at N pips.
+
+    Effective SL = min(SL, N): a trade whose safe stop is already inside the
+    cap keeps it, a wider one is tightened to N. Both the survival check and
+    the 1:1 target use the capped stop, so a capped trade is stopped out
+    sooner but needs less TP to win. The first row keeps the recorded stops.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with columns: Max SL, Trades, Signal, Strategy
+    """
+    scenarios: List[Tuple[str, object]] = [('Default', df['SL'])]
+    scenarios.extend(
+        (_pip_label(pips), df['SL'].clip(upper=float(pips)))
+        for pips in SL_MAX_PIPS
+    )
+    return _sl_scenario_statistics(df, scenarios, 'Max SL', with_signal=True)
 
 
 # ---------------------------------------------------------------------------

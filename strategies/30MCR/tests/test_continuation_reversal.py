@@ -21,6 +21,7 @@ from utils.continuation_reversal import (  # noqa: E402
     SETUP_ORDER,
     SL_BUFFER_PIPS,
     SL_FIXED_PIPS,
+    SL_MAX_PIPS,
     SL_RANGES,
     TP_RANGES,
     TYPE_ORDER,
@@ -34,6 +35,7 @@ from utils.continuation_reversal import (  # noqa: E402
     calculate_setup_statistics,
     calculate_sl_buffer_statistics,
     calculate_sl_fixed_statistics,
+    calculate_sl_max_statistics,
     calculate_sl_statistics,
     calculate_tp_statistics,
     calculate_weekday_statistics,
@@ -288,6 +290,31 @@ def test_sl_fixed_statistics_reports_signal_and_strategy():
     assert list(result['Fixed SL'])[1:] == [f'{p} pips' for p in SL_FIXED_PIPS]
 
 
+def test_sl_max_statistics_lists_every_cap():
+    result = calculate_sl_max_statistics(get_sample_data())
+    assert list(result.columns) == ['Max SL', 'Trades', 'Signal', 'Strategy']
+    assert list(result['Max SL']) == ['Default'] + [f'{p} pips'
+                                                     for p in SL_MAX_PIPS]
+    assert SL_MAX_PIPS == [9, 8, 7, 6, 5]
+    assert result['Signal'].nunique() == 1
+
+
+def test_sl_max_caps_only_wider_stops():
+    """SL 8, Pullback 6, TP 20: a 9 or 7 pip cap still survives the 6 pip
+    pullback and wins; a 6 or 5 pip cap is taken out by it. SL 3 sits inside
+    every cap, so it scores the same on every row."""
+    trades = get_sample_data().iloc[0:2].copy()
+    trades['SL'] = [8.0, 3.0]
+    trades['Pullback'] = [6.0, 1.0]
+    trades['TP'] = [20.0, 3.0]
+    result = calculate_sl_max_statistics(trades).set_index('Max SL')
+    assert result.loc['Default', 'Strategy'].startswith('2W - 0L')
+    assert result.loc['9 pips', 'Strategy'].startswith('2W - 0L')
+    assert result.loc['7 pips', 'Strategy'].startswith('2W - 0L')
+    assert result.loc['6 pips', 'Strategy'].startswith('1W - 1L')
+    assert result.loc['5 pips', 'Strategy'].startswith('1W - 1L')
+
+
 def test_fixed_sl_signal_repeats_down_the_table():
     """Signal does not depend on the stop: it is the ceiling no size beats."""
     result = calculate_sl_fixed_statistics(get_sample_data())
@@ -302,6 +329,7 @@ def test_every_stop_table_opens_with_the_same_default_row():
         'SL Range': (calculate_sl_statistics(sample), 'SL Range'),
         'Adding Buffer': (calculate_sl_buffer_statistics(sample), 'SL Buffer'),
         'Fixed SL': (calculate_sl_fixed_statistics(sample), 'Fixed SL'),
+        'Max SL': (calculate_sl_max_statistics(sample), 'Max SL'),
         'Pullback': (calculate_pullback_statistics(sample), 'Pullback'),
     }
 

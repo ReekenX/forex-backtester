@@ -356,7 +356,7 @@ def _section_html(anchor, df=None):
 def test_signal_strategy_tables_pin_their_first_column():
     """Weekday, the grouping tables, SL Range, Fixed SL, TP Range and Pullback
     all pin 40% so they line up down the page."""
-    for anchor in ('weekday', 'setup', 'sl-range', 'sl-fixed',
+    for anchor in ('weekday', 'setup', 'sl-range', 'sl-fixed', 'sl-max',
                    'tp-range', 'pullback'):
         html = _section_html(anchor)
         assert 'width: 40%' in html, anchor
@@ -364,7 +364,7 @@ def test_signal_strategy_tables_pin_their_first_column():
 
 
 def test_grouping_tables_carry_both_readings():
-    for anchor in ('weekday', 'setup', 'sl-range', 'sl-fixed'):
+    for anchor in ('weekday', 'setup', 'sl-range', 'sl-fixed', 'sl-max'):
         html = _section_html(anchor)
         assert '>Signal<' in html or 'Signal ↓' in html, anchor
         assert '>Strategy<' in html or 'Strategy ↓' in html, anchor
@@ -383,7 +383,7 @@ def test_stop_tables_are_not_sortable_but_others_are():
     Fixed SL is the exception - its rows are stop sizes to compare."""
     for anchor in ('sl-range', 'sl-buffer', 'pullback'):
         assert 'class="sortable"' not in _section_html(anchor), anchor
-    for anchor in ('setup', 'sl-fixed'):
+    for anchor in ('setup', 'sl-fixed', 'sl-max'):
         assert 'class="sortable"' in _section_html(anchor), anchor
 
 
@@ -440,3 +440,8 @@ def test_strategies_tables_close_the_page():
     anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
     assert anchors[-1] == f'strategies-1-{RRR_RATIOS[-1]}'
     assert 'three-setups' not in anchors
+
+
+def test_max_sl_section_sits_below_fixed_sl():
+    anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
+    assert anchors.index('sl-max') == anchors.index('sl-fixed') + 1

@@ -33,6 +33,7 @@ from utils.continuation_reversal import (
     calculate_setup_statistics,
     calculate_sl_buffer_statistics,
     calculate_sl_fixed_statistics,
+    calculate_sl_max_statistics,
     calculate_sl_statistics,
     calculate_tp_statistics,
     calculate_weekday_statistics,
@@ -95,6 +96,12 @@ def _sl_section(df: pd.DataFrame) -> str:
 def _sl_fixed_section(df: pd.DataFrame) -> str:
     return create_sortable_table(
         calculate_sl_fixed_statistics(df), "sl-fixed-table",
+        first_col_width="40%")
+
+
+def _sl_max_section(df: pd.DataFrame) -> str:
+    return create_sortable_table(
+        calculate_sl_max_statistics(df), "sl-max-table",
         first_col_width="40%")
 
 
@@ -201,6 +208,18 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "depend on the stop, so it repeats down the table as the ceiling; "
         "<b>Strategy</b> says how much of that ceiling each stop size captures.",
         _sl_fixed_section,
+    ),
+    (
+        "sl-max",
+        "Max SL",
+        "Max SL Analysis",
+        "The recorded stop kept, but capped at N pips: effective SL = "
+        "min(SL, N). Trades already inside the cap are unchanged; wider ones "
+        "are tightened, so both the survival check and the 1:1 target move "
+        "to the cap. <b>Signal</b> (TP &gt; 0) repeats down the table as the "
+        "ceiling; <b>Strategy</b> = Pullback &lt; capped SL AND TP &gt;= "
+        "capped SL.",
+        _sl_max_section,
     ),
     (
         "tp-range",
