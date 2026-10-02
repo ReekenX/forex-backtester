@@ -454,7 +454,7 @@ def test_buffer_statistics_carry_trend_and_max_sl_after_buffer():
     assert not result.duplicated(keys).any()
     all_trades = result[result['Strategy'] == 'All Trades']
     assert set(all_trades['Max SL']) == set(MAX_SL_CAPS)
-    assert MAX_SL_CAPS == [0, 5, 6, 7, 8, 9]
+    assert MAX_SL_CAPS == [0, 5, 6]
     assert set(result['Trend']) == set(TREND_FILTERS)
     assert (result[result['Trend'] == 'All']['Trades'] == len(sample)).all()
 

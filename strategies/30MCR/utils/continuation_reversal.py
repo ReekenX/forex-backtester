@@ -734,7 +734,7 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
 FIXED_SL_STRATEGY_VALUES = list(range(2, 11))
 
 # Stop caps for the Strategies tables' Max SL column. 0 means no cap.
-MAX_SL_CAPS = [0, 5, 6, 7, 8, 9]
+MAX_SL_CAPS = [0, 5, 6]
 
 
 def _fixed_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:

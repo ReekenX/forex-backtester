@@ -308,7 +308,7 @@ Same shell, same tables, same win rule; the data dictates the rest.
   tables, and those test buffers of `+0` and `+1` only. Their `Trend`
   column (`All`, `Continuation`, `Reversal`) filters on the setup's `Type`
   before the stop rule runs, so `Reversal` is High + Low Reversal only.
-  Their `Max SL` column (`0` = no cap, then 5-9) caps the stop after the
+  Their `Max SL` column (`0` = no cap, 5, 6) caps the stop after the
   buffer, `min(SL + buffer, cap)`, and replaces the old `Max SL X` strategy
   rows. `Fixed SL X` rows run uncapped and unbuffered only.
 - **Everything from the `Signal` column rightwards is dropped at load** - see
