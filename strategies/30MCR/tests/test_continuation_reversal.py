@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 
 from utils.continuation_reversal import (  # noqa: E402
     BUFFER_PIPS,
+    MAX_SL_CAPS,
     PULLBACK_BUFFER_PIPS,
     TREND_FILTERS,
     PULLBACK_ENTRY_PIPS,
@@ -427,11 +428,12 @@ def test_pullback_buffer_rows_pad_the_stop_but_not_the_limit():
 
 # --- Strategies tables ----------------------------------------------------
 
-def test_get_buffer_strategies_covers_fixed_and_max_sl():
+def test_get_buffer_strategies_covers_all_trades_and_fixed_sl():
+    """Capping moved to the Max SL column, so there are no Max SL strategies."""
     names = [name for name, _ in get_buffer_strategies()]
     assert names[0] == 'All Trades'
     assert any(n.startswith('Fixed SL ') for n in names)
-    assert any(n.startswith('Max SL ') for n in names)
+    assert not any(n.startswith('Max SL ') for n in names)
 
 
 def test_buffer_statistics_scores_every_rrr():
@@ -441,14 +443,18 @@ def test_buffer_statistics_scores_every_rrr():
     assert BUFFER_PIPS == [0, 1]
 
 
-def test_buffer_statistics_carry_trend_after_buffer():
-    """There is no Min/Max SL gate, so each strategy, buffer, trend and RRR
-    appears once, and All covers the whole sample."""
+def test_buffer_statistics_carry_trend_and_max_sl_after_buffer():
+    """Each strategy, buffer, trend, cap and RRR appears once, and All covers
+    the whole sample - a cap changes the stop, never the trades taken."""
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
-    assert list(result.columns) == ['Strategy', 'Buffer', 'Trend', 'RRR',
-                                    'Trades', 'Notation', 'Win Rate']
-    assert not result.duplicated(['Strategy', 'Buffer', 'Trend', 'RRR']).any()
+    assert list(result.columns) == ['Strategy', 'Buffer', 'Trend', 'Max SL',
+                                    'RRR', 'Trades', 'Notation', 'Win Rate']
+    keys = ['Strategy', 'Buffer', 'Trend', 'Max SL', 'RRR']
+    assert not result.duplicated(keys).any()
+    all_trades = result[result['Strategy'] == 'All Trades']
+    assert set(all_trades['Max SL']) == set(MAX_SL_CAPS)
+    assert MAX_SL_CAPS == [0, 5, 6, 7, 8, 9]
     assert set(result['Trend']) == set(TREND_FILTERS)
     assert (result[result['Trend'] == 'All']['Trades'] == len(sample)).all()
 
@@ -467,11 +473,34 @@ def test_buffer_statistics_trend_keeps_only_its_setups():
     assert cont.iloc[0]['Notation'] == '3W – 2L'
 
 
-def test_fixed_and_max_sl_strategies_run_without_a_buffer():
-    """A buffer would undo the fixed or capped stop the row is testing."""
+def test_fixed_sl_strategies_run_without_a_buffer_or_cap():
+    """A buffer or a cap would only turn a fixed stop into another size."""
     names = [n for n, _ in get_buffer_strategies() if n != 'All Trades']
     result = calculate_buffer_statistics(get_sample_data(), names)
     assert set(result['Buffer']) == {'+0'}
+    assert set(result['Max SL']) == {0}
+
+
+def test_max_sl_caps_the_buffered_stop():
+    """SL 3 + 1 under a 5 pip cap is 4; SL 5 + 1 is capped back to 5."""
+    trades = get_sample_data().iloc[0:2].copy()
+    trades['SL'] = [3.0, 5.0]
+    trades['Pullback'] = [3.5, 4.5]
+    trades['TP'] = [4.5, 5.0]
+    first, second = trades.iloc[0:1], trades.iloc[1:2]
+
+    def notation(one, max_sl=0):
+        return _calculate_stats_with_buffer(one, 'x', 1, 1,
+                                            max_sl=max_sl)['Notation']
+
+    # SL 3 + 1 = 4 is inside the cap: Pullback 3.5 survives, TP 4.5 reaches
+    # 1:1. Had the cap been applied as 5, TP 4.5 would fall short.
+    assert notation(first, max_sl=5) == '1W – 0L'
+    # SL 5 + 1 = 6 survives 4.5 but needs TP 6; capped to 5 it wins on TP 5.
+    assert notation(second) == '0W – 1L'
+    assert notation(second, max_sl=5) == '1W – 0L'
+    # A cap wider than the buffered stop changes nothing.
+    assert notation(second, max_sl=9) == '0W – 1L'
 
 
 def test_calculate_stats_with_buffer_applies_the_rrr_target():

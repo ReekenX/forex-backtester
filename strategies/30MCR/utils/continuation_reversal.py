@@ -732,7 +732,9 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 FIXED_SL_STRATEGY_VALUES = list(range(2, 11))
-MAX_SL_STRATEGY_VALUES = list(range(3, 11))
+
+# Stop caps for the Strategies tables' Max SL column. 0 means no cap.
+MAX_SL_CAPS = [0, 5, 6, 7, 8, 9]
 
 
 def _fixed_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
@@ -744,27 +746,13 @@ def _fixed_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
     return _filter
 
 
-def _max_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
-    """
-    Return a filter that caps the SL at x pips: effective SL = min(SL, x).
-
-    Every trade is kept; a trade whose safe stop is wider than x now uses a
-    tighter x-pip stop, so it is stopped out whenever Pullback >= x. A trade
-    whose safe stop is already <= x is unchanged.
-    """
-    def _filter(df: pd.DataFrame) -> pd.DataFrame:
-        out = df.copy()
-        out["SL"] = out["SL"].clip(upper=float(x))
-        return out
-    return _filter
-
-
 def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]:
     """
     Strategies the ranked tables test.
 
-    "Fixed SL X" replaces SL with X; "Max SL X" caps SL at min(SL, X). Both run
-    with buffer 0 only - a buffer would undo the fixed or capped stop.
+    "Fixed SL X" replaces SL with X. It runs with buffer 0 and no cap only -
+    a buffer or a cap would just turn it into another fixed size. Capping is
+    the Max SL column's job, on All Trades.
     """
     strategies: List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]] = [
         ("All Trades", lambda df: df),
@@ -772,17 +760,21 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
     strategies.extend(
         (f"Fixed SL {x}", _fixed_sl_filter(x)) for x in FIXED_SL_STRATEGY_VALUES
     )
-    strategies.extend(
-        (f"Max SL {x}", _max_sl_filter(x)) for x in MAX_SL_STRATEGY_VALUES
-    )
     return strategies
 
 
 def _buffers_for(strategy_name: str) -> List[float]:
-    """Fixed-SL and Max-SL strategies only run with buffer 0."""
-    if strategy_name.startswith("Fixed SL ") or strategy_name.startswith("Max SL "):
+    """Fixed-SL strategies only run with buffer 0."""
+    if strategy_name.startswith("Fixed SL "):
         return [0]
     return BUFFER_PIPS
+
+
+def _caps_for(strategy_name: str) -> List[int]:
+    """Fixed-SL strategies only run uncapped."""
+    if strategy_name.startswith("Fixed SL "):
+        return [0]
+    return MAX_SL_CAPS
 
 
 def _apply_trend(df: pd.DataFrame, trend: str) -> pd.DataFrame:
@@ -792,12 +784,13 @@ def _apply_trend(df: pd.DataFrame, trend: str) -> pd.DataFrame:
 
 def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
                                  buffer: float, rrr_ratio: float = 1,
-                                 trend: str = 'All') -> Dict:
+                                 trend: str = 'All', max_sl: int = 0) -> Dict:
     """
     Score a filtered set of trades with extra pips added to every SL.
 
-    Effective SL = SL + buffer. A trade wins when it survives that stop and
-    reaches the RRR target on it:
+    Effective SL = SL + buffer, then capped at max_sl when max_sl > 0. The cap
+    wins over the buffer: SL 3 + 1 under a 5 pip cap is 4, SL 5 + 1 is 5. A
+    trade wins when it survives that stop and reaches the RRR target on it:
         Pullback < effective SL   AND   TP >= rrr * effective SL
     """
     rrr_label = f"1:{rrr_ratio:g}"
@@ -808,6 +801,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
             "Strategy": strategy_name,
             "Buffer": f"+{buffer}",
             "Trend": trend,
+            "Max SL": max_sl,
             "RRR": rrr_label,
             "Trades": 0,
             "Notation": "0W – 0L",
@@ -815,6 +809,8 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
         }
 
     effective_sl = trades["SL"] + buffer
+    if max_sl:
+        effective_sl = effective_sl.clip(upper=float(max_sl))
     winning_mask = (
         (trades["Pullback"] < effective_sl)
         & (trades["TP"] >= rrr_ratio * effective_sl)
@@ -827,6 +823,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
         "Strategy": strategy_name,
         "Buffer": f"+{buffer}",
         "Trend": trend,
+        "Max SL": max_sl,
         "RRR": rrr_label,
         "Trades": total_trades,
         "Notation": f"{wins}W – {losses}L",
@@ -835,7 +832,8 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
 
 
 def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
-    """Sort by Strategy (natural order, numbers numerically), Trend, then RRR."""
+    """Sort by Strategy (natural order, numbers numerically), Trend, Max SL,
+    then RRR."""
     if result_df.empty:
         return result_df
 
@@ -854,6 +852,7 @@ def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
         key=lambda i: (
             strategy_key(result_df.at[i, 'Strategy']),
             TREND_FILTERS.index(result_df.at[i, 'Trend']),
+            int(result_df.at[i, 'Max SL']),
             rrr_key(result_df.at[i, 'RRR']),
         ),
     )
@@ -863,7 +862,8 @@ def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
 def calculate_buffer_statistics(df: pd.DataFrame,
                                 strategy_names: Optional[List[str]] = None) -> pd.DataFrame:
     """
-    Score every strategy across SL buffers, setup trends and every RRR.
+    Score every strategy across SL buffers, setup trends, stop caps and every
+    RRR.
 
     Trend filters on the setup type, which is known at entry, so it is a
     tradeable filter. The strategy's stop rule runs on the trend's trades.
@@ -873,7 +873,8 @@ def calculate_buffer_statistics(df: pd.DataFrame,
         strategy_names: Restrict to these strategy names (default: all)
 
     Returns:
-        DataFrame with one row per strategy / buffer / trend / RRR combination
+        DataFrame with one row per strategy / buffer / trend / cap / RRR
+        combination
     """
     strategies = get_buffer_strategies()
     if strategy_names is not None:
@@ -883,10 +884,12 @@ def calculate_buffer_statistics(df: pd.DataFrame,
     for strategy_name, filter_func in strategies:
         for trend in TREND_FILTERS:
             filtered_df = filter_func(_apply_trend(df, trend))
-            for rrr in RRR_RATIOS:
-                for buffer in _buffers_for(strategy_name):
-                    results.append(_calculate_stats_with_buffer(
-                        filtered_df, strategy_name, buffer, rrr, trend))
+            for max_sl in _caps_for(strategy_name):
+                for rrr in RRR_RATIOS:
+                    for buffer in _buffers_for(strategy_name):
+                        results.append(_calculate_stats_with_buffer(
+                            filtered_df, strategy_name, buffer, rrr, trend,
+                            max_sl))
 
     return _sort_strategy_rows(pd.DataFrame(results))
 
