@@ -417,6 +417,17 @@ def test_buffer_statistics_scores_every_rrr():
     assert set(result['Buffer']) == {f'+{b}' for b in BUFFER_PIPS}
 
 
+def test_buffer_statistics_carry_no_sl_gate_columns():
+    """Every trade is scored - there is no Min/Max SL gate, so each strategy,
+    RRR and buffer appears once and covers the whole sample."""
+    sample = get_sample_data()
+    result = calculate_buffer_statistics(sample)
+    assert list(result.columns) == ['Strategy', 'Buffer', 'RRR', 'Trades',
+                                    'Notation', 'Win Rate']
+    assert not result.duplicated(['Strategy', 'Buffer', 'RRR']).any()
+    assert (result['Trades'] == len(sample)).all()
+
+
 def test_fixed_and_max_sl_strategies_run_without_a_buffer():
     """A buffer would undo the fixed or capped stop the row is testing."""
     names = [n for n, _ in get_buffer_strategies() if n != 'All Trades']

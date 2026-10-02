@@ -263,7 +263,7 @@ SECTIONS.extend(
         f"strategies-1-{rrr}",
         f"Strategies 1:{rrr}",
         f"Strategies (1:{rrr} RRR)",
-        "All Trades / Fixed SL / Max SL across SL buffers and Min/Max SL gates, "
+        "All Trades / Fixed SL / Max SL across SL buffers, "
         f"ranked by win rate. Breakeven at 1:{rrr} is {100 / (1 + rrr):.1f}%.",
         _strategies_section_for(rrr),
     )

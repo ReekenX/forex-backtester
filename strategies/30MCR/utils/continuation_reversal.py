@@ -703,20 +703,8 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
 # Strategies tables
 # ---------------------------------------------------------------------------
 
-MIN_SL_VALUES = [0]
-MAX_SL_VALUES = [0, 5]
 FIXED_SL_STRATEGY_VALUES = list(range(2, 11))
 MAX_SL_STRATEGY_VALUES = list(range(3, 11))
-
-
-def _apply_min_sl(df: pd.DataFrame, min_sl: int) -> pd.DataFrame:
-    """Keep only trades whose original SL is strictly greater than min_sl pips."""
-    return df if min_sl == 0 else df[df["SL"] > min_sl]
-
-
-def _apply_max_sl(df: pd.DataFrame, max_sl: int) -> pd.DataFrame:
-    """Keep only trades whose original SL is <= max_sl pips (0 disables)."""
-    return df if max_sl == 0 else df[df["SL"] <= max_sl]
 
 
 def _fixed_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
@@ -785,8 +773,6 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
         return {
             "Strategy": strategy_name,
             "Buffer": f"+{buffer}",
-            "Min SL": 0,
-            "Max SL": 0,
             "RRR": rrr_label,
             "Trades": 0,
             "Notation": "0W – 0L",
@@ -805,8 +791,6 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
     return {
         "Strategy": strategy_name,
         "Buffer": f"+{buffer}",
-        "Min SL": 0,
-        "Max SL": 0,
         "RRR": rrr_label,
         "Trades": total_trades,
         "Notation": f"{wins}W – {losses}L",
@@ -834,8 +818,6 @@ def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
         key=lambda i: (
             strategy_key(result_df.at[i, 'Strategy']),
             rrr_key(result_df.at[i, 'RRR']),
-            int(result_df.at[i, 'Min SL']),
-            int(result_df.at[i, 'Max SL']),
         ),
     )
     return result_df.loc[sort_index].reset_index(drop=True)
@@ -844,14 +826,14 @@ def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
 def calculate_buffer_statistics(df: pd.DataFrame,
                                 strategy_names: Optional[List[str]] = None) -> pd.DataFrame:
     """
-    Score every strategy across SL buffers, Min/Max SL gates and every RRR.
+    Score every strategy across SL buffers and every RRR.
 
     Args:
         df: DataFrame with trading data
         strategy_names: Restrict to these strategy names (default: all)
 
     Returns:
-        DataFrame with one row per strategy / gate / RRR / buffer combination
+        DataFrame with one row per strategy / RRR / buffer combination
     """
     strategies = get_buffer_strategies()
     if strategy_names is not None:
@@ -859,17 +841,11 @@ def calculate_buffer_statistics(df: pd.DataFrame,
 
     results = []
     for strategy_name, filter_func in strategies:
-        for min_sl in MIN_SL_VALUES:
-            for max_sl in MAX_SL_VALUES:
-                gated = _apply_max_sl(_apply_min_sl(df, min_sl), max_sl)
-                filtered_df = filter_func(gated)
-                for rrr in RRR_RATIOS:
-                    for buffer in _buffers_for(strategy_name):
-                        stats = _calculate_stats_with_buffer(
-                            filtered_df, strategy_name, buffer, rrr)
-                        stats["Min SL"] = min_sl
-                        stats["Max SL"] = max_sl
-                        results.append(stats)
+        filtered_df = filter_func(df)
+        for rrr in RRR_RATIOS:
+            for buffer in _buffers_for(strategy_name):
+                results.append(_calculate_stats_with_buffer(
+                    filtered_df, strategy_name, buffer, rrr))
 
     return _sort_strategy_rows(pd.DataFrame(results))
 
