@@ -41,6 +41,7 @@ from utils.continuation_reversal import (
     create_r_histogram_combined,
     create_r_histogram_exact,
     create_sortable_table,
+    create_weekday_chart,
     get_buffer_strategies,
 )
 
@@ -78,7 +79,8 @@ SORT_STORAGE_KEY = "30mcr-sorts"
 
 def _weekday_section(df: pd.DataFrame) -> str:
     return create_html_table(
-        calculate_weekday_statistics(df), first_col_width="40%")
+        calculate_weekday_statistics(df), first_col_width="40%"
+    ) + create_weekday_chart(df)
 
 
 def _setup_section(df: pd.DataFrame) -> str:

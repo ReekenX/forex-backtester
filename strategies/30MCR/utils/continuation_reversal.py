@@ -413,6 +413,144 @@ def calculate_weekday_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return _signal_strategy_rows(groups, 'Day')
 
 
+# Series colours for the weekday chart: categorical slots 1 and 2 of the
+# dark-mode palette, validated against the #1e1e1e surface. Text never wears
+# them - values and labels stay in the page's text greys.
+CHART_SERIES = [('Signal', '#3987e5'), ('Strategy', '#d95926')]
+
+# Strategy is scored at 1:1, where a win rate has to clear 50% to pay.
+CHART_BREAKEVEN = 50
+
+_CHART_CSS = """
+    <style>
+        .wr-chart { font-family: 'Courier New', monospace; font-size: 12px;
+                    color: #e0e0e0; margin-top: 16px; padding: 14px 16px;
+                    background-color: #1e1e1e; border: 1px solid #404040; }
+        .wr-legend { display: flex; gap: 18px; margin: 0 0 8px 120px;
+                     color: #a0a0a0; }
+        .wr-swatch { display: inline-block; width: 10px; height: 10px;
+                     border-radius: 2px; margin-right: 6px;
+                     vertical-align: -1px; }
+        .wr-body { position: relative; }
+        .wr-grid { position: absolute; top: 0; bottom: 0; left: 120px;
+                   right: 64px; pointer-events: none; }
+        .wr-gridline { position: absolute; top: 0; bottom: 0;
+                       border-left: 1px solid #2d2d2d; }
+        .wr-breakeven { position: absolute; top: 0; bottom: 0;
+                        border-left: 1px dashed #a0a0a0; }
+        .wr-row { display: grid; grid-template-columns: 120px 1fr 64px;
+                  align-items: center; padding: 6px 0; }
+        .wr-row:hover { background-color: #2a2a2a; }
+        .wr-label { padding-right: 10px; }
+        .wr-count { display: block; color: #808080; font-size: 11px; }
+        .wr-track { position: relative; display: flex;
+                    flex-direction: column; gap: 2px; }
+        .wr-bar-line { position: relative; height: 12px; }
+        .wr-bar { height: 12px; border-radius: 0 4px 4px 0; }
+        .wr-value { position: absolute; top: -1px; margin-left: 4px;
+                    padding: 0 3px; background-color: #1e1e1e;
+                    color: #e0e0e0; white-space: nowrap; font-size: 11px; }
+        .wr-row:hover .wr-value { background-color: #2a2a2a; }
+        .wr-axis { position: relative; height: 16px; margin: 4px 64px 0 120px;
+                   color: #808080; font-size: 11px; }
+        .wr-tick { position: absolute; transform: translateX(-50%); }
+    </style>
+"""
+
+
+def calculate_weekday_rates(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Per-weekday Signal and Strategy win rates as numbers, for charting.
+
+    Same rules as calculate_weekday_statistics - Signal = TP > 0, Strategy =
+    Pullback < SL AND TP >= SL - kept numeric so bar lengths can be drawn.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with columns: Day, Trades, Signal Wins, Strategy Wins,
+        Signal, Strategy (the last two in percent, 0 when a day has no trades)
+    """
+    results = []
+    for day in WEEKDAY_ORDER:
+        trades = df[df['Weekday'] == day]
+        total = len(trades)
+        signals = int((trades['TP'] > 0).sum())
+        strategy = int(((trades['Pullback'] < trades['SL'])
+                        & (trades['TP'] >= trades['SL'])).sum())
+        results.append({
+            'Day': day,
+            'Trades': total,
+            'Signal Wins': signals,
+            'Strategy Wins': strategy,
+            'Signal': signals / total * 100 if total else 0.0,
+            'Strategy': strategy / total * 100 if total else 0.0,
+        })
+    return pd.DataFrame(results)
+
+
+def create_weekday_chart(df: pd.DataFrame) -> str:
+    """
+    Paired horizontal bars of Signal and Strategy win rate per weekday.
+
+    Both bars share one 0-100% axis, with a dashed line at the 1:1
+    breakeven, so the gap between the two readings - the cost of entry
+    timing - and the distance to breakeven read at a glance. Every bar carries
+    its value at the tip and a hover tooltip with the W/L counts.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        HTML string with the chart, or a "No data" note for an empty frame
+    """
+    if df.empty:
+        return ("<p style='color: #e0e0e0; background-color: #1e1e1e; "
+                "padding: 10px;'>No data</p>")
+
+    rates = calculate_weekday_rates(df)
+
+    html = _CHART_CSS + '<div class="wr-chart" role="img" aria-label="'
+    html += 'Signal and Strategy win rate by weekday">'
+    html += '<div class="wr-legend">'
+    for name, colour in CHART_SERIES:
+        html += (f'<span><span class="wr-swatch" '
+                 f'style="background-color: {colour};"></span>{name}</span>')
+    html += (f'<span><span class="wr-swatch" style="border: 1px dashed '
+             f'#a0a0a0; background: none;"></span>{CHART_BREAKEVEN}% '
+             'breakeven (1:1)</span></div>')
+
+    html += '<div class="wr-body"><div class="wr-grid">'
+    for tick in (0, 25, 75, 100):
+        html += f'<div class="wr-gridline" style="left: {tick}%;"></div>'
+    html += (f'<div class="wr-breakeven" style="left: {CHART_BREAKEVEN}%;">'
+             '</div></div>')
+
+    for _, row in rates.iterrows():
+        total = int(row['Trades'])
+        html += (f'<div class="wr-row"><div class="wr-label">{row["Day"]}'
+                 f'<span class="wr-count">{total} trades</span></div>'
+                 '<div class="wr-track">')
+        for name, colour in CHART_SERIES:
+            rate = float(row[name])
+            wins = int(row[f'{name} Wins'])
+            tooltip = (f'{row["Day"]} - {name}: '
+                       f'{_format_wl(wins, total - wins, total)}')
+            html += (f'<div class="wr-bar-line" title="{tooltip}">'
+                     f'<div class="wr-bar" style="width: {rate:.1f}%; '
+                     f'background-color: {colour};"></div>'
+                     f'<span class="wr-value" style="left: {rate:.1f}%;">'
+                     f'{rate:.1f}%</span></div>')
+        html += '</div><div></div></div>'
+
+    html += '</div><div class="wr-axis">'
+    for tick in (0, 25, 50, 75, 100):
+        html += f'<span class="wr-tick" style="left: {tick}%;">{tick}%</span>'
+    html += '</div></div>'
+    return html
+
+
 
 def _ordered_labels(values: pd.Series, preferred: List[str]) -> List[str]:
     """

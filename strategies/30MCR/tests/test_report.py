@@ -353,6 +353,12 @@ def _section_html(anchor, df=None):
     return builder(df)
 
 
+def test_weekday_section_puts_the_chart_below_the_table():
+    html = _section_html('weekday')
+    assert 'class="wr-chart"' in html
+    assert html.index('<table') < html.index('class="wr-chart"')
+
+
 def test_signal_strategy_tables_pin_their_first_column():
     """Weekday, the grouping tables, SL Range, Fixed SL, TP Range and Pullback
     all pin 40% so they line up down the page."""
