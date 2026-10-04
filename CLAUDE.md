@@ -306,12 +306,14 @@ Same shell, same tables, same win rule; the data dictates the rest.
   trade once. The setup is known at entry, so it is a tradeable filter, and the
   table is click-to-sort. There is no High/Low table and no Direction table -
   neither split said anything on its own.
-- **`Weekday Analysis` carries a chart under its table.** `create_weekday_chart`
-  draws Signal and Strategy as paired bars per day on one 0-100% axis, with a
-  dashed line at the 50% breakeven of 1:1. It reads `calculate_weekday_rates`,
-  the numeric twin of the table, so the two cannot disagree. Series colours are
-  categorical slots 1 and 2 of the dark palette (`#3987e5`, `#d95926`); text
-  stays in the page's greys.
+- **Every Signal/Strategy table up to `Max SL Analysis` carries a chart
+  under it** - `Weekday`, `Setup`, `SL Range`, `Fixed SL` and `Max SL`.
+  `create_signal_strategy_chart` draws Signal and Strategy as paired bars per
+  row on one 0-100% axis, with a dashed line at the 50% breakeven of 1:1. It
+  reads the W/L counts back out of the table's own cells, so the two cannot
+  disagree; the chart keeps the table's original order when a column is
+  click-sorted. Series colours are categorical slots 1 and 2 of the dark
+  palette (`#3987e5`, `#d95926`); text stays in the page's greys.
 - **It has no `4H`, `EMA` or `Hour` column**, so none of those tables exist.
 - **It has no Three Setups trade log.** The page ends on the Strategies
   tables, and those test buffers of `+0` and `+1` only. Their `Trend`

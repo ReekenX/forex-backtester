@@ -40,13 +40,12 @@ from utils.continuation_reversal import (  # noqa: E402
     calculate_sl_max_statistics,
     calculate_sl_statistics,
     calculate_tp_statistics,
-    calculate_weekday_rates,
     calculate_weekday_statistics,
     create_html_table,
     create_r_histogram_combined,
     create_r_histogram_exact,
+    create_signal_strategy_chart,
     create_sortable_table,
-    create_weekday_chart,
     get_buffer_strategies,
     load_data,
 )
@@ -192,42 +191,46 @@ def test_load_data_matches_the_sheets_own_headline_rates():
 
 # --- Signal / Strategy grouping tables ------------------------------------
 
-def test_weekday_rates_match_the_weekday_table():
+def test_chart_bars_follow_the_table_cells():
     """Monday holds rows 1-4: three reached a target (TP 16, 20, 25) and two
     survived their stop too (rows 1 and 4) - row 2 was stopped out first."""
-    rates = calculate_weekday_rates(get_sample_data()).set_index('Day')
-    assert rates.loc['Monday', 'Trades'] == 4
-    assert rates.loc['Monday', 'Signal'] == pytest.approx(75.0)
-    assert rates.loc['Monday', 'Strategy'] == pytest.approx(50.0)
-    table = calculate_weekday_statistics(get_sample_data()).set_index('Day')
-    for day in WEEKDAY_ORDER:
-        assert table.loc[day, 'Strategy'].endswith(
-            f"({rates.loc[day, 'Strategy']:.1f}%)")
-
-
-def test_weekday_rates_keep_empty_days_at_zero():
-    rates = calculate_weekday_rates(get_sample_data()).set_index('Day')
-    assert rates.loc['Friday', 'Trades'] == 0
-    assert rates.loc['Friday', 'Signal'] == 0.0
-
-
-def test_weekday_chart_draws_both_bars_per_day():
-    html = create_weekday_chart(get_sample_data())
+    html = create_signal_strategy_chart(
+        calculate_weekday_statistics(get_sample_data()))
     for day in WEEKDAY_ORDER:
         assert f'{day}<span class="wr-count">' in html
     assert html.count('class="wr-bar"') == 2 * len(WEEKDAY_ORDER)
     assert 'width: 75.0%' in html and 'width: 50.0%' in html
 
 
-def test_weekday_chart_has_a_legend_breakeven_and_tooltips():
-    html = create_weekday_chart(get_sample_data())
+def test_chart_keeps_empty_rows_at_zero():
+    """Friday has no trades in the sample: a zero-width bar, not a crash."""
+    html = create_signal_strategy_chart(
+        calculate_weekday_statistics(get_sample_data()))
+    assert 'Friday<span class="wr-count">0 trades</span>' in html
+    assert 'width: 0.0%' in html
+
+
+def test_chart_has_a_legend_breakeven_and_tooltips():
+    html = create_signal_strategy_chart(
+        calculate_weekday_statistics(get_sample_data()))
     assert '>Signal</span>' in html and '>Strategy</span>' in html
     assert 'class="wr-breakeven" style="left: 50%;"' in html
     assert 'title="Monday - Strategy: 2W - 2L (50.0%)"' in html
 
 
-def test_weekday_chart_handles_an_empty_dataset():
-    assert 'No data' in create_weekday_chart(get_empty_data())
+def test_chart_draws_every_row_of_any_signal_strategy_table():
+    for stats in (calculate_setup_statistics(get_sample_data()),
+                  calculate_sl_statistics(get_sample_data()),
+                  calculate_sl_fixed_statistics(get_sample_data())):
+        html = create_signal_strategy_chart(stats)
+        assert html.count('class="wr-row"') == len(stats)
+        assert f'by {stats.columns[0]}"' in html
+
+
+def test_chart_handles_an_empty_table():
+    empty = calculate_weekday_statistics(get_sample_data()).iloc[0:0]
+    assert 'No data' in create_signal_strategy_chart(empty)
+
 
 
 def test_format_wl_shape():

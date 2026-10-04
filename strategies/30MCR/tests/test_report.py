@@ -353,10 +353,16 @@ def _section_html(anchor, df=None):
     return builder(df)
 
 
-def test_weekday_section_puts_the_chart_below_the_table():
-    html = _section_html('weekday')
-    assert 'class="wr-chart"' in html
-    assert html.index('<table') < html.index('class="wr-chart"')
+def test_every_section_up_to_max_sl_puts_a_chart_below_its_table():
+    for anchor in ('weekday', 'setup', 'sl-range', 'sl-fixed', 'sl-max'):
+        html = _section_html(anchor)
+        assert html.count('class="wr-chart"') == 1, anchor
+        assert html.index('<table') < html.index('class="wr-chart"'), anchor
+
+
+def test_sections_after_max_sl_carry_no_chart():
+    for anchor in ('tp-range', 'pullback', 'sl-buffer'):
+        assert 'class="wr-chart"' not in _section_html(anchor), anchor
 
 
 def test_signal_strategy_tables_pin_their_first_column():

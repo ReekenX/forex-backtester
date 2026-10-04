@@ -413,7 +413,7 @@ def calculate_weekday_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return _signal_strategy_rows(groups, 'Day')
 
 
-# Series colours for the weekday chart: categorical slots 1 and 2 of the
+# Series colours for the Signal/Strategy charts: categorical slots 1 and 2 of the
 # dark-mode palette, validated against the #1e1e1e surface. Text never wears
 # them - values and labels stay in the page's text greys.
 CHART_SERIES = [('Signal', '#3987e5'), ('Strategy', '#d95926')]
@@ -458,61 +458,38 @@ _CHART_CSS = """
 """
 
 
-def calculate_weekday_rates(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Per-weekday Signal and Strategy win rates as numbers, for charting.
+def _parse_wl(cell: str) -> Tuple[int, int]:
+    """Read wins and losses back out of a '13W - 12L (52.0%)' cell."""
+    wins, losses = re.match(r'\s*(\d+)W - (\d+)L', cell).groups()
+    return int(wins), int(losses)
 
-    Same rules as calculate_weekday_statistics - Signal = TP > 0, Strategy =
-    Pullback < SL AND TP >= SL - kept numeric so bar lengths can be drawn.
+
+def create_signal_strategy_chart(stats: pd.DataFrame) -> str:
+    """
+    Paired horizontal bars of Signal and Strategy win rate, one pair per row.
+
+    Drawn from the very table it sits under - a `<label>, Trades, Signal,
+    Strategy` frame - so the chart and the table cannot disagree. Both bars
+    share one 0-100% axis, with a dashed line at the 1:1 breakeven, so the gap
+    between the two readings - the cost of entry timing - and the distance to
+    breakeven read at a glance. Every bar carries its value at the tip and a
+    hover tooltip with the W/L counts.
 
     Args:
-        df: DataFrame with trading data
-
-    Returns:
-        DataFrame with columns: Day, Trades, Signal Wins, Strategy Wins,
-        Signal, Strategy (the last two in percent, 0 when a day has no trades)
-    """
-    results = []
-    for day in WEEKDAY_ORDER:
-        trades = df[df['Weekday'] == day]
-        total = len(trades)
-        signals = int((trades['TP'] > 0).sum())
-        strategy = int(((trades['Pullback'] < trades['SL'])
-                        & (trades['TP'] >= trades['SL'])).sum())
-        results.append({
-            'Day': day,
-            'Trades': total,
-            'Signal Wins': signals,
-            'Strategy Wins': strategy,
-            'Signal': signals / total * 100 if total else 0.0,
-            'Strategy': strategy / total * 100 if total else 0.0,
-        })
-    return pd.DataFrame(results)
-
-
-def create_weekday_chart(df: pd.DataFrame) -> str:
-    """
-    Paired horizontal bars of Signal and Strategy win rate per weekday.
-
-    Both bars share one 0-100% axis, with a dashed line at the 1:1
-    breakeven, so the gap between the two readings - the cost of entry
-    timing - and the distance to breakeven read at a glance. Every bar carries
-    its value at the tip and a hover tooltip with the W/L counts.
-
-    Args:
-        df: DataFrame with trading data
+        stats: DataFrame whose first column labels the rows and which carries
+            Trades, Signal and Strategy columns in the _format_wl shape
 
     Returns:
         HTML string with the chart, or a "No data" note for an empty frame
     """
-    if df.empty:
+    if stats.empty:
         return ("<p style='color: #e0e0e0; background-color: #1e1e1e; "
                 "padding: 10px;'>No data</p>")
 
-    rates = calculate_weekday_rates(df)
+    label_column = stats.columns[0]
 
     html = _CHART_CSS + '<div class="wr-chart" role="img" aria-label="'
-    html += 'Signal and Strategy win rate by weekday">'
+    html += f'Signal and Strategy win rate by {label_column}">'
     html += '<div class="wr-legend">'
     for name, colour in CHART_SERIES:
         html += (f'<span><span class="wr-swatch" '
@@ -527,19 +504,18 @@ def create_weekday_chart(df: pd.DataFrame) -> str:
     html += (f'<div class="wr-breakeven" style="left: {CHART_BREAKEVEN}%;">'
              '</div></div>')
 
-    for _, row in rates.iterrows():
-        total = int(row['Trades'])
-        html += (f'<div class="wr-row"><div class="wr-label">{row["Day"]}'
-                 f'<span class="wr-count">{total} trades</span></div>'
-                 '<div class="wr-track">')
+    for _, row in stats.iterrows():
+        label = row[label_column]
+        html += (f'<div class="wr-row"><div class="wr-label">{label}'
+                 f'<span class="wr-count">{int(row["Trades"])} trades</span>'
+                 '</div><div class="wr-track">')
         for name, colour in CHART_SERIES:
-            rate = float(row[name])
-            wins = int(row[f'{name} Wins'])
-            tooltip = (f'{row["Day"]} - {name}: '
-                       f'{_format_wl(wins, total - wins, total)}')
-            html += (f'<div class="wr-bar-line" title="{tooltip}">'
-                     f'<div class="wr-bar" style="width: {rate:.1f}%; '
-                     f'background-color: {colour};"></div>'
+            wins, losses = _parse_wl(row[name])
+            total = wins + losses
+            rate = wins / total * 100 if total else 0.0
+            html += (f'<div class="wr-bar-line" title="{label} - {name}: '
+                     f'{row[name]}"><div class="wr-bar" style="width: '
+                     f'{rate:.1f}%; background-color: {colour};"></div>'
                      f'<span class="wr-value" style="left: {rate:.1f}%;">'
                      f'{rate:.1f}%</span></div>')
         html += '</div><div></div></div>'

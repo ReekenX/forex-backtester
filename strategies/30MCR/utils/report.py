@@ -40,8 +40,8 @@ from utils.continuation_reversal import (
     create_html_table,
     create_r_histogram_combined,
     create_r_histogram_exact,
+    create_signal_strategy_chart,
     create_sortable_table,
-    create_weekday_chart,
     get_buffer_strategies,
 )
 
@@ -77,34 +77,38 @@ SCROLL_STORAGE_KEY = "30mcr-scroll"
 SORT_STORAGE_KEY = "30mcr-sorts"
 
 
+def _with_chart(stats: pd.DataFrame, table: str) -> str:
+    """Put the Signal/Strategy chart under the table it was drawn from."""
+    return table + create_signal_strategy_chart(stats)
+
+
 def _weekday_section(df: pd.DataFrame) -> str:
-    return create_html_table(
-        calculate_weekday_statistics(df), first_col_width="40%"
-    ) + create_weekday_chart(df)
+    stats = calculate_weekday_statistics(df)
+    return _with_chart(stats, create_html_table(stats, first_col_width="40%"))
 
 
 def _setup_section(df: pd.DataFrame) -> str:
-    return create_html_table(
-        calculate_setup_statistics(df), sort_id="setup-table",
-        first_col_width="40%")
+    stats = calculate_setup_statistics(df)
+    return _with_chart(stats, create_html_table(
+        stats, sort_id="setup-table", first_col_width="40%"))
 
 
 def _sl_section(df: pd.DataFrame) -> str:
-    return create_sortable_table(
-        calculate_sl_statistics(df), "sl-range-table", sortable=False,
-        first_col_width="40%")
+    stats = calculate_sl_statistics(df)
+    return _with_chart(stats, create_sortable_table(
+        stats, "sl-range-table", sortable=False, first_col_width="40%"))
 
 
 def _sl_fixed_section(df: pd.DataFrame) -> str:
-    return create_sortable_table(
-        calculate_sl_fixed_statistics(df), "sl-fixed-table",
-        first_col_width="40%")
+    stats = calculate_sl_fixed_statistics(df)
+    return _with_chart(stats, create_sortable_table(
+        stats, "sl-fixed-table", first_col_width="40%"))
 
 
 def _sl_max_section(df: pd.DataFrame) -> str:
-    return create_sortable_table(
-        calculate_sl_max_statistics(df), "sl-max-table",
-        first_col_width="40%")
+    stats = calculate_sl_max_statistics(df)
+    return _with_chart(stats, create_sortable_table(
+        stats, "sl-max-table", first_col_width="40%"))
 
 
 def _tp_section(df: pd.DataFrame) -> str:
