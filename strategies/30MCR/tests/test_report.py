@@ -360,9 +360,15 @@ def test_every_section_up_to_max_sl_puts_a_chart_below_its_table():
         assert html.index('<table') < html.index('class="wr-chart"'), anchor
 
 
-def test_sections_after_max_sl_carry_no_chart():
+def test_sections_after_max_sl_carry_no_win_rate_chart():
     for anchor in ('tp-range', 'pullback', 'sl-buffer'):
         assert 'class="wr-chart"' not in _section_html(anchor), anchor
+
+
+def test_tp_range_keeps_its_table_and_adds_a_pip_chart_below():
+    html = _section_html('tp-range')
+    assert '>0-10<' in html and '>30+<' in html
+    assert html.index('<table') < html.index('class="tp-chart"')
 
 
 def test_signal_strategy_tables_pin_their_first_column():

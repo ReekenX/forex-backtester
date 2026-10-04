@@ -39,6 +39,7 @@ from utils.continuation_reversal import (  # noqa: E402
     calculate_sl_fixed_statistics,
     calculate_sl_max_statistics,
     calculate_sl_statistics,
+    calculate_tp_pip_counts,
     calculate_tp_statistics,
     calculate_weekday_statistics,
     create_html_table,
@@ -46,6 +47,7 @@ from utils.continuation_reversal import (  # noqa: E402
     create_r_histogram_exact,
     create_signal_strategy_chart,
     create_sortable_table,
+    create_tp_chart,
     get_buffer_strategies,
     load_data,
 )
@@ -423,6 +425,34 @@ def test_tp_statistics_buckets_profitable_trades_only():
     assert list(result['TP Range']) == [n for n, _, _ in TP_RANGES]
     profitable = int((get_sample_data()['TP'] > 0).sum())
     assert all(row.endswith(f'of {profitable}') for row in result['Trades'])
+
+
+def test_tp_pip_counts_run_8_to_29_then_pool_30_plus():
+    """Profitable TPs in the sample: 16, 20, 25, 3, 35, 9, 12. 3 is below the
+    first column; 35 pools into 30+."""
+    counts = calculate_tp_pip_counts(get_sample_data())
+    assert list(counts.index) == [str(p) for p in range(8, 30)] + ['30+']
+    assert counts['9'] == counts['12'] == counts['16'] == 1
+    assert counts['20'] == counts['25'] == counts['30+'] == 1
+    assert counts.sum() == 6
+
+
+def test_tp_pip_counts_round_down_to_the_whole_pip():
+    one = get_sample_data().iloc[0:1].assign(TP=[12.9])
+    assert calculate_tp_pip_counts(one)['12'] == 1
+
+
+def test_tp_chart_draws_a_column_per_pip_and_reports_what_it_leaves_out():
+    html = create_tp_chart(get_sample_data())
+    assert html.count('class="tp-bar"') == 23
+    assert 'title="TP 30+ pips: 1 trade"' in html
+    assert '7 profitable trades; 1 below 8 pips not shown' in html
+
+
+def test_tp_chart_handles_no_profitable_trades():
+    assert 'No data' in create_tp_chart(get_empty_data())
+    losers = get_sample_data().assign(TP=0.0)
+    assert 'No data' in create_tp_chart(losers)
 
 
 def test_tp_bands_hold_each_trade_once():

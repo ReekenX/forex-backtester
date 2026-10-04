@@ -42,6 +42,7 @@ from utils.continuation_reversal import (
     create_r_histogram_exact,
     create_signal_strategy_chart,
     create_sortable_table,
+    create_tp_chart,
     get_buffer_strategies,
 )
 
@@ -112,7 +113,9 @@ def _sl_max_section(df: pd.DataFrame) -> str:
 
 
 def _tp_section(df: pd.DataFrame) -> str:
-    return create_html_table(calculate_tp_statistics(df), first_col_width="40%")
+    return create_html_table(
+        calculate_tp_statistics(df), first_col_width="40%"
+    ) + create_tp_chart(df)
 
 
 def _pullback_section(df: pd.DataFrame) -> str:

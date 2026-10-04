@@ -314,6 +314,11 @@ Same shell, same tables, same win rule; the data dictates the rest.
   disagree; the chart keeps the table's original order when a column is
   click-sorted. Series colours are categorical slots 1 and 2 of the dark
   palette (`#3987e5`, `#d95926`); text stays in the page's greys.
+- **`TP Range Analysis` keeps its four-band table and adds a pip chart
+  under it.** `create_tp_chart` gives every whole TP pip from 8 to 29 its own
+  column (TP rounded down) and pools the rest into `30+`, set slightly apart.
+  Counts sit on the caps, so there is no y-axis. A TP below 8 gets no column;
+  the caption counts those instead of dropping them silently.
 - **It has no `4H`, `EMA` or `Hour` column**, so none of those tables exist.
 - **It has no Three Setups trade log.** The page ends on the Strategies
   tables, and those test buffers of `+0` and `+1` only. Their `Trend`
