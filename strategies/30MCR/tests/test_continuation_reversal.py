@@ -43,6 +43,7 @@ from utils.continuation_reversal import (  # noqa: E402
     calculate_tp_statistics,
     calculate_weekday_statistics,
     create_html_table,
+    create_pullback_chart,
     create_r_histogram_combined,
     create_r_histogram_exact,
     create_signal_strategy_chart,
@@ -514,6 +515,34 @@ def test_pullback_counts_match_the_sample():
     assert result['2 pips'] == '3W - 3M - 4L'
     assert result['3 pips'] == '2W - 4M - 4L'
     assert result['Half'] == '2W - 4M - 4L'
+
+
+def test_pullback_chart_stacks_w_m_l_from_the_table_cells():
+    stats = calculate_pullback_statistics(get_sample_data())
+    html = create_pullback_chart(stats)
+    assert html.count('class="pb-stack"') == len(stats)
+    # '2 pips' is 3W - 3M - 4L in the sample: three segments, sized by count.
+    assert 'title="2 pips - Tapped winners: 3 (30.0% of trades)"' in html
+    assert 'title="2 pips - Missed winners: 3 (30.0% of trades)"' in html
+    assert 'title="2 pips - Losers: 4 (40.0% of trades)"' in html
+
+
+def test_pullback_chart_skips_empty_segments():
+    """Default misses nothing, so it draws no M segment at all."""
+    html = create_pullback_chart(calculate_pullback_statistics(get_sample_data()))
+    assert 'Default - Missed winners' not in html
+
+
+def test_pullback_chart_starts_a_group_at_the_buffered_rows():
+    html = create_pullback_chart(calculate_pullback_statistics(get_sample_data()))
+    assert html.count('pb-group') == 2  # the CSS rule and one row
+    assert html.index('pb-row pb-group') < html.index('1 pip + 1 pip buffer')
+    assert html.index('>Half<') < html.index('pb-row pb-group')
+
+
+def test_pullback_chart_handles_an_empty_table():
+    empty = calculate_pullback_statistics(get_sample_data()).iloc[0:0]
+    assert 'No data' in create_pullback_chart(empty)
 
 
 def test_pullback_buffer_rows_pad_the_stop_but_not_the_limit():

@@ -950,6 +950,104 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
+# Segment colours for the pullback chart: W and M take categorical slots 1
+# and 2 of the dark palette, the same pair as the Signal/Strategy charts. L is
+# a recessive grey - it is the same on every row of a stop, so it is context
+# rather than a series to compare.
+PULLBACK_SEGMENTS = [
+    ('W', 'Tapped winners', '#3987e5'),
+    ('M', 'Missed winners', '#d95926'),
+    ('L', 'Losers', '#4a4a4a'),
+]
+
+_PULLBACK_CHART_CSS = """
+    <style>
+        .pb-chart { font-family: 'Courier New', monospace; font-size: 12px;
+                    color: #e0e0e0; margin-top: 16px; padding: 14px 16px;
+                    background-color: #1e1e1e; border: 1px solid #404040; }
+        .pb-legend { display: flex; gap: 18px; margin: 0 0 8px 200px;
+                     color: #a0a0a0; }
+        .pb-swatch { display: inline-block; width: 10px; height: 10px;
+                     border-radius: 2px; margin-right: 6px;
+                     vertical-align: -1px; }
+        .pb-row { display: grid; grid-template-columns: 200px 1fr;
+                  align-items: center; padding: 5px 0; }
+        .pb-row:hover { background-color: #2a2a2a; }
+        .pb-group { margin-top: 12px; border-top: 1px solid #2d2d2d;
+                    padding-top: 11px; }
+        .pb-stack { display: flex; gap: 2px; height: 20px; }
+        .pb-seg { display: flex; align-items: center; justify-content: center;
+                  overflow: hidden; white-space: nowrap; font-size: 11px;
+                  color: #ffffff; }
+        .pb-seg:first-child { border-radius: 4px 0 0 4px; }
+        .pb-seg:last-child { border-radius: 0 4px 4px 0; }
+    </style>
+"""
+
+
+def _parse_wml(cell: str) -> Tuple[int, int, int]:
+    """Read W, M and L back out of a '25W - 12M - 11L' cell."""
+    wins, missed, losses = re.match(
+        r'\s*(\d+)W - (\d+)M - (\d+)L', cell).groups()
+    return int(wins), int(missed), int(losses)
+
+
+def create_pullback_chart(stats: pd.DataFrame) -> str:
+    """
+    One 100% stacked bar per Pullback row: tapped winners, missed winners and
+    losers, in the order the table names them.
+
+    Drawn from the table's own cells, so the two cannot disagree. Every row
+    covers every trade once, so the bars share one length and the W segment
+    shrinking into M as the limit goes deeper is the whole story. The buffered
+    rows start a second group, since they score against a wider stop. Counts
+    sit inside the segments that have room; every segment has a hover tooltip.
+
+    Args:
+        stats: DataFrame from calculate_pullback_statistics
+
+    Returns:
+        HTML string with the chart, or a "No data" note for an empty frame
+    """
+    if stats.empty:
+        return ("<p style='color: #e0e0e0; background-color: #1e1e1e; "
+                "padding: 10px;'>No data</p>")
+
+    html = _PULLBACK_CHART_CSS + ('<div class="pb-chart" role="img" '
+                                  'aria-label="Tapped winners, missed winners '
+                                  'and losers by limit depth">'
+                                  '<div class="pb-legend">')
+    for key, name, colour in PULLBACK_SEGMENTS:
+        html += (f'<span><span class="pb-swatch" style="background-color: '
+                 f'{colour};"></span>{key} = {name}</span>')
+    html += '</div>'
+
+    grouped = False
+    for _, row in stats.iterrows():
+        label = row['Pullback']
+        counts = _parse_wml(row['Trades'])
+        total = sum(counts) or 1
+        css = 'pb-row'
+        if label.endswith('buffer') and not grouped:
+            css += ' pb-group'
+            grouped = True
+        html += (f'<div class="{css}"><div>{label}</div>'
+                 '<div class="pb-stack">')
+        for (key, name, colour), count in zip(PULLBACK_SEGMENTS, counts):
+            if count == 0:
+                continue
+            share = count / total * 100
+            # Room for the count only when the segment is wide enough.
+            text = str(count) if share >= 4 else ''
+            html += (f'<div class="pb-seg" title="{label} - {name}: {count} '
+                     f'({share:.1f}% of trades)" style="flex: {count}; '
+                     f'background-color: {colour};">{text}</div>')
+        html += '</div></div>'
+
+    html += '</div>'
+    return html
+
+
 # ---------------------------------------------------------------------------
 # Strategies tables
 # ---------------------------------------------------------------------------

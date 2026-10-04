@@ -319,6 +319,11 @@ Same shell, same tables, same win rule; the data dictates the rest.
   `calculate_sl_buffer_statistics(df, with_signal=True)` - the same scenarios
   through the same `_sl_scenario_statistics`, so Signal repeats as the
   ceiling exactly as it does under `Fixed SL`.
+- **`Pullback Analysis` carries a 100% stacked bar per row** under its
+  table. `create_pullback_chart` reads the `W - M - L` cells back and draws
+  tapped winners (`#3987e5`), missed winners (`#d95926`) and losers (recessive
+  grey, since L is constant per stop). The `+ 1 pip buffer` rows start a
+  second group, as they score against a wider stop.
 - **`TP Range Analysis` keeps its four-band table and adds a pip chart
   under it.** `create_tp_chart` gives every whole TP pip from 8 to 29 its own
   column (TP rounded down) and pools the rest into `30+`, set slightly apart.

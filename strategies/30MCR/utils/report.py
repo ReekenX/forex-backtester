@@ -38,6 +38,7 @@ from utils.continuation_reversal import (
     calculate_tp_statistics,
     calculate_weekday_statistics,
     create_html_table,
+    create_pullback_chart,
     create_r_histogram_combined,
     create_r_histogram_exact,
     create_signal_strategy_chart,
@@ -119,9 +120,10 @@ def _tp_section(df: pd.DataFrame) -> str:
 
 
 def _pullback_section(df: pd.DataFrame) -> str:
+    stats = calculate_pullback_statistics(df)
     return create_sortable_table(
-        calculate_pullback_statistics(df), "pullback-table", sortable=False,
-        first_col_width="40%")
+        stats, "pullback-table", sortable=False, first_col_width="40%"
+    ) + create_pullback_chart(stats)
 
 
 def _sl_buffer_section(df: pd.DataFrame) -> str:

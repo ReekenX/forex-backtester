@@ -367,6 +367,11 @@ def test_adding_buffer_keeps_its_table_and_adds_a_chart_below():
     assert html.index('<table') < html.index('class="wr-chart"')
 
 
+def test_pullback_keeps_its_table_and_adds_a_stacked_chart_below():
+    html = _section_html('pullback')
+    assert html.index('<table') < html.index('class="pb-chart"')
+
+
 def test_tp_range_and_pullback_carry_no_win_rate_chart():
     for anchor in ('tp-range', 'pullback'):
         assert 'class="wr-chart"' not in _section_html(anchor), anchor
