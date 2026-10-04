@@ -11,9 +11,10 @@ Three things about this export shape the loader:
 
 - Header cells carry spreadsheet scratch on a second line ("Trade\\n69"), so
   every header is normalised to its first line before anything reads it.
-- Everything from the "Signal" column rightwards is the sheet's own scratch
-  work - precomputed win rates and R totals for stop scenarios this page
-  recomputes itself - so it is dropped at load rather than read.
+- Everything right of TP is the sheet's own scratch work - precomputed win
+  rates and R totals for stop scenarios this page recomputes itself - so it is
+  dropped at load rather than read. The scratch headers are renamed and
+  repeated from one export to the next, so the cut is anchored on TP.
 - There is no R column. R is derived as TP / SL - how many multiples of the
   recorded safe stop the move was worth - and signed the way the 15LS1CC sheet
   signs it: negative when Pullback reached SL, i.e. the reach was there but the
@@ -61,8 +62,10 @@ SETUP_ORDER = [
 
 TYPE_ORDER = ['Continuation', 'Reversal']
 
-# Everything from this column rightwards is the spreadsheet's scratch work.
-SCRATCH_COLUMN = 'Signal'
+# The last trade column. Everything right of it is the spreadsheet's scratch
+# work, whose headers change between exports ("Signal", "Signal All") and can
+# repeat, so they are never named.
+LAST_TRADE_COLUMN = 'TP'
 
 DEFAULT_CSV = "../strategies/30MCR/trades.csv"
 
@@ -80,16 +83,18 @@ def _normalise_header(name: object) -> str:
 
 def _drop_scratch_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Keep only the columns left of "Signal".
+    Keep only the columns up to and including TP.
 
     The sheet precomputes win rates and R totals for its own stop scenarios to
     the right of the trade data. This page computes those itself, so reading
     them would double up on the same question with a rule this module does not
     control.
     """
-    if SCRATCH_COLUMN not in df.columns:
+    positions = [i for i, col in enumerate(df.columns)
+                 if col == LAST_TRADE_COLUMN]
+    if not positions:
         return df
-    return df.iloc[:, :df.columns.get_loc(SCRATCH_COLUMN)]
+    return df.iloc[:, :positions[0] + 1]
 
 
 def load_data(filepath: str = DEFAULT_CSV) -> pd.DataFrame:

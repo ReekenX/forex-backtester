@@ -28,6 +28,7 @@ from utils.continuation_reversal import (  # noqa: E402
     TYPE_ORDER,
     WEEKDAY_ORDER,
     _calculate_stats_with_buffer,
+    _drop_scratch_columns,
     _format_wl,
     _normalise_header,
     calculate_buffer_statistics,
@@ -102,15 +103,30 @@ def test_normalise_header_keeps_only_the_first_line():
     assert _normalise_header('SL') == 'SL'
 
 
-def test_load_data_drops_everything_from_the_signal_column_on():
+def test_load_data_drops_everything_right_of_tp():
     """The sheet's own stop scenarios are scratch: this page recomputes them
     under a rule it controls, so reading them back would double up."""
     df = load_data(CSV_PATH)
     for col in df.columns:
         assert not str(col).startswith('Signal'), col
-    for scratch in ('WR', '+1pip WR', '3 pips SL', '4 pips SL', '5 pips SL',
-                    'Attributes'):
+    for scratch in ('WR', '+1pip WR', '+1pip C WR', '+1pip R WR',
+                    '4 pips SL', '5 pips SL'):
         assert scratch not in df.columns
+
+
+def test_drop_scratch_columns_survives_renamed_and_repeated_headers():
+    """One export renamed the first scratch column to "Signal All" and added
+    two more both headed "Signal". Anchoring on a scratch name broke on
+    that; anchoring on TP does not."""
+    raw = pd.DataFrame(
+        [[1.0, 2.0, 3.0, '6R', '', '4R']],
+        columns=['SL', 'Pullback', 'TP', 'Signal All', 'Signal', 'Signal'])
+    assert list(_drop_scratch_columns(raw).columns) == ['SL', 'Pullback', 'TP']
+
+
+def test_drop_scratch_columns_leaves_a_clean_frame_alone():
+    clean = pd.DataFrame([[1.0, 2.0, 3.0]], columns=['SL', 'Pullback', 'TP'])
+    assert list(_drop_scratch_columns(clean).columns) == ['SL', 'Pullback', 'TP']
 
 
 def test_load_data_keeps_every_trade_column():
@@ -168,8 +184,8 @@ def test_load_data_matches_the_sheets_own_headline_rates():
     signal = (df['TP'] > 0).sum() / total * 100
     strategy = ((df['Pullback'] < df['SL'])
                 & (df['TP'] >= df['SL'])).sum() / total * 100
-    assert round(signal, 1) == 50.7
-    assert round(strategy, 1) == 37.7
+    assert round(signal, 1) == 48.4
+    assert round(strategy, 1) == 33.9
 
 
 # --- Signal / Strategy grouping tables ------------------------------------

@@ -86,16 +86,19 @@ Each strategy keeps its data inside its `strategies/<name>/` directory: `data.cs
 - **Pullback**: Pullback in pips
 - **TP**: Take Profit in pips (empty = not profitable)
 
-Everything from the `Signal` column rightwards (`Signal`, `WR`, `+1pip WR`,
-`3 pips SL`, `4 pips SL`, `5 pips SL`, `Attributes`) is the spreadsheet's own
-scratch work - precomputed win rates and R totals for stop scenarios the page
-recomputes itself - and `load_data` drops it. Those header figures are still a
-useful cross-check: the sheet's `Signal 50.7%` and `WR 37.7%` are exactly what
-`calculate_setup_statistics`'s Default row reports, and its `+1pip WR 44.9%`
-and `5 pips SL 44.9%` match Adding Buffer and Fixed SL. The one place the sheet
-disagrees is its `4 pips SL 42%` against this page's 40.6%: one trade recorded
-`SL 3.8, Pullback 4.0` survives a 4-pip stop in the sheet and not here, because
-the project's win rule is `Pullback < SL`, strictly.
+Everything right of `TP` (currently `Signal All`, `WR`, `+1pip WR`, two
+columns both headed `Signal`, `+1pip C WR`, `+1pip R WR`, `4 pips SL`,
+`5 pips SL`) is the spreadsheet's own scratch work - precomputed win rates and
+R totals for stop scenarios the page recomputes itself - and `load_data` drops
+it. Those headers are renamed and repeated between exports, so the cut is
+anchored on `TP`, never on a scratch name. The header figures are still a
+useful cross-check: the sheet's `Signal All 48.4%` and `WR 33.9%` are exactly
+what `calculate_setup_statistics`'s Default row reports, and its `4 pips SL
+36.3%` and `5 pips SL 40.3%` match Fixed SL. The places the sheet disagrees
+are its `+1pip WR 41.1%` against this page's 40.3%, and `+1pip C WR 35.3%`
+against 33.8%: one trade recorded `SL 4.7, Pullback 5.7` survives a 5.7-pip
+stop in the sheet and not here, because the project's win rule is
+`Pullback < SL`, strictly.
 
 There is no R column, so `load_data` derives it as `TP / SL`, signed negative
 when `Pullback >= SL` - the convention the 15LS1CC sheet exports.
@@ -311,8 +314,8 @@ Same shell, same tables, same win rule; the data dictates the rest.
   Their `Max SL` column (`0` = no cap, 5, 6) caps the stop after the
   buffer, `min(SL + buffer, cap)`, and replaces the old `Max SL X` strategy
   rows. `Fixed SL X` rows run uncapped and unbuffered only.
-- **Everything from the `Signal` column rightwards is dropped at load** - see
-  the data format above, including the one place the sheet's own figures and
+- **Everything right of `TP` is dropped at load** - see
+  the data format above, including the places the sheet's own figures and
   this page's disagree.
 - **Headers are normalised to their first line** before anything reads them:
   the export wraps a computed figure under the column name in the same cell.
