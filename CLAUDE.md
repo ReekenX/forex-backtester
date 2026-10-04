@@ -314,6 +314,11 @@ Same shell, same tables, same win rule; the data dictates the rest.
   disagree; the chart keeps the table's original order when a column is
   click-sorted. Series colours are categorical slots 1 and 2 of the dark
   palette (`#3987e5`, `#d95926`); text stays in the page's greys.
+- **`Adding Buffer` carries the same chart**, with its table left in the
+  `Notation, Win Rate` shape. The chart reads
+  `calculate_sl_buffer_statistics(df, with_signal=True)` - the same scenarios
+  through the same `_sl_scenario_statistics`, so Signal repeats as the
+  ceiling exactly as it does under `Fixed SL`.
 - **`TP Range Analysis` keeps its four-band table and adds a pip chart
   under it.** `create_tp_chart` gives every whole TP pip from 8 to 29 its own
   column (TP rounded down) and pools the rest into `30+`, set slightly apart.

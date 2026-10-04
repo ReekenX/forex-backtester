@@ -360,8 +360,15 @@ def test_every_section_up_to_max_sl_puts_a_chart_below_its_table():
         assert html.index('<table') < html.index('class="wr-chart"'), anchor
 
 
-def test_sections_after_max_sl_carry_no_win_rate_chart():
-    for anchor in ('tp-range', 'pullback', 'sl-buffer'):
+def test_adding_buffer_keeps_its_table_and_adds_a_chart_below():
+    html = _section_html('sl-buffer')
+    assert '>Notation<' in html and '>Win Rate<' in html
+    assert html.count('class="wr-chart"') == 1
+    assert html.index('<table') < html.index('class="wr-chart"')
+
+
+def test_tp_range_and_pullback_carry_no_win_rate_chart():
+    for anchor in ('tp-range', 'pullback'):
         assert 'class="wr-chart"' not in _section_html(anchor), anchor
 
 

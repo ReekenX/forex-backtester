@@ -229,6 +229,19 @@ def test_chart_draws_every_row_of_any_signal_strategy_table():
         assert f'by {stats.columns[0]}"' in html
 
 
+def test_buffer_signal_shape_scores_the_same_trades_as_the_table():
+    """The chart's Strategy column must say what the table's Notation and Win
+    Rate say, row for row; Signal repeats as the ceiling."""
+    sample = get_sample_data()
+    table = calculate_sl_buffer_statistics(sample)
+    chart = calculate_sl_buffer_statistics(sample, with_signal=True)
+    assert list(chart.columns) == ['SL Buffer', 'Trades', 'Signal', 'Strategy']
+    assert list(chart['SL Buffer']) == list(table['SL Buffer'])
+    for (_, t), (_, c) in zip(table.iterrows(), chart.iterrows()):
+        assert c['Strategy'] == f"{t['Notation']} ({t['Win Rate']})"
+    assert chart['Signal'].nunique() == 1
+
+
 def test_chart_handles_an_empty_table():
     empty = calculate_weekday_statistics(get_sample_data()).iloc[0:0]
     assert 'No data' in create_signal_strategy_chart(empty)

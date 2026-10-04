@@ -674,7 +674,8 @@ def _sl_scenario_statistics(df: pd.DataFrame,
     return pd.DataFrame(results)
 
 
-def calculate_sl_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_sl_buffer_statistics(df: pd.DataFrame,
+                                   with_signal: bool = False) -> pd.DataFrame:
     """
     1:1 win/loss statistics for progressively wider stops.
 
@@ -684,15 +685,20 @@ def calculate_sl_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
     Args:
         df: DataFrame with trading data
+        with_signal: Emit the Signal/Strategy shape the charts read, instead
+            of the Notation/Win Rate shape the table shows - same scenarios,
+            same win rule
 
     Returns:
-        DataFrame with columns: SL Buffer, Trades, Notation, Win Rate
+        DataFrame with columns: SL Buffer, Trades, Notation, Win Rate - or
+        SL Buffer, Trades, Signal, Strategy when with_signal is set
     """
     scenarios: List[Tuple[str, object]] = [
         ("Default" if pips == 0 else _pip_label(pips), df['SL'] + pips)
         for pips in SL_BUFFER_PIPS
     ]
-    return _sl_scenario_statistics(df, scenarios, 'SL Buffer')
+    return _sl_scenario_statistics(df, scenarios, 'SL Buffer',
+                                   with_signal=with_signal)
 
 
 def calculate_sl_fixed_statistics(df: pd.DataFrame) -> pd.DataFrame:

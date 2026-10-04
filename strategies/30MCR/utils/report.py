@@ -125,9 +125,13 @@ def _pullback_section(df: pd.DataFrame) -> str:
 
 
 def _sl_buffer_section(df: pd.DataFrame) -> str:
+    # The table keeps its Notation/Win Rate shape; the chart reads the same
+    # scenarios in the Signal/Strategy shape the other charts use.
     return create_sortable_table(
         calculate_sl_buffer_statistics(df), "sl-buffer-table", sortable=False,
-        first_col_width="50%")
+        first_col_width="50%"
+    ) + create_signal_strategy_chart(
+        calculate_sl_buffer_statistics(df, with_signal=True))
 
 
 def _sort_by_win_rate(stats: pd.DataFrame) -> pd.DataFrame:
