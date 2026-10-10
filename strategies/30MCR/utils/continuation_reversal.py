@@ -23,9 +23,10 @@ Three things about this export shape the loader:
 A blank TP and a TP of 0 both mean the trade was not profitable, so both load
 as 0 and `TP > 0` is the Signal rule here exactly as it is on the other pages.
 
-The 30M column names the setup that produced the signal, e.g.
-"30M Low Reversal". It is known before the trade is taken, so it is a tradeable
-filter. Its Continuation/Reversal half is pooled in the same table, so the
+The 30M column names the 30-minute level the signal formed at - "High" or
+"Low". The setup is that level read against Direction: buying a High or selling
+a Low is a Continuation, the other two are Reversals. Both are known before the
+trade is taken, so the setup is a tradeable filter. Its Continuation/Reversal half is pooled in the same table, so the
 setup can be read with the level and without it.
 """
 
@@ -47,9 +48,12 @@ TREND_FILTERS = ['All', 'Continuation', 'Reversal']
 
 WEEKDAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 
-# Column naming the setup, and the prefix its values repeat on every row.
+# Column naming the 30-minute level (High or Low) the signal formed at.
 SETUP_COLUMN = '30M'
-SETUP_PREFIX = '30M '
+
+# (level, direction) pairs that continue through the level. Every other
+# pairing is a Reversal.
+CONTINUATIONS = {('High', 'Buy'), ('Low', 'Sell')}
 
 # The four setups this strategy trades, in the order the tables list them.
 # A label outside this list is still shown - appended in sorted order - so a
@@ -122,11 +126,14 @@ def load_data(filepath: str = DEFAULT_CSV) -> pd.DataFrame:
     stopped_out = df["Pullback"] >= df["SL"]
     df["R"] = reach.where(~stopped_out, -reach)
 
-    setup = (df[SETUP_COLUMN].astype(str).str.strip()
+    level = (df[SETUP_COLUMN].astype(str).str.strip()
              if SETUP_COLUMN in df.columns else pd.Series("", index=df.index))
-    df["Setup"] = setup.str.replace(f"^{re.escape(SETUP_PREFIX)}", "",
-                                    regex=True)
-    df["Type"] = df["Setup"].str.split().str[-1].fillna("")
+    direction = df["Direction"].astype(str).str.strip()
+    df["Type"] = [
+        "Continuation" if (lvl, d) in CONTINUATIONS else "Reversal"
+        for lvl, d in zip(level, direction)
+    ]
+    df["Setup"] = level + " " + df["Type"]
 
     return df
 # ---------------------------------------------------------------------------

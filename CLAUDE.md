@@ -81,23 +81,20 @@ Each strategy keeps its data inside its `strategies/<name>/` directory: `data.cs
 - **Weekday**: Day of the week
 - **Trade**: Trade identifier. The export wraps a computed figure under the column name in the same header cell (`Trade\n69`), so `load_data` normalises every header to its first line
 - **Direction**: Trade direction (Buy or Sell)
-- **30M**: The setup that produced the signal - `30M High Continuation`, `30M High Reversal`, `30M Low Continuation` or `30M Low Reversal`. `load_data` strips the repeated `30M ` prefix into a `Setup` column and splits out its `Type` (Continuation/Reversal). Both are known at entry, so both are tradeable filters
+- **30M**: The 30-minute level the signal formed at - `High` or `Low`. `load_data` reads it against `Direction` to derive `Type`: `High` + `Buy` and `Low` + `Sell` are `Continuation`, the other two pairings are `Reversal`. `Setup` joins the two (`High Continuation`, `High Reversal`, `Low Continuation`, `Low Reversal`). All are known at entry, so all are tradeable filters
 - **SL**: Stop Loss in pips
 - **Pullback**: Pullback in pips
 - **TP**: Take Profit in pips (empty = not profitable)
 
-Everything right of `TP` (currently `Signal All`, `WR`, `+1pip WR`, two
-columns both headed `Signal`, `+1pip C WR`, `+1pip R WR`, `4 pips SL`,
-`5 pips SL`) is the spreadsheet's own scratch work - precomputed win rates and
+Everything right of `TP` (currently `All`, `WR`, `+1pip`, `+1pip CAP(6)`
+and a run of `#DIV/0!` cells) is the spreadsheet's own scratch work - precomputed win rates and
 R totals for stop scenarios the page recomputes itself - and `load_data` drops
 it. Those headers are renamed and repeated between exports, so the cut is
 anchored on `TP`, never on a scratch name. The header figures are still a
-useful cross-check: the sheet's `Signal All 48.4%` and `WR 33.9%` are exactly
-what `calculate_setup_statistics`'s Default row reports, and its `4 pips SL
-36.3%` and `5 pips SL 40.3%` match Fixed SL. The places the sheet disagrees
-are its `+1pip WR 41.1%` against this page's 40.3%, and `+1pip C WR 35.3%`
-against 33.8%: one trade recorded `SL 4.7, Pullback 5.7` survives a 5.7-pip
-stop in the sheet and not here, because the project's win rule is
+useful cross-check: the sheet's `All 48.7%` and `WR 32.9%` are exactly
+what `calculate_setup_statistics`'s Default row reports. The place the sheet
+disagrees is its `+1pip 40.8%` against this page's 40.1%: one trade recorded
+`SL 4.7, Pullback 5.7` survives a 5.7-pip stop in the sheet and not here, because the project's win rule is
 `Pullback < SL`, strictly.
 
 There is no R column, so `load_data` derives it as `TP / SL`, signed negative

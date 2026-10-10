@@ -55,7 +55,7 @@ def get_sample_data():
                     'Tuesday', 'Wednesday', 'Wednesday'],
         'Trade': ['#1', '#2', '#1', '#2', '#1', '#2'],
         'Direction': ['Buy', 'Sell', 'Buy', 'Sell', 'Buy', 'Sell'],
-        '30M': [f'30M {s}' for s in setups],
+        '30M': [s.split()[0] for s in setups],
         'SL': [4.4, 7.1, 2.6, 3.0, 4.3, 5.8],
         'Pullback': [0.7, 7.1, 2.7, 0.0, 0.9, 2.4],
         'TP': [34.0, 0.0, 31.0, 9.0, 17.0, 7.0],

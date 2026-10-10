@@ -75,7 +75,7 @@ def get_sample_data():
         'Trade': ['#1', '#2', '#3', '#4', '#1', '#2', '#3', '#1', '#2', '#3'],
         'Direction': ['Buy', 'Sell', 'Buy', 'Sell',
                       'Buy', 'Sell', 'Buy', 'Sell', 'Buy', 'Sell'],
-        '30M': [f'30M {s}' for s in setups],
+        '30M': [s.split()[0] for s in setups],
         'SL': [4.0, 5.0, 2.0, 7.0, 3.0, 12.0, 6.0, 2.5, 8.0, 5.5],
         'Pullback': [1.0, 6.0, 2.0, 3.5, 0.5, 12.0, 2.0, 2.5, 4.0, 1.5],
         'TP': [16.0, 20.0, 0.0, 25.0, 3.0, 0.0, 35.0, 0.0, 9.0, 12.0],
@@ -169,14 +169,31 @@ def test_load_data_signs_r_negative_when_the_stop_was_hit():
     assert (stopped['R'] < 0).all()
 
 
-def test_load_data_splits_the_setup_label():
-    """Setup drops the repeated '30M ' prefix; Type is its second half."""
+def test_load_data_derives_the_setup_from_level_and_direction():
+    """30M holds only the level; Type comes from reading it against
+    Direction, and Setup joins the two."""
     df = load_data(CSV_PATH)
+    assert set(df['30M']) <= {'High', 'Low'}
     assert set(df['Setup']) <= set(SETUP_ORDER)
     assert set(df['Type']) <= set(TYPE_ORDER)
     row = df.iloc[0]
-    assert row['30M'] == f"30M {row['Setup']}"
-    assert row['Setup'].endswith(row['Type'])
+    assert row['Setup'] == f"{row['30M']} {row['Type']}"
+
+
+@pytest.mark.parametrize('level, direction, setup', [
+    ('High', 'Buy', 'High Continuation'),
+    ('High', 'Sell', 'High Reversal'),
+    ('Low', 'Sell', 'Low Continuation'),
+    ('Low', 'Buy', 'Low Reversal'),
+])
+def test_load_data_maps_each_level_and_direction(tmp_path, level, direction,
+                                                 setup):
+    csv = tmp_path / 'trades.csv'
+    csv.write_text('Date,Weekday,Trade,Direction,30M,SL,Pullback,TP\n'
+                   f'2025-02-03,Monday,#1,{direction},{level},4,1,8\n')
+    row = load_data(str(csv)).iloc[0]
+    assert row['Setup'] == setup
+    assert row['Type'] == setup.split()[-1]
 
 
 def test_load_data_matches_the_sheets_own_headline_rates():
@@ -188,8 +205,8 @@ def test_load_data_matches_the_sheets_own_headline_rates():
     signal = (df['TP'] > 0).sum() / total * 100
     strategy = ((df['Pullback'] < df['SL'])
                 & (df['TP'] >= df['SL'])).sum() / total * 100
-    assert round(signal, 1) == 48.4
-    assert round(strategy, 1) == 33.9
+    assert round(signal, 1) == 48.7
+    assert round(strategy, 1) == 32.9
 
 
 # --- Signal / Strategy grouping tables ------------------------------------
