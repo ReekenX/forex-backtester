@@ -224,8 +224,8 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
     ),
     (
         "sl-max",
-        "Max SL",
-        "Max SL Analysis",
+        "Cap SL",
+        "Cap SL Analysis",
         "The recorded stop kept, but capped at N pips: effective SL = "
         "min(SL, N). Trades already inside the cap are unchanged; wider ones "
         "are tightened, so both the survival check and the 1:1 target move "

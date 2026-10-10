@@ -371,10 +371,10 @@ def test_sl_fixed_statistics_reports_signal_and_strategy():
 
 def test_sl_max_statistics_lists_every_cap():
     result = calculate_sl_max_statistics(get_sample_data())
-    assert list(result.columns) == ['Max SL', 'Trades', 'Signal', 'Strategy']
-    assert list(result['Max SL']) == ['Default'] + [f'{p} pips'
+    assert list(result.columns) == ['Cap SL', 'Trades', 'Signal', 'Strategy']
+    assert list(result['Cap SL']) == ['Default'] + [f'{p} pips'
                                                      for p in SL_MAX_PIPS]
-    assert SL_MAX_PIPS == [9, 8, 7, 6, 5]
+    assert SL_MAX_PIPS == [9, 8, 7, 6, 5, 4]
     assert result['Signal'].nunique() == 1
 
 
@@ -386,7 +386,7 @@ def test_sl_max_caps_only_wider_stops():
     trades['SL'] = [8.0, 3.0]
     trades['Pullback'] = [6.0, 1.0]
     trades['TP'] = [20.0, 3.0]
-    result = calculate_sl_max_statistics(trades).set_index('Max SL')
+    result = calculate_sl_max_statistics(trades).set_index('Cap SL')
     assert result.loc['Default', 'Strategy'].startswith('2W - 0L')
     assert result.loc['9 pips', 'Strategy'].startswith('2W - 0L')
     assert result.loc['7 pips', 'Strategy'].startswith('2W - 0L')
@@ -408,7 +408,7 @@ def test_every_stop_table_opens_with_the_same_default_row():
         'SL Range': (calculate_sl_statistics(sample), 'SL Range'),
         'Adding Buffer': (calculate_sl_buffer_statistics(sample), 'SL Buffer'),
         'Fixed SL': (calculate_sl_fixed_statistics(sample), 'Fixed SL'),
-        'Max SL': (calculate_sl_max_statistics(sample), 'Max SL'),
+        'Cap SL': (calculate_sl_max_statistics(sample), 'Cap SL'),
         'Pullback': (calculate_pullback_statistics(sample), 'Pullback'),
     }
 

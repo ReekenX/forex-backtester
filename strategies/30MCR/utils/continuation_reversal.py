@@ -614,8 +614,8 @@ SL_BUFFER_PIPS = [0, 1, 2, 3, 4, 5]
 # Stop sizes to substitute for every trade's recorded SL.
 SL_FIXED_PIPS = [3, 4, 5, 6, 7, 8, 9, 10]
 
-# Caps for the Max SL table, widest first.
-SL_MAX_PIPS = [9, 8, 7, 6, 5]
+# Caps for the Cap SL table, widest first.
+SL_MAX_PIPS = [9, 8, 7, 6, 5, 4]
 
 
 def _pip_label(pips: int) -> str:
@@ -732,14 +732,14 @@ def calculate_sl_max_statistics(df: pd.DataFrame) -> pd.DataFrame:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: Max SL, Trades, Signal, Strategy
+        DataFrame with columns: Cap SL, Trades, Signal, Strategy
     """
     scenarios: List[Tuple[str, object]] = [('Default', df['SL'])]
     scenarios.extend(
         (_pip_label(pips), df['SL'].clip(upper=float(pips)))
         for pips in SL_MAX_PIPS
     )
-    return _sl_scenario_statistics(df, scenarios, 'Max SL', with_signal=True)
+    return _sl_scenario_statistics(df, scenarios, 'Cap SL', with_signal=True)
 
 
 # ---------------------------------------------------------------------------

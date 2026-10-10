@@ -303,8 +303,8 @@ Same shell, same tables, same win rule; the data dictates the rest.
   trade once. The setup is known at entry, so it is a tradeable filter, and the
   table is click-to-sort. There is no High/Low table and no Direction table -
   neither split said anything on its own.
-- **Every Signal/Strategy table up to `Max SL Analysis` carries a chart
-  under it** - `Weekday`, `Setup`, `SL Range`, `Fixed SL` and `Max SL`.
+- **Every Signal/Strategy table up to `Cap SL Analysis` carries a chart
+  under it** - `Weekday`, `Setup`, `SL Range`, `Fixed SL` and `Cap SL`.
   `create_signal_strategy_chart` draws Signal and Strategy as paired bars per
   row on one 0-100% axis, with a dashed line at the 50% breakeven of 1:1. It
   reads the W/L counts back out of the table's own cells, so the two cannot
@@ -359,7 +359,7 @@ Sections are declared in `report.py`'s `SECTIONS` list as
 
 ### Conventions for stop tables
 
-The SL tables (`SL Range`, `Adding Buffer`, `Fixed SL`, `Max SL`, `Pullback`) are
+The SL tables (`SL Range`, `Adding Buffer`, `Fixed SL`, `Cap SL`, `Pullback`) are
 a family and must stay consistent. Both pages have this family, each in its own
 module - keep a change to one in step with the other:
 
@@ -374,7 +374,7 @@ module - keep a change to one in step with the other:
 - **Columns are `<label>, Trades, Notation, Win Rate`**, with `Notation` as
   `"12W - 3L"` and `Win Rate` as `"52.7%"` in separate columns - never combined
   into one cell. `SL Range Analysis`, `Fixed SL Analysis` and 30MCR's
-  `Max SL Analysis` are the exceptions: they carry `<label>, Trades, Signal, Strategy` like the weekday
+  `Cap SL Analysis` are the exceptions: they carry `<label>, Trades, Signal, Strategy` like the weekday
   and alignment tables, each cell combined as `"12W - 3L (52.7%)"` by
   `_format_wl`.
   Their `Strategy` column is still the family's shared win rule, which is what
@@ -389,12 +389,12 @@ module - keep a change to one in step with the other:
   padded as in `Adding Buffer`, the limit (including Half's recorded-SL / 2)
   stays put.
 - **Row order carries meaning**, so these tables are rendered with
-  `sortable=False`. `Fixed SL Analysis` and `Max SL Analysis` are the
+  `sortable=False`. `Fixed SL Analysis` and `Cap SL Analysis` are the
   exceptions - their rows are stop sizes to compare, so they stay
   click-to-sort.
 - **Label column width is `40%` everywhere except `Adding Buffer`**, which
   still carries the older `50%`. `Weekday`, the alignment tables, `SL Range`,
-  `Fixed SL`, `Max SL`, `TP Range` and `Pullback` all pin `first_col_width="40%"` so they
+  `Fixed SL`, `Cap SL`, `TP Range` and `Pullback` all pin `first_col_width="40%"` so they
   line up down the page.
 - **Table ids are not shared between the pages.** 15C's SL Range table is
   `sl-range-stats`; 5OB's is `sl-range-table`. Each page's ids only have to be
