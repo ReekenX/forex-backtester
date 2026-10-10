@@ -126,7 +126,8 @@ def test_build_report_names_the_strategy_and_its_source():
 def test_build_report_renders_data_values():
     html = build_report(get_sample_data(), '2025-02-06 10:00:00', 'abc123')
     assert 'Monday' in html
-    assert 'High Continuation' in html
+    assert 'Continuation' in html and 'Reversal' in html
+    assert 'High Continuation' not in html
     assert '>Reversal<' in html  # the pooled type row
     assert '2025-02-03' in html
 

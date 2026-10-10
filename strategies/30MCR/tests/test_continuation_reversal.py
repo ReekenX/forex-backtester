@@ -296,43 +296,29 @@ def test_signal_counts_the_stopped_out_winner_and_strategy_does_not():
     assert row['Strategy'] == '0W - 1L (0.0%)'
 
 
-def test_setup_statistics_lists_default_then_setups_then_types():
-    """One table, widest first: every trade, each setup, then the two type
-    totals pooled across the setups that end the same way."""
+def test_setup_statistics_lists_default_then_types_only():
+    """Every trade, then Continuation and Reversal - no per-level setup rows,
+    as the level alone says nothing."""
     result = calculate_setup_statistics(get_sample_data())
-    assert list(result['Setup']) == ['Default'] + SETUP_ORDER + TYPE_ORDER
+    assert list(result['Setup']) == ['Default'] + TYPE_ORDER
     assert result.iloc[0]['Trades'] == 10
     assert list(result.columns) == ['Setup', 'Trades', 'Signal', 'Strategy']
+    assert not set(result['Setup']) & set(SETUP_ORDER)
 
 
-def test_setup_rows_and_type_rows_each_sum_to_the_default_row():
-    """The two blocks overlap - each covers every trade once - so the column
-    itself does not sum, and neither block may lose a trade."""
+def test_setup_type_rows_sum_to_the_default_row():
     result = calculate_setup_statistics(get_sample_data()).set_index('Setup')
-    total = result.loc['Default', 'Trades']
-    assert result.loc[SETUP_ORDER, 'Trades'].sum() == total
-    assert result.loc[TYPE_ORDER, 'Trades'].sum() == total
+    assert (result.loc[TYPE_ORDER, 'Trades'].sum()
+            == result.loc['Default', 'Trades'])
 
 
-def test_setup_type_rows_pool_their_setups():
-    """Continuation is High Continuation plus Low Continuation."""
-    result = calculate_setup_statistics(get_sample_data()).set_index('Setup')
-    assert (result.loc['High Continuation', 'Trades']
-            + result.loc['Low Continuation', 'Trades']
-            == result.loc['Continuation', 'Trades'])
-
-
-def test_setup_statistics_keeps_an_unlisted_label():
-    """A setup the export starts recording tomorrow still gets a row."""
+def test_setup_statistics_keeps_an_unlisted_type():
+    """A type the data starts carrying tomorrow still gets a row, after the
+    known ones."""
     sample = get_sample_data()
-    sample.loc[0, 'Setup'] = 'Mid Sweep'
-    result = calculate_setup_statistics(sample)
-    labels = list(result['Setup'])
-    assert 'Mid Sweep' in labels
-    assert result[result['Setup'] == 'Mid Sweep'].iloc[0]['Trades'] == 1
-    # Appended after the known setups, and still ahead of the type rows.
-    assert labels.index('Mid Sweep') > labels.index(SETUP_ORDER[-1])
-    assert labels.index('Mid Sweep') < labels.index(TYPE_ORDER[0])
+    sample.loc[0, 'Type'] = 'Sweep'
+    labels = list(calculate_setup_statistics(sample)['Setup'])
+    assert labels == ['Default'] + TYPE_ORDER + ['Sweep']
 
 
 def test_grouping_tables_handle_an_empty_dataset():

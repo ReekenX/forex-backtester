@@ -194,12 +194,10 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "Setup",
         "Setup Analysis",
         "Trades split by what the 30-minute structure did before the signal, "
-        "the same two readings as the weekday table. The setup is known before "
-        "the trade is taken, so it is a tradeable filter. Default is every "
-        "trade, the four setups are one row each, and the last two rows pool "
-        "them by type - continuation through the level against reversal off "
-        "it, read without the level. Those overlap the setup rows, so the "
-        "column does not sum. The Signal and Strategy headers are "
+        "the same two readings as the weekday table: continuation through the "
+        "level against reversal off it. The setup is known before the trade "
+        "is taken, so it is a tradeable filter. Default is every trade, and "
+        "the two type rows sum to it. The Signal and Strategy headers are "
         "click-to-sort.",
         _setup_section,
     ),

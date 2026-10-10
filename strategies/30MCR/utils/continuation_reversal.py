@@ -550,29 +550,21 @@ def _ordered_labels(values: pd.Series, preferred: List[str]) -> List[str]:
 
 def calculate_setup_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Per-setup Signal and Strategy win rates, with the type totals under them.
+    Signal and Strategy win rates for Continuation against Reversal.
 
-    The setup - "High Continuation", "Low Reversal" and so on - is what the
-    30-minute structure did before the signal, so it is known at entry and is
-    a tradeable filter.
-
-    Three levels of the same split share the table, widest first within each
-    block: "Default" is every trade, the four setups are one row each, and
-    "Continuation" and "Reversal" pool the two setups that end the same way -
-    the C and R of the strategy's name, read without the level. The type rows
-    overlap the setup rows on purpose, so the column does not sum.
+    The type - continuation through the 30-minute level or reversal off it -
+    is known at entry, so it is a tradeable filter. "Default" is every trade;
+    the two type rows split it, so they sum to it. The four level-specific
+    setups ("High Continuation" and so on) are not listed: the level alone
+    says nothing, only the type it forms with Direction does.
 
     Args:
-        df: DataFrame with trading data, including Setup and Type columns
+        df: DataFrame with trading data, including a Type column
 
     Returns:
         DataFrame with columns: Setup, Trades, Signal, Strategy
     """
     groups: List[Tuple[str, pd.DataFrame]] = [('Default', df)]
-    groups.extend(
-        (label, df[df['Setup'] == label])
-        for label in _ordered_labels(df['Setup'], SETUP_ORDER)
-    )
     groups.extend(
         (label, df[df['Type'] == label])
         for label in _ordered_labels(df['Type'], TYPE_ORDER)
