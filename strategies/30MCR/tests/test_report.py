@@ -502,3 +502,11 @@ def test_streaks_table_sits_above_the_strategies_tables():
     for label in ('Default', 'Continuation', 'Reversal'):
         assert label in html
     assert 'Longest Wins' in html and 'Longest Losses' in html
+
+
+def test_each_strategies_table_carries_an_equity_chart():
+    html = build_report(get_sample_data(), '2025-02-06 10:00:00', 'abc123')
+    for rrr in RRR_RATIOS:
+        chart = f'id="strategies-1-{rrr}-equity"'
+        assert chart in html
+        assert html.index(f'id="strategies-1-{rrr}-table"') < html.index(chart)

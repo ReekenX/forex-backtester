@@ -359,6 +359,14 @@ Where the pages still differ:
   still carry the older Strategies shape - `Min SL` / `Max SL` gate columns,
   buffers `+0` to `+3`, and `Max SL X` rows - because `Trend` has no
   data-independent meaning there.
+- **Each Strategies table carries an equity chart under it.**
+  `calculate_equity_curves(df, rrr)` walks every row of that table trade
+  by trade in date order, +RRR per win and -1 per loss under the same
+  rule, with trades outside the row's trend left flat so the curves line
+  up in time. `create_equity_chart` draws them as one SVG: the five best
+  final outcomes in categorical slots 1-5 with direct labels and a legend,
+  the rest in a recessive grey that comes forward on hover with a tooltip
+  naming the row and its R at that trade.
 - **Everything right of `TP` is dropped at load** - see
   the data format above, including the places the sheet's own figures and
   this page's disagree.

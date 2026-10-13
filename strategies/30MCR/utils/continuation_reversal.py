@@ -32,6 +32,7 @@ setup can be read with the level and without it.
 
 import math
 import re
+from html import escape
 from typing import Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -1276,6 +1277,312 @@ def calculate_buffer_statistics(df: pd.DataFrame,
                             max_sl))
 
     return _sort_strategy_rows(pd.DataFrame(results))
+
+
+# ---------------------------------------------------------------------------
+# Strategy equity curves
+# ---------------------------------------------------------------------------
+
+# Lines coloured apart on the chart; the rest draw in one recessive grey and
+# only come forward on hover. Five is the ceiling the categorical palette
+# keeps distinct, so the five best outcomes get the colours.
+EQUITY_HIGHLIGHT = 5
+# Categorical slots 1-5 of the dark palette, in fixed order.
+EQUITY_COLOURS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181']
+EQUITY_OTHER_COLOUR = '#4a4a4a'
+
+# SVG viewBox and the plot area inside it; the right margin holds the direct
+# labels of the coloured lines.
+EQUITY_WIDTH = 1100
+EQUITY_HEIGHT = 340
+EQUITY_MARGIN = {'top': 12, 'right': 300, 'bottom': 28, 'left': 52}
+
+_EQUITY_CHART_CSS = """
+    <style>
+        .eq-chart { font-family: 'Courier New', monospace; font-size: 12px;
+                    color: #e0e0e0; margin-top: 16px; padding: 14px 16px;
+                    background-color: #1e1e1e; border: 1px solid #404040;
+                    position: relative; }
+        .eq-legend { display: flex; flex-wrap: wrap; gap: 6px 18px;
+                     margin: 0 0 8px 0; color: #a0a0a0; }
+        .eq-swatch { display: inline-block; width: 14px; height: 3px;
+                     border-radius: 2px; margin-right: 6px;
+                     vertical-align: 3px; }
+        .eq-chart svg { display: block; width: 100%; height: auto;
+                        overflow: visible; }
+        .eq-grid { stroke: #2d2d2d; stroke-width: 1; }
+        .eq-zero { stroke: #a0a0a0; stroke-width: 1;
+                   stroke-dasharray: 4 4; }
+        .eq-axis { fill: #808080; font-size: 11px; }
+        .eq-hit { fill: none; stroke: transparent; stroke-width: 10;
+                  cursor: crosshair; }
+        .eq-line { fill: none; stroke-width: 1; stroke-linejoin: round;
+                   stroke-linecap: round; pointer-events: none; }
+        .eq-series.eq-top .eq-line { stroke-width: 2; }
+        .eq-series:hover .eq-line, .eq-series.eq-active .eq-line {
+            stroke-width: 3; }
+        .eq-series.eq-other:hover .eq-line,
+        .eq-series.eq-other.eq-active .eq-line { stroke: #e0e0e0; }
+        .eq-label { fill: #e0e0e0; font-size: 11px; }
+        .eq-leader { stroke: #606060; stroke-width: 1; }
+        .eq-tip { position: absolute; display: none; padding: 4px 8px;
+                  background-color: #2d2d2d; border: 1px solid #404040;
+                  border-radius: 4px; color: #e0e0e0; font-size: 11px;
+                  white-space: nowrap; pointer-events: none; z-index: 2; }
+        .eq-caption { margin: 8px 0 0 0; color: #808080; font-size: 11px; }
+    </style>
+"""
+
+# Binds every chart on the page that has not been bound yet, so each chart's
+# own copy of the script picks up the charts rendered before it and the last
+# copy leaves nothing unbound.
+_EQUITY_CHART_SCRIPT = """
+    <script>
+    (function () {
+        document.querySelectorAll('.eq-chart:not([data-bound])').forEach(function (chart) {
+            chart.dataset.bound = '1';
+            var svg = chart.querySelector('svg');
+            var tip = chart.querySelector('.eq-tip');
+            var left = parseFloat(svg.dataset.left);
+            var step = parseFloat(svg.dataset.step);
+            var rrr = svg.dataset.rrr;
+            chart.querySelectorAll('.eq-series').forEach(function (series) {
+                var values = series.dataset.values.split(',').map(Number);
+                series.addEventListener('mousemove', function (event) {
+                    var point = svg.createSVGPoint();
+                    point.x = event.clientX;
+                    point.y = event.clientY;
+                    var local = point.matrixTransform(svg.getScreenCTM().inverse());
+                    var index = Math.round((local.x - left) / step);
+                    index = Math.max(0, Math.min(values.length - 1, index));
+                    var value = values[index];
+                    tip.textContent = series.dataset.label + ' · trade ' + index
+                        + ' of ' + (values.length - 1) + ' · '
+                        + (value > 0 ? '+' : '') + value.toFixed(1) + 'R at 1:' + rrr;
+                    tip.style.display = 'block';
+                    var box = chart.getBoundingClientRect();
+                    tip.style.left = (event.clientX - box.left + 14) + 'px';
+                    tip.style.top = (event.clientY - box.top - 28) + 'px';
+                    series.classList.add('eq-active');
+                    series.parentNode.appendChild(series);
+                });
+                series.addEventListener('mouseleave', function () {
+                    tip.style.display = 'none';
+                    series.classList.remove('eq-active');
+                });
+            });
+        });
+    })();
+    </script>
+"""
+
+
+def _strategy_curve_label(strategy_name: str, buffer: float, trend: str,
+                          max_sl: int) -> str:
+    """One line of text naming a Strategies table row, e.g.
+    'All Trades +1 / Reversal / cap 5' or 'Fixed SL 6 / Continuation'."""
+    parts = [strategy_name]
+    if not strategy_name.startswith("Fixed SL "):
+        parts[0] += f" +{buffer:g}"
+    if trend != 'All':
+        parts.append(trend)
+    if max_sl:
+        parts.append(f"cap {max_sl}")
+    return " / ".join(parts)
+
+
+def calculate_equity_curves(df: pd.DataFrame, rrr: float = 1) -> List[Dict]:
+    """
+    Cumulative R of every Strategies table row, trade by trade, at one RRR.
+
+    Trades are walked in date order; the export's own order breaks ties within
+    a day. A win adds the RRR in R, a loss takes 1R, under the same rule as
+    calculate_buffer_statistics: effective SL = SL + buffer, capped at Max SL,
+    and win = Pullback < effective SL AND TP >= rrr x effective SL. Every curve
+    runs over every trade, so a Continuation-only strategy sits flat through
+    the Reversal trades it would not have taken and the curves line up in
+    time. Transaction costs are not deducted.
+
+    Args:
+        df: DataFrame with trading data, including a Type column
+        rrr: Risk-reward ratio to score at
+
+    Returns:
+        One dict per strategy row, best final outcome first: label, trades
+        (the trades the strategy took), outcome (final R) and curve (the
+        cumulative R after each trade, starting from 0, so len(df) + 1 long)
+    """
+    ordered = df.sort_values('Date', kind='stable') if len(df) else df
+    curves = []
+    for strategy_name, filter_func in get_buffer_strategies():
+        filtered = filter_func(ordered)
+        for trend in TREND_FILTERS:
+            taken = (pd.Series(True, index=ordered.index) if trend == 'All'
+                     else ordered['Type'] == trend)
+            for max_sl in _caps_for(strategy_name):
+                for buffer in _buffers_for(strategy_name):
+                    effective_sl = filtered['SL'] + buffer
+                    if max_sl:
+                        effective_sl = effective_sl.clip(upper=float(max_sl))
+                    won = ((filtered['Pullback'] < effective_sl)
+                           & (filtered['TP'] >= rrr * effective_sl))
+                    per_trade = pd.Series(-1.0, index=ordered.index)
+                    per_trade[won] = float(rrr)
+                    per_trade[~taken] = 0.0
+                    curve = [0.0] + per_trade.cumsum().round(6).tolist()
+                    curves.append({
+                        'label': _strategy_curve_label(
+                            strategy_name, buffer, trend, max_sl),
+                        'trades': int(taken.sum()),
+                        'outcome': curve[-1],
+                        'curve': curve,
+                    })
+    return sorted(curves, key=lambda c: -c['outcome'])
+
+
+def _nice_step(span: float, target_ticks: int = 6) -> float:
+    """Pick a round tick step that gives about `target_ticks` across `span`."""
+    raw = max(span, 1) / target_ticks
+    for step in (1, 2, 5, 10, 20, 25, 50, 100, 200, 500):
+        if step >= raw:
+            return step
+    return 1000
+
+
+def create_equity_chart(curves: List[Dict], rrr: float = 1,
+                        chart_id: str = 'equity-chart') -> str:
+    """
+    Line chart of every strategy's cumulative R, one line per table row.
+
+    The EQUITY_HIGHLIGHT best final outcomes are coloured, labelled at their
+    right-hand end and listed in the legend; every other line draws in one
+    recessive grey so the field reads as context. Hovering any line brings it
+    forward and shows its name and its R at that trade. The dashed line is
+    0R, where trading the strategy would have broken even before costs.
+
+    Args:
+        curves: Output of calculate_equity_curves
+        rrr: The RRR the curves were scored at, for the legend and tooltip
+        chart_id: Unique DOM id for this chart
+
+    Returns:
+        HTML string with the chart, or a "No data" note when there are no
+        curves or no trades
+    """
+    if not curves or len(curves[0]['curve']) < 2:
+        return ("<p style='color: #e0e0e0; background-color: #1e1e1e; "
+                "padding: 10px;'>No data</p>")
+
+    n_points = len(curves[0]['curve'])
+    n_trades = n_points - 1
+    m = EQUITY_MARGIN
+    plot_w = EQUITY_WIDTH - m['left'] - m['right']
+    plot_h = EQUITY_HEIGHT - m['top'] - m['bottom']
+    x_step = plot_w / n_trades
+
+    lo = min(0.0, min(min(c['curve']) for c in curves))
+    hi = max(0.0, max(max(c['curve']) for c in curves))
+    tick = _nice_step(hi - lo)
+    y_min = math.floor(lo / tick) * tick
+    y_max = math.ceil(hi / tick) * tick
+    if y_max == y_min:
+        y_max = y_min + tick
+
+    def x_of(i: int) -> float:
+        return m['left'] + i * x_step
+
+    def y_of(value: float) -> float:
+        return m['top'] + (y_max - value) / (y_max - y_min) * plot_h
+
+    top = curves[:EQUITY_HIGHLIGHT]
+    rest = curves[EQUITY_HIGHLIGHT:]
+
+    out = _EQUITY_CHART_CSS
+    out += (f'<div class="eq-chart" id="{chart_id}" role="img" '
+            f'aria-label="Cumulative R per strategy at 1:{rrr:g}">')
+    out += '<div class="eq-legend">'
+    for colour, curve in zip(EQUITY_COLOURS, top):
+        out += (f'<span><span class="eq-swatch" style="background-color: '
+                f'{colour};"></span>{escape(curve["label"])} '
+                f'({curve["outcome"]:+.0f}R)</span>')
+    if rest:
+        out += (f'<span><span class="eq-swatch" style="background-color: '
+                f'{EQUITY_OTHER_COLOUR};"></span>{len(rest)} other '
+                'strategies (hover a line)</span>')
+    out += ('<span><span class="eq-swatch" style="border-top: 1px dashed '
+            '#a0a0a0; background: none; height: 0;"></span>0R breakeven'
+            '</span></div>')
+
+    out += (f'<svg viewBox="0 0 {EQUITY_WIDTH} {EQUITY_HEIGHT}" '
+            f'data-left="{m["left"]}" data-step="{x_step:.4f}" '
+            f'data-rrr="{rrr:g}">')
+
+    # Gridlines and y-axis labels.
+    value = y_min
+    while value <= y_max + 1e-9:
+        y = y_of(value)
+        cls = 'eq-zero' if value == 0 else 'eq-grid'
+        out += (f'<line class="{cls}" x1="{m["left"]}" y1="{y:.1f}" '
+                f'x2="{m["left"] + plot_w}" y2="{y:.1f}"/>')
+        out += (f'<text class="eq-axis" x="{m["left"] - 8}" y="{y + 4:.1f}" '
+                f'text-anchor="end">{value:+.0f}R</text>')
+        value += tick
+    # x-axis labels: first, last and a few in between.
+    x_tick = _nice_step(n_trades, 8)
+    # The last trade always gets a label; a regular tick that would sit on
+    # top of it is dropped.
+    labels = [i for i in range(0, n_trades + 1, int(x_tick))
+              if n_trades - i >= x_tick / 2]
+    labels.append(n_trades)
+    for i in labels:
+        out += (f'<text class="eq-axis" x="{x_of(i):.1f}" '
+                f'y="{EQUITY_HEIGHT - 8}" text-anchor="middle">{i}</text>')
+
+    def series(curve: Dict, colour: str, kind: str) -> str:
+        d = ' '.join(f'{"M" if i == 0 else "L"}{x_of(i):.1f},{y_of(v):.1f}'
+                     for i, v in enumerate(curve['curve']))
+        values = ','.join(f'{v:g}' for v in curve['curve'])
+        return (f'<g class="eq-series {kind}" data-label="'
+                f'{escape(curve["label"])}" data-values="{values}">'
+                f'<path class="eq-hit" d="{d}"/>'
+                f'<path class="eq-line" style="stroke: {colour};" d="{d}"/>'
+                '</g>')
+
+    out += '<g class="eq-lines">'
+    for curve in rest:
+        out += series(curve, EQUITY_OTHER_COLOUR, 'eq-other')
+    for colour, curve in zip(EQUITY_COLOURS, top):
+        out += series(curve, colour, 'eq-top')
+    out += '</g>'
+
+    # Direct labels at the right edge, nudged apart with leader lines so they
+    # never overprint each other where lines converge.
+    anchors = sorted(
+        ((y_of(c['outcome']), colour, c) for colour, c in zip(EQUITY_COLOURS, top)),
+        key=lambda a: a[0])
+    min_gap = 14
+    placed = []
+    for y, colour, curve in anchors:
+        slot = y if not placed else max(y, placed[-1] + min_gap)
+        placed.append(slot)
+    overflow = placed[-1] - (EQUITY_HEIGHT - m['bottom']) if placed else 0
+    if overflow > 0:
+        placed = [p - overflow for p in placed]
+    x_end = x_of(n_trades)
+    for (y, colour, curve), slot in zip(anchors, placed):
+        out += (f'<line class="eq-leader" x1="{x_end:.1f}" y1="{y:.1f}" '
+                f'x2="{x_end + 12}" y2="{slot:.1f}"/>')
+        out += (f'<circle cx="{x_end:.1f}" cy="{y:.1f}" r="3" '
+                f'fill="{colour}" stroke="#1e1e1e" stroke-width="2"/>')
+        out += (f'<text class="eq-label" x="{x_end + 16}" y="{slot + 4:.1f}">'
+                f'{escape(curve["label"])} {curve["outcome"]:+.0f}R</text>')
+    out += '</svg><div class="eq-tip"></div>'
+    out += (f'<p class="eq-caption">Cumulative R over {n_trades} trades in '
+            f'date order: +{rrr:g}R per win, -1R per loss, before costs. '
+            'Trades outside a strategy\'s trend stay flat. The best '
+            f'{len(top)} final outcomes are coloured.</p>')
+    out += '</div>' + _EQUITY_CHART_SCRIPT
+    return out
 
 
 # ---------------------------------------------------------------------------

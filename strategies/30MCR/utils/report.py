@@ -29,6 +29,7 @@ from utils.continuation_reversal import (
     RRR_RATIOS,
     _calculate_stats_with_buffer,
     calculate_buffer_statistics,
+    calculate_equity_curves,
     calculate_pullback_statistics,
     calculate_setup_statistics,
     calculate_sl_buffer_statistics,
@@ -39,6 +40,7 @@ from utils.continuation_reversal import (
     calculate_tp_statistics,
     calculate_weekday_statistics,
     create_html_table,
+    create_equity_chart,
     create_pullback_chart,
     create_r_histogram_combined,
     create_r_histogram_exact,
@@ -174,7 +176,10 @@ def _strategies_section_for(rrr: int) -> Callable[[pd.DataFrame], str]:
         # Distinct from the section anchor: a duplicate id would make
         # getElementById inside the sort script return the <section>.
         return create_html_table(
-            _sort_by_win_rate(stats), sort_id=f"strategies-1-{rrr}-table")
+            _sort_by_win_rate(stats), sort_id=f"strategies-1-{rrr}-table"
+        ) + create_equity_chart(
+            calculate_equity_curves(df, rrr), rrr,
+            chart_id=f"strategies-1-{rrr}-equity")
     return build
 
 
@@ -312,7 +317,9 @@ SECTIONS.extend(
         "(<b>Continuation</b> or <b>Reversal</b> keeps only those setups). "
         "<b>Max SL</b> caps the stop after the buffer: min(SL + buffer, cap), "
         "0 = no cap. "
-        f"Ranked by win rate. Breakeven at 1:{rrr} is {100 / (1 + rrr):.1f}%.",
+        f"Ranked by win rate. Breakeven at 1:{rrr} is {100 / (1 + rrr):.1f}%. "
+        "The chart under the table walks every row trade by trade in date "
+        "order and plots its cumulative R.",
         _strategies_section_for(rrr),
     )
     for rrr in RRR_RATIOS

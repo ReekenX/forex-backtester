@@ -31,7 +31,9 @@ from utils.continuation_reversal import (  # noqa: E402
     _drop_scratch_columns,
     _format_wl,
     _normalise_header,
+    EQUITY_HIGHLIGHT,
     calculate_buffer_statistics,
+    calculate_equity_curves,
     calculate_pullback_statistics,
     calculate_r_counts,
     calculate_setup_statistics,
@@ -43,6 +45,7 @@ from utils.continuation_reversal import (  # noqa: E402
     calculate_tp_pip_counts,
     calculate_tp_statistics,
     calculate_weekday_statistics,
+    create_equity_chart,
     create_html_table,
     create_pullback_chart,
     create_r_histogram_combined,
@@ -794,3 +797,73 @@ def test_streak_statistics_empty_dataset():
     assert list(result['Trades']) == [0, 0, 0]
     assert set(result['Longest Wins']) == {'0'}
     assert set(result['Longest Losses']) == {'0'}
+
+
+# ---------------------------------------------------------------------------
+# Strategy equity curves
+# ---------------------------------------------------------------------------
+
+def test_equity_curves_cover_every_strategies_row():
+    df = get_sample_data()
+    curves = calculate_equity_curves(df, 1)
+    table = calculate_buffer_statistics(df)
+    assert len(curves) == len(table[table['RRR'] == '1:1'])
+    assert all(len(c['curve']) == len(df) + 1 for c in curves)
+    assert all(c['curve'][0] == 0.0 for c in curves)
+    outcomes = [c['outcome'] for c in curves]
+    assert outcomes == sorted(outcomes, reverse=True)
+
+
+def test_equity_curve_outcome_matches_the_table_notation():
+    """Final R is wins x RRR - losses, from the same rule the table scores."""
+    df = get_sample_data()
+    for rrr in RRR_RATIOS:
+        curves = {c['label']: c for c in calculate_equity_curves(df, rrr)}
+        table = calculate_buffer_statistics(df)
+        row = table[(table['Strategy'] == 'All Trades') & (table['Buffer'] == '+1')
+                    & (table['Trend'] == 'Reversal') & (table['Max SL'] == 5)
+                    & (table['RRR'] == f'1:{rrr}')].iloc[0]
+        wins, losses = (int(v[:-1]) for v in row['Notation'].split(' \u2013 '))
+        curve = curves['All Trades +1 / Reversal / cap 5']
+        assert curve['outcome'] == wins * rrr - losses
+        assert curve['trades'] == wins + losses == row['Trades']
+
+
+def test_equity_curve_stays_flat_outside_its_trend():
+    df = get_sample_data()
+    curves = {c['label']: c for c in calculate_equity_curves(df, 1)}
+    ordered = df.sort_values('Date', kind='stable')
+    steps = pd.Series(curves['Fixed SL 5 / Reversal']['curve']).diff().dropna()
+    assert (steps[(ordered['Type'] != 'Reversal').values] == 0).all()
+    assert (steps[(ordered['Type'] == 'Reversal').values] != 0).all()
+
+
+def test_equity_curves_walk_trades_in_date_order():
+    df = pd.DataFrame({
+        'Date': ['2025-02-04', '2025-02-03'],
+        'Type': ['Continuation', 'Continuation'],
+        'SL': [5.0, 5.0], 'Pullback': [1.0, 5.0], 'TP': [10.0, 0.0],
+    })
+    curves = {c['label']: c for c in calculate_equity_curves(df, 1)}
+    assert curves['All Trades +0']['curve'] == [0.0, -1.0, 0.0]
+
+
+def test_equity_curves_empty_dataset():
+    curves = calculate_equity_curves(get_empty_data(), 1)
+    assert curves and all(c['curve'] == [0.0] for c in curves)
+    assert 'No data' in create_equity_chart(curves, 1)
+    assert 'No data' in create_equity_chart([], 1)
+
+
+def test_equity_chart_draws_every_curve_and_colours_the_best():
+    curves = calculate_equity_curves(get_sample_data(), 2)
+    html = create_equity_chart(curves, 2, chart_id='eq-test')
+    assert 'id="eq-test"' in html
+    assert html.count('class="eq-series') == len(curves)
+    assert html.count('class="eq-series eq-top"') == EQUITY_HIGHLIGHT
+    assert html.count('class="eq-series eq-other"') == len(curves) - EQUITY_HIGHLIGHT
+    for curve in curves[:EQUITY_HIGHLIGHT]:
+        assert curve['label'] in html
+    assert 'data-rrr="2"' in html
+    assert 'class="eq-zero"' in html
+    assert '+2R per win' in html
