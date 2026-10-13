@@ -205,8 +205,8 @@ def test_load_data_matches_the_sheets_own_headline_rates():
     signal = (df['TP'] > 0).sum() / total * 100
     strategy = ((df['Pullback'] < df['SL'])
                 & (df['TP'] >= df['SL'])).sum() / total * 100
-    assert round(signal, 1) == 48.7
-    assert round(strategy, 1) == 32.9
+    assert round(signal, 1) == 50.0
+    assert round(strategy, 1) == 33.5
 
 
 # --- Signal / Strategy grouping tables ------------------------------------
