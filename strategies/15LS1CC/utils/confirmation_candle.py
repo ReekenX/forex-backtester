@@ -15,6 +15,7 @@ the right of it is scratch work and is loaded but unused.
 """
 
 import math
+import re
 from decimal import Decimal, ROUND_HALF_UP
 
 import pandas as pd
@@ -990,6 +991,117 @@ def display_weekday(df: pd.DataFrame):
     display(HTML(html_table))
 
 
+CHART_SERIES = [('Signal', '#3987e5'), ('Strategy', '#d95926')]
+
+# Strategy is scored at 1:1, where a win rate has to clear 50% to pay.
+CHART_BREAKEVEN = 50
+
+_CHART_CSS = """
+    <style>
+        .wr-chart { font-family: 'Courier New', monospace; font-size: 12px;
+                    color: #e0e0e0; margin-top: 16px; padding: 14px 16px;
+                    background-color: #1e1e1e; border: 1px solid #404040; }
+        .wr-legend { display: flex; gap: 18px; margin: 0 0 8px 120px;
+                     color: #a0a0a0; }
+        .wr-swatch { display: inline-block; width: 10px; height: 10px;
+                     border-radius: 2px; margin-right: 6px;
+                     vertical-align: -1px; }
+        .wr-body { position: relative; }
+        .wr-grid { position: absolute; top: 0; bottom: 0; left: 120px;
+                   right: 64px; pointer-events: none; }
+        .wr-gridline { position: absolute; top: 0; bottom: 0;
+                       border-left: 1px solid #2d2d2d; }
+        .wr-breakeven { position: absolute; top: 0; bottom: 0;
+                        border-left: 1px dashed #a0a0a0; }
+        .wr-row { display: grid; grid-template-columns: 120px 1fr 64px;
+                  align-items: center; padding: 6px 0; }
+        .wr-row:hover { background-color: #2a2a2a; }
+        .wr-label { padding-right: 10px; }
+        .wr-count { display: block; color: #808080; font-size: 11px; }
+        .wr-track { position: relative; display: flex;
+                    flex-direction: column; gap: 2px; }
+        .wr-bar-line { position: relative; height: 12px; }
+        .wr-bar { height: 12px; border-radius: 0 4px 4px 0; }
+        .wr-value { position: absolute; top: -1px; margin-left: 4px;
+                    padding: 0 3px; background-color: #1e1e1e;
+                    color: #e0e0e0; white-space: nowrap; font-size: 11px; }
+        .wr-row:hover .wr-value { background-color: #2a2a2a; }
+        .wr-axis { position: relative; height: 16px; margin: 4px 64px 0 120px;
+                   color: #808080; font-size: 11px; }
+        .wr-tick { position: absolute; transform: translateX(-50%); }
+    </style>
+"""
+
+
+def _parse_wl(cell: str) -> Tuple[int, int]:
+    """Read wins and losses back out of a '13W - 12L (52.0%)' cell."""
+    wins, losses = re.match(r'\s*(\d+)W - (\d+)L', cell).groups()
+    return int(wins), int(losses)
+
+
+def create_signal_strategy_chart(stats: pd.DataFrame) -> str:
+    """
+    Paired horizontal bars of Signal and Strategy win rate, one pair per row.
+
+    Drawn from the very table it sits under - a `<label>, Trades, Signal,
+    Strategy` frame - so the chart and the table cannot disagree. Both bars
+    share one 0-100% axis, with a dashed line at the 1:1 breakeven, so the gap
+    between the two readings - the cost of entry timing - and the distance to
+    breakeven read at a glance. Every bar carries its value at the tip and a
+    hover tooltip with the W/L counts.
+
+    Args:
+        stats: DataFrame whose first column labels the rows and which carries
+            Trades, Signal and Strategy columns in the _format_wl shape
+
+    Returns:
+        HTML string with the chart, or a "No data" note for an empty frame
+    """
+    if stats.empty:
+        return ("<p style='color: #e0e0e0; background-color: #1e1e1e; "
+                "padding: 10px;'>No data</p>")
+
+    label_column = stats.columns[0]
+
+    html = _CHART_CSS + '<div class="wr-chart" role="img" aria-label="'
+    html += f'Signal and Strategy win rate by {label_column}">'
+    html += '<div class="wr-legend">'
+    for name, colour in CHART_SERIES:
+        html += (f'<span><span class="wr-swatch" '
+                 f'style="background-color: {colour};"></span>{name}</span>')
+    html += (f'<span><span class="wr-swatch" style="border: 1px dashed '
+             f'#a0a0a0; background: none;"></span>{CHART_BREAKEVEN}% '
+             'breakeven (1:1)</span></div>')
+
+    html += '<div class="wr-body"><div class="wr-grid">'
+    for tick in (0, 25, 75, 100):
+        html += f'<div class="wr-gridline" style="left: {tick}%;"></div>'
+    html += (f'<div class="wr-breakeven" style="left: {CHART_BREAKEVEN}%;">'
+             '</div></div>')
+
+    for _, row in stats.iterrows():
+        label = row[label_column]
+        html += (f'<div class="wr-row"><div class="wr-label">{label}'
+                 f'<span class="wr-count">{int(row["Trades"])} trades</span>'
+                 '</div><div class="wr-track">')
+        for name, colour in CHART_SERIES:
+            wins, losses = _parse_wl(row[name])
+            total = wins + losses
+            rate = wins / total * 100 if total else 0.0
+            html += (f'<div class="wr-bar-line" title="{label} - {name}: '
+                     f'{row[name]}"><div class="wr-bar" style="width: '
+                     f'{rate:.1f}%; background-color: {colour};"></div>'
+                     f'<span class="wr-value" style="left: {rate:.1f}%;">'
+                     f'{rate:.1f}%</span></div>')
+        html += '</div><div></div></div>'
+
+    html += '</div><div class="wr-axis">'
+    for tick in (0, 25, 50, 75, 100):
+        html += f'<span class="wr-tick" style="left: {tick}%;">{tick}%</span>'
+    html += '</div></div>'
+    return html
+
+
 def calculate_htf_alignment_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate 4H trend alignment statistics under both readings of a trade.
@@ -1265,6 +1377,9 @@ SL_BUFFER_PIPS = [0, 1, 2, 3, 4, 5]
 # Stop sizes to substitute for every trade's recorded SL.
 SL_FIXED_PIPS = [3, 4, 5, 6, 7, 8, 9, 10]
 
+# Caps for the Cap SL table, widest first.
+SL_MAX_PIPS = [9, 8, 7, 6, 5, 4]
+
 
 def _pip_label(pips: int) -> str:
     """Render a pip count for a table cell: '0 pips', '1 pip', '2 pips'."""
@@ -1322,7 +1437,8 @@ def _sl_scenario_statistics(df: pd.DataFrame, scenarios: List[Tuple[str, object]
 
 
 def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float],
-                         column: str) -> pd.DataFrame:
+                         column: str,
+                         with_signal: bool = False) -> pd.DataFrame:
     """
     Score every trade at 1:1 with each stop adjustment applied.
 
@@ -1333,9 +1449,12 @@ def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float],
         df: DataFrame with trading data
         shifts: Pip adjustments to apply to every trade's SL
         column: Name for the leading column (e.g. 'SL Buffer')
+        with_signal: Emit the Signal/Strategy shape instead of Notation/Win
+            Rate - see _sl_scenario_statistics
 
     Returns:
-        DataFrame with columns: <column>, Trades, Notation, Win Rate
+        DataFrame with columns: <column>, Trades, Notation, Win Rate - or
+        <column>, Trades, Signal, Strategy when with_signal is set
     """
     scenarios = []
     for shift in shifts:
@@ -1343,10 +1462,12 @@ def _sl_shift_statistics(df: pd.DataFrame, shifts: List[float],
         label = "Default" if shift == 0 else _pip_label(abs(int(shift)))
         scenarios.append((label, effective_sl))
 
-    return _sl_scenario_statistics(df, scenarios, column)
+    return _sl_scenario_statistics(df, scenarios, column,
+                                   with_signal=with_signal)
 
 
-def calculate_sl_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_sl_buffer_statistics(df: pd.DataFrame,
+                                   with_signal: bool = False) -> pd.DataFrame:
     """
     Calculate 1:1 win/loss statistics for progressively wider stops.
 
@@ -1360,11 +1481,16 @@ def calculate_sl_buffer_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
     Args:
         df: DataFrame with trading data
+        with_signal: Emit the Signal/Strategy shape the charts read, instead
+            of the Notation/Win Rate shape the table shows - same scenarios,
+            same win rule
 
     Returns:
-        DataFrame with columns: SL Buffer, Trades, Notation, Win Rate
+        DataFrame with columns: SL Buffer, Trades, Notation, Win Rate - or
+        SL Buffer, Trades, Signal, Strategy when with_signal is set
     """
-    return _sl_shift_statistics(df, SL_BUFFER_PIPS, 'SL Buffer')
+    return _sl_shift_statistics(df, SL_BUFFER_PIPS, 'SL Buffer',
+                                with_signal=with_signal)
 
 
 def calculate_sl_fixed_statistics(df: pd.DataFrame) -> pd.DataFrame:
@@ -1429,83 +1555,226 @@ def display_analysis_sl_fixed(df: pd.DataFrame):
         stats_df, "sl-fixed-table", first_col_width="40%")))
 
 
+def calculate_sl_max_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    1:1 win/loss statistics with the recorded stop capped at N pips.
+
+    Effective SL = min(SL, N): a trade whose safe stop is already inside the
+    cap keeps it, a wider one is tightened to N. Both the survival check and
+    the 1:1 target use the capped stop, so a capped trade is stopped out
+    sooner but needs less TP to win. The first row keeps the recorded stops.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with columns: Cap SL, Trades, Signal, Strategy
+    """
+    scenarios: List[Tuple[str, object]] = [('Default', df['SL'])]
+    scenarios.extend(
+        (_pip_label(pips), df['SL'].clip(upper=float(pips)))
+        for pips in SL_MAX_PIPS
+    )
+    return _sl_scenario_statistics(df, scenarios, 'Cap SL', with_signal=True)
+
+
+def display_analysis_sl_max(df: pd.DataFrame):
+    """
+    Display 1:1 win/loss statistics with the recorded stop capped at N pips.
+
+    The Win Rate column header is click-to-sort, descending.
+
+    Args:
+        df: DataFrame with trading data
+    """
+    from IPython.display import display, HTML
+
+    title_html = ("<h2 style='color: #e0e0e0; background-color: #1e1e1e; "
+                  "padding: 10px;'>Cap SL Analysis</h2>")
+    display(HTML(title_html))
+
+    stats_df = calculate_sl_max_statistics(df)
+    display(HTML(_create_sl_sortable_table(
+        stats_df, "sl-max-table", first_col_width="40%")))
+
+
 PULLBACK_ENTRY_PIPS = [0, 1, 2, 3]
+PULLBACK_BUFFER_PIPS = 1
 
 
-def _format_wlm(wins: int, losses: int, missed: int) -> str:
-    """Format winners/losers/missed-winners into '1W - 2L - 3M'."""
-    return f"{wins}W - {losses}L - {missed}M"
-
-
-def _entered_win_rate(wins: int, losses: int) -> str:
-    """Win rate over ENTERED trades only; missed winners never filled."""
-    entered = wins + losses
-    return f"{(wins / entered * 100) if entered > 0 else 0.0:.1f}%"
+def _format_wml(wins: int, missed: int, losses: int) -> str:
+    """Format tapped winners/missed winners/losers into '1W - 2M - 3L'."""
+    return f"{wins}W - {missed}M - {losses}L"
 
 
 def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate limit-order pullback-entry statistics at 1:1 RRR across all trades.
+    Limit-order pullback-entry statistics at 1:1 RRR.
 
     A limit order placed N pips into the pullback fills only if price pulled
     back at least N pips (Pullback >= N). One extra level scales the fill
     threshold to each trade's own stop: "Half" fills when the pullback reached
     at least half the SL.
 
+    Every level except Default then repeats with the stop padded by
+    PULLBACK_BUFFER_PIPS, scored with the Adding Buffer rule. The fill
+    threshold does not move - "Half" still means half the recorded SL - so
+    each buffered row differs from its plain twin by the stop alone.
+
+    Every row splits the whole dataset three ways:
+
+        winner = Pullback < SL + buffer AND TP >= SL + buffer
+        W = tapped winners (winner AND the limit filled)
+        M = missed winners (winner, but the pullback never reached the limit)
+        L = losers - not winners whatever the pullback, so the same on every
+            row that shares a buffer
+
     The first row, "Default", is the 0-pip level: no limit order, every trade
     taken at the signal, so nothing is missed. It matches the Default row of
     the other stop tables.
-
-    A trade wins at 1:1 when it survives its stop and reaches the target:
-        winner = Pullback < SL AND TP >= SL
-        W = entered winners; L = entered - W; M = missed winners (winners whose
-        pullback never reached the fill threshold, so the limit never filled)
-
-    Missed winners are excluded from Trades because those trades were never
-    entered, and from Win Rate for the same reason.
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: Pullback, Trades, Notation, Win Rate
+        DataFrame with columns: Pullback, Trades
     """
-    results = []
-
     levels = [
-        ('Default' if n == 0 else (f"{n} pip" if n == 1 else f"{n} pips"),
-         df['Pullback'] >= n)
+        ('Default' if n == 0 else _pip_label(n), df['Pullback'] >= n)
         for n in PULLBACK_ENTRY_PIPS
     ]
     levels.append(('Half', df['Pullback'] >= df['SL'] / 2))
 
-    winner = (df['Pullback'] < df['SL']) & (df['TP'] >= df['SL'])
+    buffer = PULLBACK_BUFFER_PIPS
+    rows = [(label, tapped, 0) for label, tapped in levels]
+    rows.extend(
+        (f"{label} + {_pip_label(buffer)} buffer", tapped, buffer)
+        for label, tapped in levels[1:]
+    )
 
-    for label, entered in levels:
-        entered_total = int(entered.sum())
-        wins = int((entered & winner).sum())
-        losses = entered_total - wins
-        missed = int((~entered & winner).sum())
-
+    results = []
+    for label, tapped, pad in rows:
+        effective_sl = df['SL'] + pad
+        winner = (df['Pullback'] < effective_sl) & (df['TP'] >= effective_sl)
+        wins = int((tapped & winner).sum())
+        missed = int((~tapped & winner).sum())
+        losses = int((~winner).sum())
         results.append({
             'Pullback': label,
-            'Trades': entered_total,
-            'Notation': _format_wlm(wins, losses, missed),
-            'Win Rate': _entered_win_rate(wins, losses),
+            'Trades': _format_wml(wins, missed, losses),
         })
 
     return pd.DataFrame(results)
 
 
+# Segment colours for the pullback chart: W and M take categorical slots 1
+# and 2 of the dark palette, the same pair as the Signal/Strategy charts. L is
+# a recessive grey - it is the same on every row of a stop, so it is context
+# rather than a series to compare.
+PULLBACK_SEGMENTS = [
+    ('W', 'Tapped winners', '#3987e5'),
+    ('M', 'Missed winners', '#d95926'),
+    ('L', 'Losers', '#4a4a4a'),
+]
+
+_PULLBACK_CHART_CSS = """
+    <style>
+        .pb-chart { font-family: 'Courier New', monospace; font-size: 12px;
+                    color: #e0e0e0; margin-top: 16px; padding: 14px 16px;
+                    background-color: #1e1e1e; border: 1px solid #404040; }
+        .pb-legend { display: flex; gap: 18px; margin: 0 0 8px 200px;
+                     color: #a0a0a0; }
+        .pb-swatch { display: inline-block; width: 10px; height: 10px;
+                     border-radius: 2px; margin-right: 6px;
+                     vertical-align: -1px; }
+        .pb-row { display: grid; grid-template-columns: 200px 1fr;
+                  align-items: center; padding: 5px 0; }
+        .pb-row:hover { background-color: #2a2a2a; }
+        .pb-group { margin-top: 12px; border-top: 1px solid #2d2d2d;
+                    padding-top: 11px; }
+        .pb-stack { display: flex; gap: 2px; height: 20px; }
+        .pb-seg { display: flex; align-items: center; justify-content: center;
+                  overflow: hidden; white-space: nowrap; font-size: 11px;
+                  color: #ffffff; }
+        .pb-seg:first-child { border-radius: 4px 0 0 4px; }
+        .pb-seg:last-child { border-radius: 0 4px 4px 0; }
+    </style>
+"""
+
+
+def _parse_wml(cell: str) -> Tuple[int, int, int]:
+    """Read W, M and L back out of a '25W - 12M - 11L' cell."""
+    wins, missed, losses = re.match(
+        r'\s*(\d+)W - (\d+)M - (\d+)L', cell).groups()
+    return int(wins), int(missed), int(losses)
+
+
+def create_pullback_chart(stats: pd.DataFrame) -> str:
+    """
+    One 100% stacked bar per Pullback row: tapped winners, missed winners and
+    losers, in the order the table names them.
+
+    Drawn from the table's own cells, so the two cannot disagree. Every row
+    covers every trade once, so the bars share one length and the W segment
+    shrinking into M as the limit goes deeper is the whole story. The buffered
+    rows start a second group, since they score against a wider stop. Counts
+    sit inside the segments that have room; every segment has a hover tooltip.
+
+    Args:
+        stats: DataFrame from calculate_pullback_statistics
+
+    Returns:
+        HTML string with the chart, or a "No data" note for an empty frame
+    """
+    if stats.empty:
+        return ("<p style='color: #e0e0e0; background-color: #1e1e1e; "
+                "padding: 10px;'>No data</p>")
+
+    html = _PULLBACK_CHART_CSS + ('<div class="pb-chart" role="img" '
+                                  'aria-label="Tapped winners, missed winners '
+                                  'and losers by limit depth">'
+                                  '<div class="pb-legend">')
+    for key, name, colour in PULLBACK_SEGMENTS:
+        html += (f'<span><span class="pb-swatch" style="background-color: '
+                 f'{colour};"></span>{key} = {name}</span>')
+    html += '</div>'
+
+    grouped = False
+    for _, row in stats.iterrows():
+        label = row['Pullback']
+        counts = _parse_wml(row['Trades'])
+        total = sum(counts) or 1
+        css = 'pb-row'
+        if label.endswith('buffer') and not grouped:
+            css += ' pb-group'
+            grouped = True
+        html += (f'<div class="{css}"><div>{label}</div>'
+                 '<div class="pb-stack">')
+        for (key, name, colour), count in zip(PULLBACK_SEGMENTS, counts):
+            if count == 0:
+                continue
+            share = count / total * 100
+            # Room for the count only when the segment is wide enough.
+            text = str(count) if share >= 4 else ''
+            html += (f'<div class="pb-seg" title="{label} - {name}: {count} '
+                     f'({share:.1f}% of trades)" style="flex: {count}; '
+                     f'background-color: {colour};">{text}</div>')
+        html += '</div></div>'
+
+    html += '</div>'
+    return html
+
+
 def display_analysis_pullback(df: pd.DataFrame):
     """
     Display limit-order pullback-entry statistics at 1:1 RRR for fixed
-    (0/1/2/3 pip) and SL-relative (Half/Full) pullback fill levels.
+    (0/1/2/3 pip) and SL-relative (Half) pullback fill levels, with a stacked
+    chart of the same rows below the table.
 
-    Notation is W - L - M: winners, losers and missed winners (real winners that
-    never pulled back far enough for the limit to fill). The +1/+2/+3 pip
-    columns re-score the same trades with that buffer added to the SL.
-    Each notation column header is click-to-sort by win rate, descending.
+    Trades is W - M - L: tapped winners, missed winners (real winners that
+    never pulled back far enough for the limit to fill) and losers. Every
+    level but Default repeats with a 1 pip buffer on the stop. Rows read as a
+    progression from Default outwards, so they are not sortable.
 
     Args:
         df: DataFrame with trading data
@@ -1517,8 +1786,8 @@ def display_analysis_pullback(df: pd.DataFrame):
 
     stats_df = calculate_pullback_statistics(df)
     html_table = _create_sl_sortable_table(
-        stats_df, "pullback-analysis", first_col_width="40%")
-    display(HTML(html_table))
+        stats_df, "pullback-analysis", sortable=False, first_col_width="40%")
+    display(HTML(html_table + create_pullback_chart(stats_df)))
 
 
 # Ten-pip bands, each holding TP >= low and TP < high, so a trade lands in
@@ -1555,6 +1824,103 @@ def calculate_tp_statistics(df: pd.DataFrame) -> pd.DataFrame:
         })
 
     return pd.DataFrame(results)
+
+
+# The TP chart gives every whole pip from TP_CHART_FIRST to TP_CHART_LAST its
+# own column and pools everything from TP_CHART_LAST + 1 up into one "30+".
+TP_CHART_FIRST = 8
+TP_CHART_LAST = 29
+
+_TP_CHART_CSS = """
+    <style>
+        .tp-chart { font-family: 'Courier New', monospace; font-size: 11px;
+                    color: #e0e0e0; margin-top: 16px; padding: 14px 16px;
+                    background-color: #1e1e1e; border: 1px solid #404040; }
+        .tp-plot { display: flex; align-items: flex-end; gap: 2px;
+                   height: 180px; border-bottom: 1px solid #404040; }
+        .tp-col { flex: 1; display: flex; flex-direction: column;
+                  justify-content: flex-end; align-items: stretch;
+                  height: 100%; }
+        .tp-col:hover { background-color: #2a2a2a; }
+        .tp-count { text-align: center; margin-bottom: 3px; }
+        .tp-bar { background-color: #3987e5; border-radius: 4px 4px 0 0; }
+        .tp-axis { display: flex; gap: 2px; margin-top: 4px; color: #808080; }
+        .tp-axis span { flex: 1; text-align: center; }
+        .tp-pool { margin-left: 10px; }
+        .tp-caption { margin-top: 8px; color: #a0a0a0; }
+    </style>
+"""
+
+
+def calculate_tp_pip_counts(df: pd.DataFrame) -> pd.Series:
+    """
+    Profitable trades per whole TP pip, for the TP Range chart.
+
+    A trade lands in the column of its TP rounded down, so 12.6 counts under
+    12. Every TP above TP_CHART_LAST pools into the last, "30+", column.
+    Trades below TP_CHART_FIRST are not columns; create_tp_chart reports how
+    many there are instead of dropping them silently.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        Series of counts indexed '8', '9', ..., '29', '30+'
+    """
+    pips = df.loc[df['TP'] > 0, 'TP'].astype(float).apply(math.floor)
+    counts = {str(pip): int((pips == pip).sum())
+              for pip in range(TP_CHART_FIRST, TP_CHART_LAST + 1)}
+    counts[f'{TP_CHART_LAST + 1}+'] = int((pips > TP_CHART_LAST).sum())
+    return pd.Series(counts)
+
+
+def create_tp_chart(df: pd.DataFrame) -> str:
+    """
+    Column chart of how far the profitable trades ran, one column per pip.
+
+    Every column carries its count on the cap, so there is no y-axis, and a
+    hover tooltip names the pip and the count. The pooled "30+" column is set
+    a little apart, since it spans many pips rather than one.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        HTML string with the chart, or a "No data" note when no trade has
+        TP > 0
+    """
+    profitable = int((df['TP'] > 0).sum()) if not df.empty else 0
+    if profitable == 0:
+        return ("<p style='color: #e0e0e0; background-color: #1e1e1e; "
+                "padding: 10px;'>No data</p>")
+
+    counts = calculate_tp_pip_counts(df)
+    tallest = max(int(counts.max()), 1)
+
+    html = _TP_CHART_CSS + ('<div class="tp-chart" role="img" '
+                            'aria-label="Profitable trades per TP pip">'
+                            '<div class="tp-plot">')
+    pooled = counts.index[-1]
+    for label, count in counts.items():
+        height = count / tallest * 85
+        css = 'tp-col tp-pool' if label == pooled else 'tp-col'
+        html += (f'<div class="{css}" title="TP {label} pips: {count} '
+                 f'trade{"" if count == 1 else "s"}">'
+                 f'<span class="tp-count">{count if count else ""}</span>'
+                 f'<div class="tp-bar" style="height: {height:.1f}%;"></div>'
+                 '</div>')
+    html += '</div><div class="tp-axis">'
+    for label in counts.index:
+        css = ' class="tp-pool"' if label == pooled else ''
+        html += f'<span{css}>{label}</span>'
+    html += '</div>'
+
+    below = profitable - int(counts.sum())
+    caption = f'TP in pips, {profitable} profitable trades'
+    if below:
+        caption += f'; {below} below {TP_CHART_FIRST} pips not shown'
+    html += f'<div class="tp-caption">{caption}.</div></div>'
+    return html
 
 
 def display_analysis_tp(df: pd.DataFrame):

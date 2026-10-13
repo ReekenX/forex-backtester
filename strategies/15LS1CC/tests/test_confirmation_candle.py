@@ -38,14 +38,21 @@ from utils.confirmation_candle import (
     SL_RANGES,
     SL_BUFFER_PIPS,
     SL_FIXED_PIPS,
+    SL_MAX_PIPS,
     calculate_sl_statistics,
     _create_sl_sortable_table,
     calculate_sl_fixed_statistics,
+    calculate_sl_max_statistics,
     calculate_sl_buffer_statistics,
+    create_signal_strategy_chart,
     PULLBACK_ENTRY_PIPS,
+    PULLBACK_BUFFER_PIPS,
     calculate_pullback_statistics,
+    create_pullback_chart,
     TP_RANGES,
     calculate_tp_statistics,
+    calculate_tp_pip_counts,
+    create_tp_chart,
     THREE_SETUPS_RRR,
     THREE_SETUPS_COLUMNS,
     THREE_SETUPS_CUMULATIVE_KEYS,
@@ -1892,52 +1899,167 @@ def test_first_col_width_composes_with_sorting():
 
 
 def test_every_stop_table_opens_with_the_same_default_row():
-    """SL Range, Adding Buffer and Fixed SL all
-    start from the recorded stops, so their Default rows must agree."""
+    """SL Range, Adding Buffer, Fixed SL, Cap SL and Pullback all start from
+    the recorded stops, so their Default rows must agree - one shared win
+    rule."""
     sample = get_sample_data()
     tables = {
         'SL Range': (calculate_sl_statistics(sample), 'SL Range'),
         'Adding Buffer': (calculate_sl_buffer_statistics(sample), 'SL Buffer'),
         'Fixed SL': (calculate_sl_fixed_statistics(sample), 'Fixed SL'),
+        'Cap SL': (calculate_sl_max_statistics(sample), 'Cap SL'),
+        'Pullback': (calculate_pullback_statistics(sample), 'Pullback'),
     }
 
     seen = {}
     for name, (result, column) in tables.items():
         first = result.iloc[0]
         assert first[column] == 'Default', f'{name} does not open with Default'
-        # SL Range reports Signal/Strategy in one cell each; the rest keep
-        # Notation and Win Rate apart. Compare on the combined form so the
-        # shared rule stays pinned across both shapes.
+        # SL Range, Fixed SL and Cap SL report Signal/Strategy in one cell
+        # each; Adding Buffer keeps Notation and Win Rate apart; Pullback only
+        # carries a W - M - L split. Compare on W/L counts so the shared rule
+        # stays pinned across every shape.
         if 'Strategy' in result.columns:
-            seen[name] = (first['Trades'], first['Strategy'])
+            seen[name] = (first['Trades'], first['Strategy'].split(' (')[0])
+        elif 'Notation' in result.columns:
+            seen[name] = (first['Trades'], first['Notation'])
         else:
-            seen[name] = (first['Trades'],
-                          f"{first['Notation']} ({first['Win Rate']})")
+            # Nothing is missed when every trade is taken at the signal.
+            wins, missed, losses = first['Trades'].split(' - ')
+            assert missed == '0M'
+            seen[name] = (int(wins[:-1]) + int(losses[:-1]),
+                          f'{wins} - {losses}')
 
     assert len(set(seen.values())) == 1, f'Default rows disagree: {seen}'
     assert seen['SL Range'][0] == len(sample)
 
 
+def test_sl_buffer_signal_shape_scores_the_same_trades_as_the_table():
+    """The chart's Strategy column must say what the table's Notation and Win
+    Rate say, row for row; Signal repeats as the ceiling."""
+    sample = get_sample_data()
+    table = calculate_sl_buffer_statistics(sample)
+    chart = calculate_sl_buffer_statistics(sample, with_signal=True)
+    assert list(chart.columns) == ['SL Buffer', 'Trades', 'Signal', 'Strategy']
+    assert list(chart['SL Buffer']) == list(table['SL Buffer'])
+    for (_, t), (_, c) in zip(table.iterrows(), chart.iterrows()):
+        assert c['Strategy'] == f"{t['Notation']} ({t['Win Rate']})"
+    assert chart['Signal'].nunique() == 1
+
+
+def test_sl_max_statistics_lists_every_cap():
+    result = calculate_sl_max_statistics(get_sample_data())
+    assert list(result.columns) == ['Cap SL', 'Trades', 'Signal', 'Strategy']
+    assert list(result['Cap SL']) == ['Default'] + [f'{p} pips'
+                                                     for p in SL_MAX_PIPS]
+    assert SL_MAX_PIPS == [9, 8, 7, 6, 5, 4]
+    assert result['Signal'].nunique() == 1
+
+
+def test_sl_max_caps_only_wider_stops():
+    """SL 8, Pullback 6, TP 20: a 9 or 7 pip cap still survives the 6 pip
+    pullback and wins; a 6 or 5 pip cap is taken out by it. SL 3 sits inside
+    every cap, so it scores the same on every row."""
+    trades = get_sample_data().iloc[0:2].copy()
+    trades['SL'] = [8.0, 3.0]
+    trades['Pullback'] = [6.0, 1.0]
+    trades['TP'] = [20.0, 3.0]
+    result = calculate_sl_max_statistics(trades).set_index('Cap SL')
+    assert result.loc['Default', 'Strategy'].startswith('2W - 0L')
+    assert result.loc['9 pips', 'Strategy'].startswith('2W - 0L')
+    assert result.loc['7 pips', 'Strategy'].startswith('2W - 0L')
+    assert result.loc['6 pips', 'Strategy'].startswith('1W - 1L')
+    assert result.loc['5 pips', 'Strategy'].startswith('1W - 1L')
+
+
+def test_sl_max_empty():
+    result = calculate_sl_max_statistics(get_empty_data())
+    assert len(result) == len(SL_MAX_PIPS) + 1
+    assert all(result['Trades'] == 0)
+
+
+def test_chart_bars_follow_the_table_cells():
+    """Monday holds rows 1-3: one reached a target (TP 12) and survived its
+    stop too, so both readings sit at 33.3%; Thursday's two trades both
+    win on both readings."""
+    html = create_signal_strategy_chart(
+        calculate_weekday_statistics(get_sample_data()))
+    for day in WEEKDAY_ORDER:
+        assert f'{day}<span class="wr-count">' in html
+    assert html.count('class="wr-bar"') == 2 * len(WEEKDAY_ORDER)
+    assert 'width: 33.3%' in html and 'width: 100.0%' in html
+
+
+def test_chart_keeps_empty_rows_at_zero():
+    """A day with no trades draws a zero-width bar, not a crash."""
+    monday_only = get_sample_data().iloc[0:3]
+    html = create_signal_strategy_chart(
+        calculate_weekday_statistics(monday_only))
+    assert 'Friday<span class="wr-count">0 trades</span>' in html
+    assert 'width: 0.0%' in html
+
+
+def test_chart_has_a_legend_breakeven_and_tooltips():
+    html = create_signal_strategy_chart(
+        calculate_weekday_statistics(get_sample_data()))
+    assert '>Signal</span>' in html and '>Strategy</span>' in html
+    assert 'class="wr-breakeven" style="left: 50%;"' in html
+    assert 'title="Monday - Strategy: 1W - 2L (33.3%)"' in html
+
+
+def test_chart_draws_every_row_of_any_signal_strategy_table():
+    for stats in (calculate_htf_alignment_statistics(get_sample_data()),
+                  calculate_sl_statistics(get_sample_data()),
+                  calculate_sl_fixed_statistics(get_sample_data()),
+                  calculate_sl_max_statistics(get_sample_data())):
+        html = create_signal_strategy_chart(stats)
+        assert html.count('class="wr-row"') == len(stats)
+        assert f'by {stats.columns[0]}"' in html
+
+
+def test_chart_handles_an_empty_table():
+    empty = calculate_weekday_statistics(get_sample_data()).iloc[0:0]
+    assert 'No data' in create_signal_strategy_chart(empty)
+
+
+def _wml(cell):
+    """Split '1W - 2M - 3L' into (1, 2, 3)."""
+    return tuple(int(part[:-1]) for part in cell.split(' - '))
+
+
 def test_pullback_entry_pips_constant():
-    """Pullback entry levels are 0, 1, 2 and 3 pips."""
+    """Pullback entry levels are 0, 1, 2 and 3 pips, padded by 1 pip."""
     assert PULLBACK_ENTRY_PIPS == [0, 1, 2, 3]
+    assert PULLBACK_BUFFER_PIPS == 1
 
 
 def test_pullback_statistics_columns():
-    """Same column shape as the other stop tables."""
-    sample = get_sample_data()
-    result = calculate_pullback_statistics(sample)
-    assert list(result.columns) == ['Pullback', 'Trades', 'Notation', 'Win Rate']
+    """Pullback, Trades - the W - M - L split lives in the Trades cell."""
+    result = calculate_pullback_statistics(get_sample_data())
+    assert list(result.columns) == ['Pullback', 'Trades']
 
 
 def test_pullback_statistics_levels_present():
-    """All fixed and SL-relative pullback entry levels appear, Default first."""
+    """All fixed and SL-relative levels appear, Default first, then every
+    level but Default again with the buffer."""
+    result = calculate_pullback_statistics(get_sample_data())
+    assert len(result) == 2 * len(PULLBACK_ENTRY_PIPS) + 1
+    assert list(result['Pullback']) == [
+        'Default', '1 pip', '2 pips', '3 pips', 'Half',
+        '1 pip + 1 pip buffer', '2 pips + 1 pip buffer',
+        '3 pips + 1 pip buffer', 'Half + 1 pip buffer']
+
+
+def test_pullback_rows_split_every_trade_into_tapped_missed_and_lost():
+    """Each row covers the whole dataset once, and losers do not depend on
+    the limit - they lose whatever the pullback, for a given buffer."""
     sample = get_sample_data()
     result = calculate_pullback_statistics(sample)
-    assert len(result) == 5
-    assert list(result['Pullback']) == [
-        'Default', '1 pip', '2 pips', '3 pips', 'Half']
-    assert 'Full' not in list(result['Pullback'])
+    rows = [_wml(c) for c in result['Trades']]
+    assert all(sum(row) == len(sample) for row in rows)
+    buffered = result['Pullback'].str.endswith('buffer')
+    assert len({row[2] for row, b in zip(rows, buffered) if not b}) == 1
+    assert len({row[2] for row, b in zip(rows, buffered) if b}) == 1
 
 
 def test_pullback_statistics_values():
@@ -1946,46 +2068,48 @@ def test_pullback_statistics_values():
     2.5/2.5/0, 6.0/3.0/15, 8.0/7.0/10, 1.5/0.5/5.
 
     1:1 winners (PB < SL AND TP >= SL): idx 1,3,5,7,8,9 = 6; their pullbacks
-    are 0.8, 1.5, 2.0, 3.0, 7.0, 0.5.
+    are 0.8, 1.5, 2.0, 3.0, 7.0, 0.5. The other four lose on every row.
 
-    Default: all 10 entered, nothing missed.
-    1 pip: 8 entered; winners with PB < 1 (0.8, 0.5) are missed.
-    2 pips: 7 entered; missed winners: 0.8, 1.5, 0.5.
-    3 pips: 4 entered; missed winners: 0.8, 1.5, 2.0, 0.5.
+    Default: nothing missed.
+    1 pip: winners with PB < 1 (0.8, 0.5) are missed.
+    2 pips: missed 0.8, 1.5, 0.5.
+    3 pips: missed 0.8, 1.5, 2.0, 0.5.
     """
-    sample = get_sample_data()
-    rows = _pullback_rows(calculate_pullback_statistics(sample))
-
-    assert rows['Default']['Trades'] == 10
-    assert rows['Default']['Notation'] == '6W - 4L - 0M'
-    assert rows['Default']['Win Rate'] == '60.0%'
-
-    assert rows['1 pip']['Trades'] == 8
-    assert rows['1 pip']['Notation'] == '4W - 4L - 2M'
-    assert rows['1 pip']['Win Rate'] == '50.0%'
-
-    assert rows['2 pips']['Trades'] == 7
-    assert rows['2 pips']['Notation'] == '3W - 4L - 3M'
-    assert rows['2 pips']['Win Rate'] == '42.9%'
-
-    assert rows['3 pips']['Trades'] == 4
-    assert rows['3 pips']['Notation'] == '2W - 2L - 4M'
-    assert rows['3 pips']['Win Rate'] == '50.0%'
+    rows = _pullback_rows(calculate_pullback_statistics(get_sample_data()))
+    assert rows['Default']['Trades'] == '6W - 0M - 4L'
+    assert rows['1 pip']['Trades'] == '4W - 2M - 4L'
+    assert rows['2 pips']['Trades'] == '3W - 3M - 4L'
+    assert rows['3 pips']['Trades'] == '2W - 4M - 4L'
 
 
 def test_pullback_statistics_half_values():
-    """Half fills when Pullback >= SL/2.
+    """Half fills when Pullback >= SL/2: among the six winners that is
+    1.1/0.8, 6.0/3.0 and 8.0/7.0 -> 3W; 4.0/1.5, 5.0/2.0 and 1.5/0.5 are
+    missed -> 3M."""
+    rows = _pullback_rows(calculate_pullback_statistics(get_sample_data()))
+    assert rows['Half']['Trades'] == '3W - 3M - 4L'
 
-    Half entered: PB >= SL/2 at idx 0,1,2,4,6,7,8 -> 7 trades; winners among
-    them are 1.1/0.8/12, 6.0/3.0/15, 8.0/7.0/10 -> 3W, 4L, missed winners
-    4.0/1.5/10, 5.0/2.0/8, 1.5/0.5/5 -> 3M.
-    """
-    sample = get_sample_data()
-    rows = _pullback_rows(calculate_pullback_statistics(sample))
 
-    assert rows['Half']['Trades'] == 7
-    assert rows['Half']['Notation'] == '3W - 4L - 3M'
-    assert rows['Half']['Win Rate'] == '42.9%'
+def test_pullback_buffer_rows_pad_the_stop_but_not_the_limit():
+    """SL 3, Pullback 3.5, TP 6 loses on its own stop; at SL + 1 the 3.5
+    pullback survives the 4 pip stop and TP 6 clears the 4 pip target. The
+    3.5 pullback taps a 1 pip limit either way - the buffer moves only the
+    stop. Half still reads the recorded SL (1.5), which 3.5 also taps."""
+    trades = pd.DataFrame({
+        'Date': ['2026-01-01'],
+        'Weekday': ['Monday'],
+        'Trade': ['#1'],
+        'Direction': ['Buy'],
+        'SL': [3.0],
+        'Pullback': [3.5],
+        'TP': [6.0],
+        'R': [-2.0],
+    })
+    rows = _pullback_rows(calculate_pullback_statistics(trades))
+    assert rows['1 pip']['Trades'] == '0W - 0M - 1L'
+    assert rows['1 pip + 1 pip buffer']['Trades'] == '1W - 0M - 0L'
+    assert rows['Half']['Trades'] == '0W - 0M - 1L'
+    assert rows['Half + 1 pip buffer']['Trades'] == '1W - 0M - 0L'
 
 
 def test_pullback_statistics_half_entry_can_still_win():
@@ -2001,31 +2125,26 @@ def test_pullback_statistics_half_entry_can_still_win():
         'TP': [10.0],
         'R': [2.5],
     })
-
     rows = _pullback_rows(calculate_pullback_statistics(trades))
-
-    assert rows['Half']['Trades'] == 1
-    assert rows['Half']['Notation'] == '1W - 0L - 0M'
-    assert rows['Half']['Win Rate'] == '100.0%'
+    assert rows['Half']['Trades'] == '1W - 0M - 0L'
 
 
 def test_pullback_statistics_deeper_entry_misses_more_winners():
-    """Every step deeper into the pullback fills fewer trades and strands more
-    winners as missed."""
-    sample = get_sample_data()
-    rows = _pullback_rows(calculate_pullback_statistics(sample))
-
-    trades = [rows[k]['Trades'] for k in ['Default', '1 pip', '2 pips', '3 pips']]
-    assert trades == sorted(trades, reverse=True)
-
-    missed = [int(rows[k]['Notation'].split('- ')[-1].rstrip('M'))
-              for k in ['Default', '1 pip', '2 pips', '3 pips']]
+    """Every step deeper into the pullback taps fewer winners and strands
+    more as missed."""
+    rows = _pullback_rows(calculate_pullback_statistics(get_sample_data()))
+    levels = ['Default', '1 pip', '2 pips', '3 pips']
+    tapped = [_wml(rows[k]['Trades'])[0] for k in levels]
+    missed = [_wml(rows[k]['Trades'])[1] for k in levels]
+    assert tapped == sorted(tapped, reverse=True)
     assert missed == sorted(missed)
 
 
 def test_pullback_statistics_stopped_trade_is_loss_not_win():
-    """A trade that reaches TP but pulls back past its SL is a filled LOSS,
-    never a win, however deep the entry."""
+    """A trade that reaches TP but pulls back to its SL is a loss, never a
+    win, however deep the entry. A 1 pip buffer moves the stop to 3, which the
+    3.0 pullback still reaches (Pullback < SL is strict), so it loses there
+    too."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
         'Weekday': ['Monday'],
@@ -2036,17 +2155,15 @@ def test_pullback_statistics_stopped_trade_is_loss_not_win():
         'TP': [10.0],       # reached target only in hindsight
         'R': [-5.0],
     })
-
     rows = _pullback_rows(calculate_pullback_statistics(trades))
-
-    assert rows['1 pip']['Trades'] == 1
-    assert rows['1 pip']['Notation'] == '0W - 1L - 0M'
-    assert rows['1 pip']['Win Rate'] == '0.0%'
+    assert rows['Default']['Trades'] == '0W - 0M - 1L'
+    assert rows['1 pip']['Trades'] == '0W - 0M - 1L'
+    assert rows['1 pip + 1 pip buffer']['Trades'] == '0W - 0M - 1L'
 
 
 def test_pullback_statistics_missed_winner():
-    """A real winner whose pullback is too shallow to fill the limit is a
-    missed winner (M), not entered (Trades and Win Rate exclude it)."""
+    """A real winner whose pullback is too shallow to tap the limit is a
+    missed winner (M), not a loss."""
     trades = pd.DataFrame({
         'Date': ['2026-01-01'],
         'Weekday': ['Monday'],
@@ -2057,40 +2174,87 @@ def test_pullback_statistics_missed_winner():
         'TP': [10.0],       # survives stop and TP >= SL -> 1:1 winner
         'R': [2.0],
     })
-
     rows = _pullback_rows(calculate_pullback_statistics(trades))
-
-    assert rows['Default']['Trades'] == 1
-    assert rows['Default']['Notation'] == '1W - 0L - 0M'
-    assert rows['Default']['Win Rate'] == '100.0%'
-    assert rows['1 pip']['Trades'] == 0
-    assert rows['1 pip']['Notation'] == '0W - 0L - 1M'
-    assert rows['1 pip']['Win Rate'] == '0.0%'
+    assert rows['Default']['Trades'] == '1W - 0M - 0L'
+    assert rows['1 pip']['Trades'] == '0W - 1M - 0L'
 
 
-def test_pullback_statistics_sortable_columns():
-    """Win Rate is the one click-to-sort column now; the rest stay plain."""
-    sample = get_sample_data()
-    stats = calculate_pullback_statistics(sample)
-    html = _create_sl_sortable_table(stats, "pullback-analysis")
-
-    for idx, col in enumerate(stats.columns):
-        if col == 'Win Rate':
-            assert f"sortSlRange('pullback-analysis', {idx}, this)" in html
-        else:
-            assert f"sortSlRange('pullback-analysis', {idx}, this)" not in html
-            assert f">{col}</th>" in html
+def test_pullback_table_is_not_sortable():
+    """Rows read as a progression from Default outwards, and the W - M - L
+    cell carries no percentage to sort on anyway."""
+    stats = calculate_pullback_statistics(get_sample_data())
+    html = _create_sl_sortable_table(stats, "pullback-analysis", sortable=False)
+    assert "sortSlRange" not in html
+    assert ">Pullback</th>" in html and ">Trades</th>" in html
 
 
 def test_pullback_statistics_empty():
-    """Test Pullback statistics with empty dataset."""
-    empty = get_empty_data()
-    result = calculate_pullback_statistics(empty)
-    assert len(result) == 5
-    for _, row in result.iterrows():
-        assert row['Trades'] == 0
-        assert row['Notation'] == '0W - 0L - 0M'
-        assert row['Win Rate'] == '0.0%'
+    result = calculate_pullback_statistics(get_empty_data())
+    assert len(result) == 2 * len(PULLBACK_ENTRY_PIPS) + 1
+    assert all(result['Trades'] == '0W - 0M - 0L')
+
+
+def test_pullback_chart_stacks_w_m_l_from_the_table_cells():
+    stats = calculate_pullback_statistics(get_sample_data())
+    html = create_pullback_chart(stats)
+    assert html.count('class="pb-stack"') == len(stats)
+    # '2 pips' is 3W - 3M - 4L in the sample: three segments, sized by count.
+    assert 'title="2 pips - Tapped winners: 3 (30.0% of trades)"' in html
+    assert 'title="2 pips - Missed winners: 3 (30.0% of trades)"' in html
+    assert 'title="2 pips - Losers: 4 (40.0% of trades)"' in html
+
+
+def test_pullback_chart_skips_empty_segments():
+    """Default misses nothing, so it draws no M segment at all."""
+    html = create_pullback_chart(calculate_pullback_statistics(get_sample_data()))
+    assert 'Default - Missed winners' not in html
+
+
+def test_pullback_chart_starts_a_group_at_the_buffered_rows():
+    html = create_pullback_chart(calculate_pullback_statistics(get_sample_data()))
+    assert html.count('pb-group') == 2  # the CSS rule and one row
+    assert html.index('pb-row pb-group') < html.index('1 pip + 1 pip buffer')
+    assert html.index('>Half<') < html.index('pb-row pb-group')
+
+
+def test_pullback_chart_handles_an_empty_table():
+    empty = calculate_pullback_statistics(get_sample_data()).iloc[0:0]
+    assert 'No data' in create_pullback_chart(empty)
+
+
+def test_tp_pip_counts_run_8_to_29_then_pool_30_plus():
+    """Profitable TPs in the sample: 12, 10, 8, 15, 10, 5. 5 is below the
+    first column; nothing reaches 30+."""
+    counts = calculate_tp_pip_counts(get_sample_data())
+    assert list(counts.index) == [str(p) for p in range(8, 30)] + ['30+']
+    assert counts['8'] == counts['12'] == counts['15'] == 1
+    assert counts['10'] == 2
+    assert counts['30+'] == 0
+    assert counts.sum() == 5
+
+
+def test_tp_pip_counts_round_down_to_the_whole_pip():
+    one = get_sample_data().iloc[1:2].assign(TP=[12.9])
+    assert calculate_tp_pip_counts(one)['12'] == 1
+
+
+def test_tp_pip_counts_pool_everything_past_29():
+    one = get_sample_data().iloc[1:2].assign(TP=[41.0])
+    counts = calculate_tp_pip_counts(one)
+    assert counts['30+'] == 1 and counts.sum() == 1
+
+
+def test_tp_chart_draws_a_column_per_pip_and_reports_what_it_leaves_out():
+    html = create_tp_chart(get_sample_data())
+    assert html.count('class="tp-bar"') == 23
+    assert 'title="TP 10 pips: 2 trades"' in html
+    assert '6 profitable trades; 1 below 8 pips not shown' in html
+
+
+def test_tp_chart_handles_no_profitable_trades():
+    assert 'No data' in create_tp_chart(get_empty_data())
+    losers = get_sample_data().assign(TP=0.0)
+    assert 'No data' in create_tp_chart(losers)
 
 
 def test_tp_ranges_constant():
@@ -2620,17 +2784,37 @@ def run_all_tests():
         test_first_col_width_is_opt_in,
         test_first_col_width_composes_with_sorting,
         test_every_stop_table_opens_with_the_same_default_row,
+        test_sl_buffer_signal_shape_scores_the_same_trades_as_the_table,
+        test_sl_max_statistics_lists_every_cap,
+        test_sl_max_caps_only_wider_stops,
+        test_sl_max_empty,
+        test_chart_bars_follow_the_table_cells,
+        test_chart_keeps_empty_rows_at_zero,
+        test_chart_has_a_legend_breakeven_and_tooltips,
+        test_chart_draws_every_row_of_any_signal_strategy_table,
+        test_chart_handles_an_empty_table,
         test_pullback_entry_pips_constant,
         test_pullback_statistics_columns,
         test_pullback_statistics_levels_present,
+        test_pullback_rows_split_every_trade_into_tapped_missed_and_lost,
         test_pullback_statistics_values,
         test_pullback_statistics_half_values,
+        test_pullback_buffer_rows_pad_the_stop_but_not_the_limit,
         test_pullback_statistics_half_entry_can_still_win,
         test_pullback_statistics_deeper_entry_misses_more_winners,
         test_pullback_statistics_stopped_trade_is_loss_not_win,
         test_pullback_statistics_missed_winner,
-        test_pullback_statistics_sortable_columns,
+        test_pullback_table_is_not_sortable,
         test_pullback_statistics_empty,
+        test_pullback_chart_stacks_w_m_l_from_the_table_cells,
+        test_pullback_chart_skips_empty_segments,
+        test_pullback_chart_starts_a_group_at_the_buffered_rows,
+        test_pullback_chart_handles_an_empty_table,
+        test_tp_pip_counts_run_8_to_29_then_pool_30_plus,
+        test_tp_pip_counts_round_down_to_the_whole_pip,
+        test_tp_pip_counts_pool_everything_past_29,
+        test_tp_chart_draws_a_column_per_pip_and_reports_what_it_leaves_out,
+        test_tp_chart_handles_no_profitable_trades,
         test_tp_ranges_constant,
         test_tp_ranges_are_contiguous_and_open_ended,
         test_tp_statistics_columns,

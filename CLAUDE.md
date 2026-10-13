@@ -91,9 +91,9 @@ and a run of `#DIV/0!` cells) is the spreadsheet's own scratch work - precompute
 R totals for stop scenarios the page recomputes itself - and `load_data` drops
 it. Those headers are renamed and repeated between exports, so the cut is
 anchored on `TP`, never on a scratch name. The header figures are still a
-useful cross-check: the sheet's `All 48.7%` and `WR 32.9%` are exactly
+useful cross-check: the sheet's `All 50%` and `WR 33.5%` are exactly
 what `calculate_setup_statistics`'s Default row reports. The place the sheet
-disagrees is its `+1pip 40.8%` against this page's 40.1%: one trade recorded
+disagrees is its `+1pip 41.1%` against this page's 40.5%: one trade recorded
 `SL 4.7, Pullback 5.7` survives a 5.7-pip stop in the sheet and not here, because the project's win rule is
 `Pullback < SL`, strictly.
 
@@ -136,8 +136,9 @@ correct calls that the recorded stop could not hold onto. A wide gap points at
 the entry, not at the idea.
 
 Report tables state which rule they use. `Weekday Analysis`, `4H Alignment
-Analysis`, `SL Range Analysis` and `Fixed SL Analysis` show both side by side;
-the remaining SL tables use Strategy only, named in each note.
+Analysis`, `SL Range Analysis`, `Fixed SL Analysis` and `Cap SL Analysis` show
+both side by side; the remaining SL tables use Strategy only, named in each
+note.
 
 `TP Range Analysis` deliberately keeps neither column: it buckets trades that
 already have `TP > 0`, so a Signal column would read 100% on every row. It is a
@@ -272,7 +273,45 @@ this.
 
 ### How the pages differ
 
-Same shell, same tables, same win rule; the data dictates the rest.
+Same shell, same tables, same win rule; the data dictates the rest. The 30MCR
+page was built last and became the template, so the charts and the stop-table
+shapes below are on all three pages - compare them side by side with
+`make serve`:
+
+- **Every Signal/Strategy table up to `Cap SL Analysis` carries a chart
+  under it** - `Weekday`, the grouping tables (`4H Alignment` on 15C; `Hour`,
+  `EMA Alignment`, `Structure` and `30M Leg` on 5OB; `Setup` on 30MCR),
+  `SL Range`, `Fixed SL` and `Cap SL`.
+  `create_signal_strategy_chart` draws Signal and Strategy as paired bars per
+  row on one 0-100% axis, with a dashed line at the 50% breakeven of 1:1. It
+  reads the W/L counts back out of the table's own cells, so the two cannot
+  disagree; the chart keeps the table's original order when a column is
+  click-sorted. Series colours are categorical slots 1 and 2 of the dark
+  palette (`#3987e5`, `#d95926`); text stays in the page's greys.
+- **`Cap SL Analysis` sits right below `Fixed SL`** on every page: the
+  recorded stop kept but capped at 9, 8, 7, 6, 5 and 4 pips,
+  `min(SL, cap)`, through `calculate_sl_max_statistics`. Rows are stop sizes
+  to compare, so the table stays click-to-sort.
+- **`Adding Buffer` carries the same chart**, with its table left in the
+  `Notation, Win Rate` shape. The chart reads
+  `calculate_sl_buffer_statistics(df, with_signal=True)` - the same scenarios
+  through the same `_sl_scenario_statistics`, so Signal repeats as the
+  ceiling exactly as it does under `Fixed SL`.
+- **`Pullback Analysis` carries a 100% stacked bar per row** under its
+  table. `create_pullback_chart` reads the `W - M - L` cells back and draws
+  tapped winners (`#3987e5`), missed winners (`#d95926`) and losers (recessive
+  grey, since L is constant per stop). The `+ 1 pip buffer` rows start a
+  second group, as they score against a wider stop.
+- **`TP Range Analysis` keeps its four-band table and adds a pip chart
+  under it.** `create_tp_chart` gives every whole TP pip from 8 to 29 its own
+  column (TP rounded down) and pools the rest into `30+`, set slightly apart.
+  Counts sit on the caps, so there is no y-axis. A TP below 8 gets no column;
+  the caption counts those instead of dropping them silently.
+- **The 15C notebook mirrors the page's tables**, so `Cap SL` has a
+  `display_analysis_sl_max` cell there too. 5OB's notebook predates the report
+  and does not; 30MCR has no notebook.
+
+Where the pages still differ:
 
 - **5OB1CC has no `R` column**, so `order_block.load_data` derives it as
   `TP / SL`, signed negative when `Pullback >= SL` - the convention the
@@ -303,29 +342,6 @@ Same shell, same tables, same win rule; the data dictates the rest.
   trade once. The setup is known at entry, so it is a tradeable filter, and the
   table is click-to-sort. There is no High/Low table and no Direction table -
   neither split said anything on its own.
-- **Every Signal/Strategy table up to `Cap SL Analysis` carries a chart
-  under it** - `Weekday`, `Setup`, `SL Range`, `Fixed SL` and `Cap SL`.
-  `create_signal_strategy_chart` draws Signal and Strategy as paired bars per
-  row on one 0-100% axis, with a dashed line at the 50% breakeven of 1:1. It
-  reads the W/L counts back out of the table's own cells, so the two cannot
-  disagree; the chart keeps the table's original order when a column is
-  click-sorted. Series colours are categorical slots 1 and 2 of the dark
-  palette (`#3987e5`, `#d95926`); text stays in the page's greys.
-- **`Adding Buffer` carries the same chart**, with its table left in the
-  `Notation, Win Rate` shape. The chart reads
-  `calculate_sl_buffer_statistics(df, with_signal=True)` - the same scenarios
-  through the same `_sl_scenario_statistics`, so Signal repeats as the
-  ceiling exactly as it does under `Fixed SL`.
-- **`Pullback Analysis` carries a 100% stacked bar per row** under its
-  table. `create_pullback_chart` reads the `W - M - L` cells back and draws
-  tapped winners (`#3987e5`), missed winners (`#d95926`) and losers (recessive
-  grey, since L is constant per stop). The `+ 1 pip buffer` rows start a
-  second group, as they score against a wider stop.
-- **`TP Range Analysis` keeps its four-band table and adds a pip chart
-  under it.** `create_tp_chart` gives every whole TP pip from 8 to 29 its own
-  column (TP rounded down) and pools the rest into `30+`, set slightly apart.
-  Counts sit on the caps, so there is no y-axis. A TP below 8 gets no column;
-  the caption counts those instead of dropping them silently.
 - **It has no `4H`, `EMA` or `Hour` column**, so none of those tables exist.
 - **It has no Three Setups trade log.** The page ends on the Strategies
   tables, and those test buffers of `+0` and `+1` only. Their `Trend`
@@ -333,7 +349,10 @@ Same shell, same tables, same win rule; the data dictates the rest.
   before the stop rule runs, so `Reversal` is High + Low Reversal only.
   Their `Max SL` column (`0` = no cap, 5, 6) caps the stop after the
   buffer, `min(SL + buffer, cap)`, and replaces the old `Max SL X` strategy
-  rows. `Fixed SL X` rows run uncapped and unbuffered only.
+  rows. `Fixed SL X` rows run uncapped and unbuffered only. 15C and 5OB
+  still carry the older Strategies shape - `Min SL` / `Max SL` gate columns,
+  buffers `+0` to `+3`, and `Max SL X` rows - because `Trend` has no
+  data-independent meaning there.
 - **Everything right of `TP` is dropped at load** - see
   the data format above, including the places the sheet's own figures and
   this page's disagree.
@@ -360,8 +379,8 @@ Sections are declared in `report.py`'s `SECTIONS` list as
 ### Conventions for stop tables
 
 The SL tables (`SL Range`, `Adding Buffer`, `Fixed SL`, `Cap SL`, `Pullback`) are
-a family and must stay consistent. Both pages have this family, each in its own
-module - keep a change to one in step with the other:
+a family and must stay consistent. All three pages have this family, each in
+its own module - keep a change to one in step with the others:
 
 - **One shared win rule.** Every stop scenario goes through
   `_sl_scenario_statistics`, which takes `(label, effective SL)` pairs. Do not
@@ -373,7 +392,7 @@ module - keep a change to one in step with the other:
   `test_every_stop_table_opens_with_the_same_default_row` pins that.
 - **Columns are `<label>, Trades, Notation, Win Rate`**, with `Notation` as
   `"12W - 3L"` and `Win Rate` as `"52.7%"` in separate columns - never combined
-  into one cell. `SL Range Analysis`, `Fixed SL Analysis` and 30MCR's
+  into one cell. `SL Range Analysis`, `Fixed SL Analysis` and
   `Cap SL Analysis` are the exceptions: they carry `<label>, Trades, Signal, Strategy` like the weekday
   and alignment tables, each cell combined as `"12W - 3L (52.7%)"` by
   `_format_wl`.
@@ -381,7 +400,7 @@ module - keep a change to one in step with the other:
   `test_every_stop_table_opens_with_the_same_default_row` compares against.
   `_sl_scenario_statistics` emits that shape via `with_signal=True`, so the win
   rule stays in one place - do not compute it in the caller.
-  30MCR's `Pullback Analysis` is a third shape: `Pullback, Trades`, with
+  `Pullback Analysis` is a third shape: `Pullback, Trades`, with
   `Trades` as `"25W - 12M - 11L"` - winners whose pullback tapped the limit,
   winners it missed, and losers, which lose whatever the pullback and so read
   the same on every row that shares a stop. Each row covers every trade once.
@@ -397,8 +416,10 @@ module - keep a change to one in step with the other:
   `Fixed SL`, `Cap SL`, `TP Range` and `Pullback` all pin `first_col_width="40%"` so they
   line up down the page.
 - **Table ids are not shared between the pages.** 15C's SL Range table is
-  `sl-range-stats`; 5OB's is `sl-range-table`. Each page's ids only have to be
-  unique within that page, so do not assume a test on one applies to the other.
+  `sl-range-stats` and its Pullback table `pullback-analysis`; 5OB's and
+  30MCR's are `sl-range-table` and `pullback-table`. Each page's ids only have
+  to be unique within that page, so do not assume a test on one applies to the
+  other.
 
 ## Previewing Lab Data
 

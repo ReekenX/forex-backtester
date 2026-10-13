@@ -36,16 +36,20 @@ from utils.order_block import (
     calculate_pullback_statistics,
     calculate_sl_buffer_statistics,
     calculate_sl_fixed_statistics,
+    calculate_sl_max_statistics,
     calculate_sl_statistics,
     calculate_structure_statistics,
     calculate_three_setups_comparison,
     calculate_tp_statistics,
     calculate_weekday_statistics,
     create_html_table,
+    create_pullback_chart,
     create_r_histogram_combined,
     create_r_histogram_exact,
+    create_signal_strategy_chart,
     create_sortable_table,
     create_three_setups_table,
+    create_tp_chart,
     get_buffer_strategies,
 )
 
@@ -80,58 +84,76 @@ SCROLL_STORAGE_KEY = "5ob1cc-scroll"
 SORT_STORAGE_KEY = "5ob1cc-sorts"
 
 
+def _with_chart(stats: pd.DataFrame, table: str) -> str:
+    """Put the Signal/Strategy chart under the table it was drawn from."""
+    return table + create_signal_strategy_chart(stats)
+
+
 def _weekday_section(df: pd.DataFrame) -> str:
-    return create_html_table(
-        calculate_weekday_statistics(df), first_col_width="40%")
+    stats = calculate_weekday_statistics(df)
+    return _with_chart(stats, create_html_table(stats, first_col_width="40%"))
 
 
 def _hour_section(df: pd.DataFrame) -> str:
-    return create_html_table(
-        calculate_hour_statistics(df), sort_id="hour-table",
-        first_col_width="40%")
+    stats = calculate_hour_statistics(df)
+    return _with_chart(stats, create_html_table(
+        stats, sort_id="hour-table", first_col_width="40%"))
 
 
 def _ema_alignment_section(df: pd.DataFrame) -> str:
-    return create_html_table(
-        calculate_ema_alignment_statistics(df), first_col_width="40%")
+    stats = calculate_ema_alignment_statistics(df)
+    return _with_chart(stats, create_html_table(stats, first_col_width="40%"))
 
 
 def _structure_section(df: pd.DataFrame) -> str:
-    return create_html_table(
-        calculate_structure_statistics(df), first_col_width="40%")
+    stats = calculate_structure_statistics(df)
+    return _with_chart(stats, create_html_table(stats, first_col_width="40%"))
 
 
 def _htf_leg_section(df: pd.DataFrame) -> str:
-    return create_html_table(
-        calculate_htf_leg_statistics(df), first_col_width="40%")
+    stats = calculate_htf_leg_statistics(df)
+    return _with_chart(stats, create_html_table(stats, first_col_width="40%"))
 
 
 def _sl_section(df: pd.DataFrame) -> str:
-    return create_sortable_table(
-        calculate_sl_statistics(df), "sl-range-table", sortable=False,
-        first_col_width="40%")
+    stats = calculate_sl_statistics(df)
+    return _with_chart(stats, create_sortable_table(
+        stats, "sl-range-table", sortable=False, first_col_width="40%"))
 
 
 def _sl_fixed_section(df: pd.DataFrame) -> str:
-    return create_sortable_table(
-        calculate_sl_fixed_statistics(df), "sl-fixed-table",
-        first_col_width="40%")
+    stats = calculate_sl_fixed_statistics(df)
+    return _with_chart(stats, create_sortable_table(
+        stats, "sl-fixed-table", first_col_width="40%"))
+
+
+def _sl_max_section(df: pd.DataFrame) -> str:
+    stats = calculate_sl_max_statistics(df)
+    return _with_chart(stats, create_sortable_table(
+        stats, "sl-max-table", first_col_width="40%"))
 
 
 def _tp_section(df: pd.DataFrame) -> str:
-    return create_html_table(calculate_tp_statistics(df), first_col_width="40%")
+    return create_html_table(
+        calculate_tp_statistics(df), first_col_width="40%"
+    ) + create_tp_chart(df)
 
 
 def _pullback_section(df: pd.DataFrame) -> str:
+    stats = calculate_pullback_statistics(df)
     return create_sortable_table(
-        calculate_pullback_statistics(df), "pullback-table",
-        first_col_width="40%")
+        stats, "pullback-table", sortable=False, first_col_width="40%"
+    ) + create_pullback_chart(stats)
 
 
 def _sl_buffer_section(df: pd.DataFrame) -> str:
+    # The table keeps its Notation/Win Rate shape; the chart reads the same
+    # scenarios in the Signal/Strategy shape the other charts use.
     return create_sortable_table(
         calculate_sl_buffer_statistics(df), "sl-buffer-table", sortable=False,
-        first_col_width="50%")
+        first_col_width="50%"
+    ) + create_signal_strategy_chart(
+        calculate_sl_buffer_statistics(df, with_signal=True))
 
 
 def _three_setups_section(df: pd.DataFrame) -> str:
@@ -252,6 +274,18 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         _sl_fixed_section,
     ),
     (
+        "sl-max",
+        "Cap SL",
+        "Cap SL Analysis",
+        "The recorded stop kept, but capped at N pips: effective SL = "
+        "min(SL, N). Trades already inside the cap are unchanged; wider ones "
+        "are tightened, so both the survival check and the 1:1 target move "
+        "to the cap. <b>Signal</b> (TP &gt; 0) repeats down the table as the "
+        "ceiling; <b>Strategy</b> = Pullback &lt; capped SL AND TP &gt;= "
+        "capped SL.",
+        _sl_max_section,
+    ),
+    (
         "tp-range",
         "TP Range",
         "TP Range Analysis",
@@ -263,8 +297,12 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "Pullback",
         "Pullback Analysis",
         "Filling a limit order N pips into the pullback instead of taking the "
-        "signal. Half fills at half the stop. M counts winners the limit never "
-        "filled, so they are excluded from Trades and Win Rate.",
+        "signal. Half fills at half the stop. <b>+ 1 pip buffer</b> rows pad "
+        "the stop by a pip (win = Pullback &lt; SL + 1 AND TP &gt;= SL + 1); "
+        "the limit stays put. <b>W</b> = winners that pulled "
+        "back far enough to tap the limit, <b>M</b> = winners missed because "
+        "the limit was never tapped, <b>L</b> = losers whatever the pullback "
+        "(plain rows: win = Pullback &lt; SL AND TP &gt;= SL).",
         _pullback_section,
     ),
     (

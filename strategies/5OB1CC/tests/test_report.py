@@ -353,7 +353,8 @@ def test_grouping_sections_lead_the_page_in_order():
     page = build_report(get_sample_data(), 'now', 'abc123')
     order = [page.index(f'id="{a}"') for a in
              ('weekday', 'hour', 'ema-alignment', 'structure', 'htf-leg',
-              'sl-range', 'sl-fixed', 'tp-range', 'pullback', 'sl-buffer')]
+              'sl-range', 'sl-fixed', 'sl-max', 'tp-range', 'pullback',
+              'sl-buffer')]
     assert order == sorted(order)
 
 
@@ -378,6 +379,7 @@ def test_signal_strategy_tables_pin_their_first_column():
         ('htf-leg', '30M Leg'),
         ('sl-range', 'SL Range'),
         ('sl-fixed', 'Fixed SL'),
+        ('sl-max', 'Cap SL'),
         ('tp-range', 'TP Range'),
         ('pullback', 'Pullback'),
     )
@@ -400,18 +402,61 @@ def test_tp_range_keeps_neither_win_rate_column():
 
 
 def test_stop_tables_are_not_sortable_but_others_are():
-    """The stop tables keep their Default-outwards order; Pullback, Hour and
-    the Strategies tables stay click-to-sort."""
+    """The stop tables keep their Default-outwards order; Hour, Fixed SL,
+    Cap SL and the Strategies tables stay click-to-sort."""
     page = build_report(get_sample_data(), 'now', 'abc123')
 
-    for table_id in ('sl-range-table', 'sl-buffer-table'):
+    for table_id in ('sl-range-table', 'sl-buffer-table', 'pullback-table'):
         assert f'id="{table_id}"' in page, f'{table_id} missing'
         assert f"sortAnalysisTable('{table_id}'" not in page, (
             f'{table_id} still sortable')
 
-    assert "sortAnalysisTable('pullback-table'" in page
     assert "sortAnalysisTable('hour-table'" in page
+    assert "sortAnalysisTable('sl-fixed-table'" in page
+    assert "sortAnalysisTable('sl-max-table'" in page
     assert "sortAnalysisTable('strategies-1-1-table'" in page
+
+
+def _section_html(anchor, df=None):
+    df = get_sample_data() if df is None else df
+    builder = next(b for a, _, _, _, b in SECTIONS if a == anchor)
+    return builder(df)
+
+
+def test_every_section_up_to_max_sl_puts_a_chart_below_its_table():
+    for anchor in ('weekday', 'hour', 'ema-alignment', 'structure', 'htf-leg',
+                   'sl-range', 'sl-fixed', 'sl-max'):
+        html = _section_html(anchor)
+        assert html.count('class="wr-chart"') == 1, anchor
+        assert html.index('<table') < html.index('class="wr-chart"'), anchor
+
+
+def test_adding_buffer_keeps_its_table_and_adds_a_chart_below():
+    html = _section_html('sl-buffer')
+    assert '>Notation<' in html and '>Win Rate<' in html
+    assert html.count('class="wr-chart"') == 1
+    assert html.index('<table') < html.index('class="wr-chart"')
+
+
+def test_pullback_keeps_its_table_and_adds_a_stacked_chart_below():
+    html = _section_html('pullback')
+    assert html.index('<table') < html.index('class="pb-chart"')
+
+
+def test_tp_range_and_pullback_carry_no_win_rate_chart():
+    for anchor in ('tp-range', 'pullback'):
+        assert 'class="wr-chart"' not in _section_html(anchor), anchor
+
+
+def test_tp_range_keeps_its_table_and_adds_a_pip_chart_below():
+    html = _section_html('tp-range')
+    assert '>0-10<' in html and '>30+<' in html
+    assert html.index('<table') < html.index('class="tp-chart"')
+
+
+def test_max_sl_section_sits_below_fixed_sl():
+    anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
+    assert anchors.index('sl-max') == anchors.index('sl-fixed') + 1
 
 
 def test_adding_buffer_keeps_the_wider_label_column():
