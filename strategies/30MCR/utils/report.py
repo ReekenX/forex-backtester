@@ -35,6 +35,7 @@ from utils.continuation_reversal import (
     calculate_sl_fixed_statistics,
     calculate_sl_max_statistics,
     calculate_sl_statistics,
+    calculate_streak_statistics,
     calculate_tp_statistics,
     calculate_weekday_statistics,
     create_html_table,
@@ -134,6 +135,13 @@ def _sl_buffer_section(df: pd.DataFrame) -> str:
         first_col_width="50%"
     ) + create_signal_strategy_chart(
         calculate_sl_buffer_statistics(df, with_signal=True))
+
+
+def _streaks_section(df: pd.DataFrame) -> str:
+    return create_sortable_table(
+        calculate_streak_statistics(df), "streaks-table", sortable=False,
+        first_col_width="40%"
+    )
 
 
 def _sort_by_win_rate(stats: pd.DataFrame) -> pd.DataFrame:
@@ -278,6 +286,19 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "Each trade counted once, in the bucket of the highest whole R it "
         "reached.",
         create_r_histogram_exact,
+    ),
+    (
+        "streaks",
+        "Streaks",
+        "Streaks",
+        "Longest unbroken runs of winners and losers at 1:1, read in date "
+        "order (win = Pullback &lt; SL AND TP &gt;= SL, so a stopped-out "
+        "trade breaks a winning run). Each cell gives the run's length and "
+        "the dates of its first and last trade. <b>Continuation</b> and "
+        "<b>Reversal</b> run through only their own trades, so a loss in one "
+        "type does not break the other's streak - the sequence trading that "
+        "type alone would have produced.",
+        _streaks_section,
     ),
 ]
 

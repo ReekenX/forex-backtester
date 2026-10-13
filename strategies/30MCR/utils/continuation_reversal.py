@@ -1048,6 +1048,70 @@ def create_pullback_chart(stats: pd.DataFrame) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Streaks
+# ---------------------------------------------------------------------------
+
+def _longest_run(won: pd.Series, dates: pd.Series, value: bool) -> str:
+    """
+    Length of the longest unbroken run of `value` in `won`, with its dates.
+
+    Trades are read in the order given, so the caller sorts them first. The
+    cell reads "7 (2026-03-10 - 2026-03-14)" - the run's first and last trade
+    dates - or a bare "0" when the run never happened. On a tie the earliest
+    run is the one named.
+    """
+    best, best_start, best_end = 0, None, None
+    length, start = 0, None
+    for date, hit in zip(dates, won):
+        if hit == value:
+            if length == 0:
+                start = date
+            length += 1
+            if length > best:
+                best, best_start, best_end = length, start, date
+        else:
+            length = 0
+    if best == 0:
+        return "0"
+    return f"{best} ({best_start} - {best_end})"
+
+
+def calculate_streak_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Longest winning and losing runs at 1:1, for every trade and for each type.
+
+    A trade is a win under the family's rule - Pullback < SL AND TP >= SL -
+    and anything else breaks a winning run, so the stopped-out
+    winner-that-wasn't counts as a loss here. Trades are read in date order;
+    the export's own order breaks ties within a day. The Continuation and
+    Reversal rows run through only their own trades, so a loss in one type
+    does not break the other type's streak - that is what trading one type
+    alone would have felt like.
+
+    Args:
+        df: DataFrame with trading data, including a Type column
+
+    Returns:
+        DataFrame with columns: Trend, Trades, Longest Wins, Longest Losses
+    """
+    ordered = df.sort_values('Date', kind='stable') if len(df) else df
+    won = (ordered['Pullback'] < ordered['SL']) & (ordered['TP'] >= ordered['SL'])
+
+    groups: List[Tuple[str, pd.Series]] = [('Default', pd.Series(True, index=ordered.index))]
+    groups.extend((label, ordered['Type'] == label) for label in TYPE_ORDER)
+
+    results = []
+    for label, mask in groups:
+        results.append({
+            'Trend': label,
+            'Trades': int(mask.sum()),
+            'Longest Wins': _longest_run(won[mask], ordered.loc[mask, 'Date'], True),
+            'Longest Losses': _longest_run(won[mask], ordered.loc[mask, 'Date'], False),
+        })
+    return pd.DataFrame(results)
+
+
+# ---------------------------------------------------------------------------
 # Strategies tables
 # ---------------------------------------------------------------------------
 

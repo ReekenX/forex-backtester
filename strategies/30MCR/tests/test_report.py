@@ -476,3 +476,13 @@ def test_strategies_tables_close_the_page():
 def test_max_sl_section_sits_below_fixed_sl():
     anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
     assert anchors.index('sl-max') == anchors.index('sl-fixed') + 1
+
+
+def test_streaks_table_sits_above_the_strategies_tables():
+    html = build_report(get_sample_data(), '2025-02-06 10:00:00', 'abc123')
+    assert 'id="streaks-table"' in html
+    assert html.index('id="streaks"') > html.index('id="r-distribution-exact"')
+    assert html.index('id="streaks"') < html.index('id="strategies-1-1"')
+    for label in ('Default', 'Continuation', 'Reversal'):
+        assert label in html
+    assert 'Longest Wins' in html and 'Longest Losses' in html

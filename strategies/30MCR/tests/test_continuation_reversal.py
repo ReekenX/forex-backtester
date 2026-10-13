@@ -39,6 +39,7 @@ from utils.continuation_reversal import (  # noqa: E402
     calculate_sl_fixed_statistics,
     calculate_sl_max_statistics,
     calculate_sl_statistics,
+    calculate_streak_statistics,
     calculate_tp_pip_counts,
     calculate_tp_statistics,
     calculate_weekday_statistics,
@@ -715,3 +716,81 @@ def test_create_sortable_table_can_refuse_to_sort():
 def test_tables_render_no_data_when_empty():
     assert 'No data' in create_html_table(get_empty_data())
     assert 'No data' in create_sortable_table(get_empty_data(), 'x')
+
+
+# ---------------------------------------------------------------------------
+# Streaks
+# ---------------------------------------------------------------------------
+
+def test_streak_statistics_lists_default_then_types():
+    result = calculate_streak_statistics(get_sample_data())
+    assert list(result['Trend']) == ['Default'] + TYPE_ORDER
+    assert list(result.columns) == [
+        'Trend', 'Trades', 'Longest Wins', 'Longest Losses']
+    assert result.iloc[0]['Trades'] == 10
+    assert result.set_index('Trend').loc[TYPE_ORDER, 'Trades'].sum() == 10
+
+
+def test_streak_statistics_uses_the_strategy_win_rule():
+    """Sample row 2 (Pullback 6.0 >= SL 5.0, TP 20) is a Signal win but a
+    Strategy loss. With row 3 it forms a two-trade losing run; scored on
+    Signal the longest losing run would be a single trade."""
+    result = calculate_streak_statistics(get_sample_data()).set_index('Trend')
+    assert result.loc['Default', 'Longest Losses'] == '2 (2025-02-03 - 2025-02-03)'
+    assert result.loc['Default', 'Longest Wins'] == '2 (2025-02-03 - 2025-02-04)'
+
+
+def test_streak_statistics_counts_longest_runs_with_their_dates():
+    df = pd.DataFrame({
+        'Date': ['2025-02-03', '2025-02-03', '2025-02-04', '2025-02-05',
+                 '2025-02-05', '2025-02-06', '2025-02-07'],
+        'Type': ['Continuation'] * 7,
+        'SL': [5.0] * 7,
+        'Pullback': [1.0, 1.0, 1.0, 5.0, 5.0, 1.0, 5.0],
+        'TP': [10.0, 10.0, 10.0, 0.0, 0.0, 10.0, 0.0],
+    })
+    result = calculate_streak_statistics(df).set_index('Trend')
+    assert result.loc['Default', 'Longest Wins'] == '3 (2025-02-03 - 2025-02-04)'
+    assert result.loc['Default', 'Longest Losses'] == '2 (2025-02-05 - 2025-02-05)'
+    assert result.loc['Continuation', 'Longest Wins'] == '3 (2025-02-03 - 2025-02-04)'
+    assert result.loc['Reversal', 'Trades'] == 0
+    assert result.loc['Reversal', 'Longest Wins'] == '0'
+    assert result.loc['Reversal', 'Longest Losses'] == '0'
+
+
+def test_streak_statistics_reads_trades_in_date_order():
+    """Two wins separated in the file but adjacent by date form one run."""
+    df = pd.DataFrame({
+        'Date': ['2025-02-04', '2025-02-03', '2025-02-05'],
+        'Type': ['Reversal'] * 3,
+        'SL': [5.0] * 3,
+        'Pullback': [1.0, 5.0, 1.0],
+        'TP': [10.0, 0.0, 10.0],
+    })
+    result = calculate_streak_statistics(df).set_index('Trend')
+    assert result.loc['Default', 'Longest Wins'] == '2 (2025-02-04 - 2025-02-05)'
+
+
+def test_streak_statistics_type_rows_skip_the_other_type():
+    """A Reversal loss between two Continuation wins does not break the
+    Continuation run - that type alone would have won twice running."""
+    df = pd.DataFrame({
+        'Date': ['2025-02-03', '2025-02-04', '2025-02-05'],
+        'Type': ['Continuation', 'Reversal', 'Continuation'],
+        'SL': [5.0] * 3,
+        'Pullback': [1.0, 5.0, 1.0],
+        'TP': [10.0, 0.0, 10.0],
+    })
+    result = calculate_streak_statistics(df).set_index('Trend')
+    assert result.loc['Default', 'Longest Wins'].startswith('1 (')
+    assert result.loc['Continuation', 'Longest Wins'] == '2 (2025-02-03 - 2025-02-05)'
+    assert result.loc['Continuation', 'Longest Losses'] == '0'
+    assert result.loc['Reversal', 'Longest Losses'] == '1 (2025-02-04 - 2025-02-04)'
+
+
+def test_streak_statistics_empty_dataset():
+    result = calculate_streak_statistics(get_empty_data())
+    assert list(result['Trend']) == ['Default'] + TYPE_ORDER
+    assert list(result['Trades']) == [0, 0, 0]
+    assert set(result['Longest Wins']) == {'0'}
+    assert set(result['Longest Losses']) == {'0'}

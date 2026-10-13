@@ -343,6 +343,12 @@ Where the pages still differ:
   table is click-to-sort. There is no High/Low table and no Direction table -
   neither split said anything on its own.
 - **It has no `4H`, `EMA` or `Hour` column**, so none of those tables exist.
+- **A `Streaks` table sits between the R Distribution charts and the
+  Strategies tables.** `calculate_streak_statistics` reads the trades in
+  date order and reports the longest unbroken run of wins and of losses
+  under the family's 1:1 win rule, with the run's first and last trade
+  dates. Rows are `Default`, `Continuation` and `Reversal`; the type rows
+  walk only their own trades, so the other type's losses do not break them.
 - **It has no Three Setups trade log.** The page ends on the Strategies
   tables, and those test buffers of `+0` and `+1` only. Their `Trend`
   column (`All`, `Continuation`, `Reversal`) filters on the setup's `Type`
