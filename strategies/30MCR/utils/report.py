@@ -342,6 +342,10 @@ def _summary_cards(df: pd.DataFrame) -> List[Tuple[str, str, str]]:
     baseline = _calculate_stats_with_buffer(df, "All Trades", 0, 1)
     win_rate = float(baseline["Win Rate"].rstrip("%"))
     dates = df["Date"].astype(str)
+    # Signal: the idea was right and price reached a target, whatever the
+    # pullback did on the way. Always at or above the 1:1 win rate.
+    signals = int((df["TP"] > 0).sum())
+    signal_rate = signals / len(df) * 100
 
     return [
         ("Trades", str(len(df)), "neutral"),
@@ -353,6 +357,11 @@ def _summary_cards(df: pd.DataFrame) -> List[Tuple[str, str, str]]:
             "positive" if win_rate >= 50 else "negative",
         ),
         ("Notation", baseline["Notation"], "neutral"),
+        (
+            "Signal (TP > 0)",
+            f"{signal_rate:.1f}%",
+            "positive" if signal_rate >= 50 else "negative",
+        ),
     ]
 
 
