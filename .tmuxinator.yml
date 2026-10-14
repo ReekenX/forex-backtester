@@ -1,4 +1,4 @@
-name: forex-backtester
+name: forex
 
 startup_window: shell
 
@@ -12,6 +12,7 @@ windows:
       - alias run="nvim ."
       - nvim .
   - shell:
+      - tmux set-option set-titles-string 'forex'
   - claude:
       - alias run="claude --dangerously-skip-permissions"
       - claude --dangerously-skip-permissions
