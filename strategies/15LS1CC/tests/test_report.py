@@ -134,6 +134,27 @@ def test_summary_win_rate_tone_flips_at_50_percent():
     assert tones['Win rate (1:1, no buffer)'] == 'negative'
 
 
+def test_summary_signal_ignores_the_stop():
+    """Signal counts every trade with TP > 0: row 2 has none, so five of six
+    - one more than the win rate, which also drops the stopped-out row 3."""
+    cards = dict((label, value) for label, value, _ in _summary_cards(get_sample_data()))
+    assert cards['Signal (TP > 0)'] == '83.3%'
+
+
+def test_summary_signal_tone_flips_at_50_percent():
+    losing = get_sample_data().copy()
+    losing['TP'] = 0.0
+    tones = {label: tone for label, _, tone in _summary_cards(losing)}
+    assert tones['Signal (TP > 0)'] == 'negative'
+    tones = {label: tone for label, _, tone in _summary_cards(get_sample_data())}
+    assert tones['Signal (TP > 0)'] == 'positive'
+
+
+def test_summary_cards_put_signal_between_notation_and_win_rate():
+    labels = [label for label, _, _ in _summary_cards(get_sample_data())]
+    assert labels[-3:] == ['Notation', 'Signal (TP > 0)', 'Win rate (1:1, no buffer)']
+
+
 def test_summary_cards_empty_dataset():
     cards = _summary_cards(get_empty_data())
     assert cards == [('Trades', '0', 'neutral')]
