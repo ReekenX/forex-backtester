@@ -358,16 +358,16 @@ def _summary_cards(df: pd.DataFrame) -> List[Tuple[str, str, str]]:
         ("Trades", str(len(df)), "neutral"),
         ("Trading days", str(df["Date"].nunique()), "neutral"),
         ("Date range", f"{dates.min()} to {dates.max()}", "neutral"),
-        (
-            "Win rate (1:1, no buffer)",
-            baseline["Win Rate"],
-            "positive" if win_rate >= 50 else "negative",
-        ),
         ("Notation", baseline["Notation"], "neutral"),
         (
             "Signal (TP > 0)",
             f"{signal_rate:.1f}%",
             "positive" if signal_rate >= 50 else "negative",
+        ),
+        (
+            "Win rate (1:1, no buffer)",
+            baseline["Win Rate"],
+            "positive" if win_rate >= 50 else "negative",
         ),
     ]
 

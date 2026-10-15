@@ -180,6 +180,11 @@ def test_summary_win_rate_tone_flips_at_50_percent():
     assert tones['Win rate (1:1, no buffer)'] == 'positive'
 
 
+def test_summary_cards_put_signal_between_notation_and_win_rate():
+    labels = [label for label, _, _ in _summary_cards(get_sample_data())]
+    assert labels[-3:] == ['Notation', 'Signal (TP > 0)', 'Win rate (1:1, no buffer)']
+
+
 def test_summary_cards_empty_dataset():
     assert _summary_cards(get_empty_data()) == [('Trades', '0', 'neutral')]
 
