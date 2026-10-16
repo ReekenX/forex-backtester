@@ -403,7 +403,7 @@ def test_sl_max_statistics_lists_every_cap():
     assert list(result.columns) == ['Cap SL', 'Trades', 'Signal', 'Strategy']
     assert list(result['Cap SL']) == ['Default'] + [f'{p} pips'
                                                      for p in SL_MAX_PIPS]
-    assert SL_MAX_PIPS == [9, 8, 7, 6, 5, 4]
+    assert SL_MAX_PIPS == [4, 5, 6, 7, 8, 9]
     assert result['Signal'].nunique() == 1
 
 

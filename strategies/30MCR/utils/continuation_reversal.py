@@ -635,8 +635,8 @@ SL_BUFFER_PIPS = [0, 1, 2, 3, 4, 5]
 # Stop sizes to substitute for every trade's recorded SL.
 SL_FIXED_PIPS = [3, 4, 5, 6, 7, 8, 9, 10]
 
-# Caps for the Cap SL table, widest first.
-SL_MAX_PIPS = [9, 8, 7, 6, 5, 4]
+# Caps for the Cap SL table, tightest first, like Fixed SL.
+SL_MAX_PIPS = [4, 5, 6, 7, 8, 9]
 
 
 def _pip_label(pips: int) -> str:

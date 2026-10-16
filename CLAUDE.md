@@ -291,7 +291,8 @@ shapes below are on all three pages - compare them side by side with
 - **`Cap SL Analysis` sits right below `Fixed SL`** on every page: the
   recorded stop kept but capped at 9, 8, 7, 6, 5 and 4 pips,
   `min(SL, cap)`, through `calculate_sl_max_statistics`. Rows are stop sizes
-  to compare, so the table stays click-to-sort.
+  to compare, so the table stays click-to-sort. 30MCR lists them tightest
+  first (4 up to 9), like `Fixed SL`; 15C and 5OB still go 9 down to 4.
 - **`Adding Buffer` carries the same chart**, with its table left in the
   `Notation, Win Rate` shape. The chart reads
   `calculate_sl_buffer_statistics(df, with_signal=True)` - the same scenarios
