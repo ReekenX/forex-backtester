@@ -25,6 +25,7 @@ from utils.continuation_reversal import (  # noqa: E402
     SL_MAX_PIPS,
     SL_RANGES,
     TP_RANGES,
+    TYPE_BUFFER_PIPS,
     TYPE_ORDER,
     WEEKDAY_ORDER,
     _calculate_stats_with_buffer,
@@ -302,11 +303,15 @@ def test_signal_counts_the_stopped_out_winner_and_strategy_does_not():
     assert row['Strategy'] == '0W - 1L (0.0%)'
 
 
+BUFFERED_TYPES = [f'{t} + 1 pip buffer' for t in TYPE_ORDER]
+
+
 def test_setup_statistics_lists_default_then_types_only():
-    """Every trade, then Continuation and Reversal - no per-level setup rows,
-    as the level alone says nothing."""
+    """Every trade, then Continuation and Reversal, then both again with a
+    buffered stop - no per-level setup rows, as the level alone says
+    nothing."""
     result = calculate_setup_statistics(get_sample_data())
-    assert list(result['Setup']) == ['Default'] + TYPE_ORDER
+    assert list(result['Setup']) == ['Default'] + TYPE_ORDER + BUFFERED_TYPES
     assert result.iloc[0]['Trades'] == 10
     assert list(result.columns) == ['Setup', 'Trades', 'Signal', 'Strategy']
     assert not set(result['Setup']) & set(SETUP_ORDER)
@@ -324,7 +329,25 @@ def test_setup_statistics_keeps_an_unlisted_type():
     sample = get_sample_data()
     sample.loc[0, 'Type'] = 'Sweep'
     labels = list(calculate_setup_statistics(sample)['Setup'])
-    assert labels == ['Default'] + TYPE_ORDER + ['Sweep']
+    assert labels == (['Default'] + TYPE_ORDER + ['Sweep'] + BUFFERED_TYPES
+                      + ['Sweep + 1 pip buffer'])
+
+
+def test_setup_buffer_rows_pad_the_stop_for_strategy_only():
+    """Continuation is sample rows 1, 3, 5, 8, 9 - Strategy wins 1, 5, 9.
+    At SL + 1 row 5 drops out (TP 3 < SL 3 + 1). Reversal is rows 2, 4, 6,
+    7, 10 - wins 4, 7, 10 - and SL + 1 rescues none and drops none. Signal
+    does not read the stop, so each buffered row keeps its type's Signal."""
+    assert TYPE_BUFFER_PIPS == 1
+    result = calculate_setup_statistics(get_sample_data()).set_index('Setup')
+    assert result.loc['Continuation', 'Strategy'] == '3W - 2L (60.0%)'
+    assert (result.loc['Continuation + 1 pip buffer', 'Strategy']
+            == '2W - 3L (40.0%)')
+    assert (result.loc['Reversal + 1 pip buffer', 'Strategy']
+            == result.loc['Reversal', 'Strategy'])
+    for t in TYPE_ORDER:
+        assert result.loc[f'{t} + 1 pip buffer', 'Signal'] == result.loc[t, 'Signal']
+        assert result.loc[f'{t} + 1 pip buffer', 'Trades'] == result.loc[t, 'Trades']
 
 
 def test_grouping_tables_handle_an_empty_dataset():
@@ -729,11 +752,30 @@ def test_tables_render_no_data_when_empty():
 
 def test_streak_statistics_lists_default_then_types():
     result = calculate_streak_statistics(get_sample_data())
-    assert list(result['Trend']) == ['Default'] + TYPE_ORDER
+    assert list(result['Trend']) == ['Default'] + TYPE_ORDER + BUFFERED_TYPES
     assert list(result.columns) == [
         'Trend', 'Trades', 'Longest Wins', 'Longest Losses']
     assert result.iloc[0]['Trades'] == 10
     assert result.set_index('Trend').loc[TYPE_ORDER, 'Trades'].sum() == 10
+    assert result.set_index('Trend').loc[BUFFERED_TYPES, 'Trades'].sum() == 10
+
+
+def test_streak_buffer_rows_score_runs_on_the_padded_stop():
+    """Two Continuation trades with SL 5: the first pulls back exactly 5 and
+    is stopped at SL but survives SL + 1; the second wins either way. The
+    buffer turns a 1-win run into a 2-win run."""
+    df = pd.DataFrame({
+        'Date': ['2025-02-03', '2025-02-04'],
+        'Type': ['Continuation'] * 2,
+        'SL': [5.0] * 2,
+        'Pullback': [5.0, 1.0],
+        'TP': [10.0, 10.0],
+    })
+    result = calculate_streak_statistics(df).set_index('Trend')
+    assert result.loc['Continuation', 'Longest Wins'] == '1 (2025-02-04 - 2025-02-04)'
+    assert (result.loc['Continuation + 1 pip buffer', 'Longest Wins']
+            == '2 (2025-02-03 - 2025-02-04)')
+    assert result.loc['Continuation + 1 pip buffer', 'Longest Losses'] == '0'
 
 
 def test_streak_statistics_uses_the_strategy_win_rule():
@@ -795,8 +837,8 @@ def test_streak_statistics_type_rows_skip_the_other_type():
 
 def test_streak_statistics_empty_dataset():
     result = calculate_streak_statistics(get_empty_data())
-    assert list(result['Trend']) == ['Default'] + TYPE_ORDER
-    assert list(result['Trades']) == [0, 0, 0]
+    assert list(result['Trend']) == ['Default'] + TYPE_ORDER + BUFFERED_TYPES
+    assert list(result['Trades']) == [0] * 5
     assert set(result['Longest Wins']) == {'0'}
     assert set(result['Longest Losses']) == {'0'}
 

@@ -216,8 +216,10 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "the same two readings as the weekday table: continuation through the "
         "level against reversal off it. The setup is known before the trade "
         "is taken, so it is a tradeable filter. Default is every trade, and "
-        "the two type rows sum to it. The Signal and Strategy headers are "
-        "click-to-sort.",
+        "the two type rows sum to it. <b>+ 1 pip buffer</b> rows repeat each "
+        "type with the stop padded by a pip (Strategy = Pullback &lt; SL + 1 "
+        "AND TP &gt;= SL + 1); Signal ignores the stop, so it does not move. "
+        "The Signal and Strategy headers are click-to-sort.",
         _setup_section,
     ),
     (
@@ -308,7 +310,9 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "the dates of its first and last trade. <b>Continuation</b> and "
         "<b>Reversal</b> run through only their own trades, so a loss in one "
         "type does not break the other's streak - the sequence trading that "
-        "type alone would have produced.",
+        "type alone would have produced. <b>+ 1 pip buffer</b> rows repeat "
+        "each type with the stop padded by a pip (win = Pullback &lt; SL + 1 "
+        "AND TP &gt;= SL + 1).",
         _streaks_section,
     ),
     (

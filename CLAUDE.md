@@ -340,7 +340,9 @@ Where the pages still differ:
   `Reversal` pooling the setups that end the same way. Those last two overlap
   the setup rows, so the `Trades` column does not sum - each block covers every
   trade once. The setup is known at entry, so it is a tradeable filter, and the
-  table is click-to-sort. There is no High/Low table and no Direction table -
+  table is click-to-sort. `Continuation + 1 pip buffer` and `Reversal + 1 pip
+  buffer` close the table: Strategy scored on SL + 1 (`TYPE_BUFFER_PIPS`),
+  Signal unchanged since it ignores the stop. There is no High/Low table and no Direction table -
   neither split said anything on its own.
 - **It has no `4H`, `EMA` or `Hour` column**, so none of those tables exist.
 - **A `Streaks` table sits between the R Distribution charts and the
@@ -349,6 +351,7 @@ Where the pages still differ:
   under the family's 1:1 win rule, with the run's first and last trade
   dates. Rows are `Default`, `Continuation` and `Reversal`; the type rows
   walk only their own trades, so the other type's losses do not break them.
+  Both type rows repeat as `<type> + 1 pip buffer`, scored on SL + 1.
 - **A `Half SL` table sits between `Streaks` and the Strategies tables.**
   `calculate_half_sl_statistics` compares, at every RRR, `Default`, `Half SL`
   (stop at SL / 2 from the signal) and `Limit order on half` (a limit SL / 2

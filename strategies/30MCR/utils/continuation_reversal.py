@@ -366,7 +366,7 @@ def _format_wl(wins: int, losses: int, total: int) -> str:
     return f"{wins}W - {losses}L ({win_rate:.1f}%)"
 
 
-def _signal_strategy_rows(groups: List[Tuple[str, pd.DataFrame]],
+def _signal_strategy_rows(groups: List[Tuple],
                           column: str) -> pd.DataFrame:
     """
     Score each group of trades under both readings of a trade.
@@ -382,8 +382,13 @@ def _signal_strategy_rows(groups: List[Tuple[str, pd.DataFrame]],
     The gap between the two is the cost of entry timing. Every grouping table
     on the page comes through here so they cannot drift apart on the rule.
 
+    A group may carry a third element, a buffer in pips: its Strategy reads
+    the stop as SL + buffer, as in Adding Buffer. Signal ignores the stop, so
+    the buffer leaves it alone.
+
     Args:
-        groups: (label, trades) pairs, one per row of the table
+        groups: (label, trades) or (label, trades, buffer) tuples, one per row
+            of the table
         column: Name for the leading column (e.g. 'Day', 'Setup')
 
     Returns:
@@ -391,11 +396,12 @@ def _signal_strategy_rows(groups: List[Tuple[str, pd.DataFrame]],
     """
     results = []
 
-    for label, trades in groups:
+    for label, trades, *buffer in groups:
         total = len(trades)
+        effective_sl = trades['SL'] + (buffer[0] if buffer else 0)
         signals = int((trades['TP'] > 0).sum()) if total else 0
         strategy = int((
-            (trades['Pullback'] < trades['SL']) & (trades['TP'] >= trades['SL'])
+            (trades['Pullback'] < effective_sl) & (trades['TP'] >= effective_sl)
         ).sum()) if total else 0
 
         results.append({
@@ -549,13 +555,25 @@ def _ordered_labels(values: pd.Series, preferred: List[str]) -> List[str]:
     return [label for label in preferred if label in present] + extras
 
 
+# Pips the "<type> + 1 pip buffer" rows of the Setup and Streaks tables pad
+# the stop with.
+TYPE_BUFFER_PIPS = 1
+
+
+def _type_buffer_label(label: str) -> str:
+    """'Continuation' -> 'Continuation + 1 pip buffer'."""
+    return f"{label} + {_pip_label(TYPE_BUFFER_PIPS)} buffer"
+
+
 def calculate_setup_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Signal and Strategy win rates for Continuation against Reversal.
 
     The type - continuation through the 30-minute level or reversal off it -
     is known at entry, so it is a tradeable filter. "Default" is every trade;
-    the two type rows split it, so they sum to it. The four level-specific
+    the two type rows split it, so they sum to it. Each type then repeats as
+    "<type> + 1 pip buffer", its Strategy scored on SL + TYPE_BUFFER_PIPS as
+    in Adding Buffer. The four level-specific
     setups ("High Continuation" and so on) are not listed: the level alone
     says nothing, only the type it forms with Direction does.
 
@@ -565,10 +583,12 @@ def calculate_setup_statistics(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with columns: Setup, Trades, Signal, Strategy
     """
-    groups: List[Tuple[str, pd.DataFrame]] = [('Default', df)]
+    types = _ordered_labels(df['Type'], TYPE_ORDER)
+    groups: List[Tuple] = [('Default', df)]
+    groups.extend((label, df[df['Type'] == label]) for label in types)
     groups.extend(
-        (label, df[df['Type'] == label])
-        for label in _ordered_labels(df['Type'], TYPE_ORDER)
+        (_type_buffer_label(label), df[df['Type'] == label], TYPE_BUFFER_PIPS)
+        for label in types
     )
     return _signal_strategy_rows(groups, 'Setup')
 
@@ -1087,7 +1107,8 @@ def calculate_streak_statistics(df: pd.DataFrame) -> pd.DataFrame:
     the export's own order breaks ties within a day. The Continuation and
     Reversal rows run through only their own trades, so a loss in one type
     does not break the other type's streak - that is what trading one type
-    alone would have felt like.
+    alone would have felt like. Each type then repeats as "<type> + 1 pip
+    buffer", its runs scored on SL + TYPE_BUFFER_PIPS as in Adding Buffer.
 
     Args:
         df: DataFrame with trading data, including a Type column
@@ -1096,13 +1117,18 @@ def calculate_streak_statistics(df: pd.DataFrame) -> pd.DataFrame:
         DataFrame with columns: Trend, Trades, Longest Wins, Longest Losses
     """
     ordered = df.sort_values('Date', kind='stable') if len(df) else df
-    won = (ordered['Pullback'] < ordered['SL']) & (ordered['TP'] >= ordered['SL'])
-
-    groups: List[Tuple[str, pd.Series]] = [('Default', pd.Series(True, index=ordered.index))]
-    groups.extend((label, ordered['Type'] == label) for label in TYPE_ORDER)
+    groups: List[Tuple[str, pd.Series, float]] = [
+        ('Default', pd.Series(True, index=ordered.index), 0)]
+    groups.extend((label, ordered['Type'] == label, 0) for label in TYPE_ORDER)
+    groups.extend(
+        (_type_buffer_label(label), ordered['Type'] == label, TYPE_BUFFER_PIPS)
+        for label in TYPE_ORDER
+    )
 
     results = []
-    for label, mask in groups:
+    for label, mask, buffer in groups:
+        effective_sl = ordered['SL'] + buffer
+        won = (ordered['Pullback'] < effective_sl) & (ordered['TP'] >= effective_sl)
         results.append({
             'Trend': label,
             'Trades': int(mask.sum()),
