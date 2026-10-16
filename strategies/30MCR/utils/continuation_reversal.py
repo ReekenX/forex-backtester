@@ -1113,6 +1113,73 @@ def calculate_streak_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Half SL entries
+# ---------------------------------------------------------------------------
+
+HALF_SL_ENTRIES = ['Default', 'Half SL', 'Limit order on half']
+
+
+def calculate_half_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    The recorded stop against two ways of halving it, at every RRR.
+
+    - Default: entry at the signal, stop as recorded.
+    - Half SL: entry at the signal, stop at SL / 2. A pullback of half the
+      stop now takes it out.
+    - Limit order on half: a limit SL / 2 into the pullback, stop left at the
+      recorded level - so it is SL / 2 from the fill. It fills only when
+      Pullback >= SL / 2. Measured from the fill, the pullback shrinks to
+      Pullback - SL / 2 and the run grows to TP + SL / 2. A trade that never
+      reached a target (TP = 0) is given no run from the fill either.
+
+    All three rows score the trade at its own entry with the family's rule,
+    Pullback < SL AND TP >= RRR x SL. Half SL and the limit share a stop
+    size, so their R is directly comparable.
+
+    Notation splits every trade three ways, like the Pullback table:
+    W = won, M = limit never filled (no trade), L = lost. Win Rate is
+    W / (W + L), the trades actually taken; Outcome is W x RRR - L.
+
+    Args:
+        df: DataFrame with trading data
+
+    Returns:
+        DataFrame with columns: Entry, RRR, Trades, Notation, Win Rate, Outcome
+    """
+    half = df['SL'] / 2
+    # No target reached means no run from the fill either.
+    run = (df['TP'] + half).where(df['TP'] > 0, 0.0)
+    entries = {
+        'Default': (pd.Series(True, index=df.index),
+                    df['Pullback'], df['TP'], df['SL']),
+        'Half SL': (pd.Series(True, index=df.index),
+                    df['Pullback'], df['TP'], half),
+        'Limit order on half': (df['Pullback'] >= half,
+                                df['Pullback'] - half, run, half),
+    }
+
+    results = []
+    for rrr in RRR_RATIOS:
+        for label in HALF_SL_ENTRIES:
+            filled, pullback, tp, sl = entries[label]
+            won = filled & (pullback < sl) & (tp >= rrr * sl)
+            wins = int(won.sum())
+            missed = int((~filled).sum())
+            losses = len(df) - wins - missed
+            taken = wins + losses
+            win_rate = (wins / taken * 100) if taken else 0.0
+            results.append({
+                'Entry': label,
+                'RRR': f'1:{rrr}',
+                'Trades': taken,
+                'Notation': _format_wml(wins, missed, losses),
+                'Win Rate': f'{win_rate:.1f}%',
+                'Outcome': f'{wins * rrr - losses:+d}R',
+            })
+    return pd.DataFrame(results)
+
+
+# ---------------------------------------------------------------------------
 # Strategies tables
 # ---------------------------------------------------------------------------
 

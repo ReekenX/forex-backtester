@@ -349,6 +349,13 @@ Where the pages still differ:
   under the family's 1:1 win rule, with the run's first and last trade
   dates. Rows are `Default`, `Continuation` and `Reversal`; the type rows
   walk only their own trades, so the other type's losses do not break them.
+- **A `Half SL` table sits between `Streaks` and the Strategies tables.**
+  `calculate_half_sl_statistics` compares, at every RRR, `Default`, `Half SL`
+  (stop at SL / 2 from the signal) and `Limit order on half` (a limit SL / 2
+  into the pullback, stop left at the recorded level, so SL / 2 from the
+  fill; scored on Pullback - SL / 2 and TP + SL / 2). `Notation` is
+  `W - M - L` like `Pullback`, with M = limit never filled; `Win Rate` is
+  W / (W + L) and `Outcome` W x RRR - L.
 - **It has no Three Setups trade log.** The page ends on the Strategies
   tables, and those test buffers of `+0` and `+1` only. Their `Trend`
   column (`All`, `Continuation`, `Reversal`) filters on the setup's `Type`

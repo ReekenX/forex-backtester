@@ -515,3 +515,16 @@ def test_each_strategies_table_carries_an_equity_chart():
         chart = f'id="strategies-1-{rrr}-equity"'
         assert chart in html
         assert html.index(f'id="strategies-1-{rrr}-table"') < html.index(chart)
+
+
+def test_half_sl_table_sits_right_above_the_strategies_tables():
+    anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
+    assert anchors.index('half-sl') == anchors.index('strategies-1-1') - 1
+
+
+def test_half_sl_table_compares_the_three_entries_without_sorting():
+    html = _section_html('half-sl')
+    for entry in ('>Default<', '>Half SL<', '>Limit order on half<'):
+        assert entry in html
+    assert 'class="sortable"' not in html
+    assert 'width: 40%' in html

@@ -36,6 +36,7 @@ from utils.continuation_reversal import (
     calculate_sl_fixed_statistics,
     calculate_sl_max_statistics,
     calculate_sl_statistics,
+    calculate_half_sl_statistics,
     calculate_streak_statistics,
     calculate_tp_statistics,
     calculate_weekday_statistics,
@@ -144,6 +145,11 @@ def _streaks_section(df: pd.DataFrame) -> str:
         calculate_streak_statistics(df), "streaks-table", sortable=False,
         first_col_width="40%"
     )
+
+
+def _half_sl_section(df: pd.DataFrame) -> str:
+    return create_html_table(
+        calculate_half_sl_statistics(df), first_col_width="40%")
 
 
 def _sort_by_win_rate(stats: pd.DataFrame) -> pd.DataFrame:
@@ -304,6 +310,21 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "type does not break the other's streak - the sequence trading that "
         "type alone would have produced.",
         _streaks_section,
+    ),
+    (
+        "half-sl",
+        "Half SL",
+        "Half SL Analysis",
+        "Two ways to halve the stop, against the recorded one. <b>Half SL</b> "
+        "enters at the signal with the stop at SL / 2. <b>Limit order on "
+        "half</b> rests a limit SL / 2 into the pullback and leaves the stop "
+        "where it was, so it is also SL / 2 from the fill; measured from "
+        "there, the pullback is Pullback - SL / 2 and the run TP + SL / 2. "
+        "Every row scores its own entry: win = Pullback &lt; SL AND TP &gt;= "
+        "RRR x SL. <b>W</b> = won, <b>M</b> = limit never filled (no trade), "
+        "<b>L</b> = lost. Win Rate is W / (W + L), the trades taken; Outcome "
+        "is W x RRR - L.",
+        _half_sl_section,
     ),
 ]
 

@@ -32,7 +32,9 @@ from utils.continuation_reversal import (  # noqa: E402
     _format_wl,
     _normalise_header,
     EQUITY_HIGHLIGHT,
+    HALF_SL_ENTRIES,
     calculate_buffer_statistics,
+    calculate_half_sl_statistics,
     calculate_equity_curves,
     calculate_pullback_statistics,
     calculate_r_counts,
@@ -867,3 +869,77 @@ def test_equity_chart_draws_every_curve_and_colours_the_best():
     assert 'data-rrr="2"' in html
     assert 'class="eq-zero"' in html
     assert '+2R per win' in html
+
+
+# --- Half SL entries ------------------------------------------------------
+
+def _half_sl(rrr):
+    result = calculate_half_sl_statistics(get_sample_data())
+    return result[result['RRR'] == f'1:{rrr}'].set_index('Entry')
+
+
+def test_half_sl_lists_every_entry_at_every_rrr():
+    result = calculate_half_sl_statistics(get_sample_data())
+    assert list(result['Entry']) == HALF_SL_ENTRIES * len(RRR_RATIOS)
+    assert list(result['RRR'].unique()) == [f'1:{r}' for r in RRR_RATIOS]
+
+
+def test_half_sl_default_row_matches_the_other_stop_tables():
+    default = _half_sl(1).loc['Default']
+    buffer_default = calculate_sl_buffer_statistics(get_sample_data()).iloc[0]
+    wins, missed, losses = default['Notation'].split(' - ')
+    assert missed == '0M'
+    assert f'{wins} - {losses}' == buffer_default['Notation']
+    assert default['Win Rate'] == buffer_default['Win Rate']
+
+
+def test_half_sl_counts_match_the_sample_at_1_to_1():
+    """Half SL keeps rows 1, 5, 7, 10 - rows 4 and 9 pull back exactly half
+    their stop (3.5 of 7, 4 of 8) and are stopped out. The limit fills on
+    those two and wins both; rows 1, 5, 7, 10 never pull back half the stop,
+    so the limit misses them."""
+    result = _half_sl(1)
+    assert result.loc['Default', 'Notation'] == '6W - 0M - 4L'
+    assert result.loc['Half SL', 'Notation'] == '4W - 0M - 6L'
+    assert result.loc['Limit order on half', 'Notation'] == '2W - 4M - 4L'
+    assert result.loc['Limit order on half', 'Trades'] == 6
+    assert result.loc['Limit order on half', 'Win Rate'] == '33.3%'
+    assert result.loc['Default', 'Outcome'] == '+2R'
+    assert result.loc['Half SL', 'Outcome'] == '-2R'
+
+
+def test_half_sl_limit_measures_the_run_from_the_fill_at_1_to_3():
+    """Row 9 (SL 8, TP 9) cannot reach 3R from the signal, but from the
+    limit its run is 9 + 4 = 13 against a 4 pip stop - over the 12 needed."""
+    result = _half_sl(3)
+    assert result.loc['Default', 'Notation'] == '3W - 0M - 7L'
+    assert result.loc['Limit order on half', 'Notation'] == '2W - 4M - 4L'
+    assert result.loc['Limit order on half', 'Outcome'] == '+2R'
+
+
+def test_half_sl_limit_matches_the_worked_example():
+    """SL 3.6, Pullback 2.0, TP 10: Half SL is stopped by the 2.0 pullback.
+    The limit fills at 1.8 with a 1.8 stop, pulls back 0.2 more and runs
+    11.8 - a win even at 1:3."""
+    trade = get_sample_data().iloc[[0]].assign(SL=3.6, Pullback=2.0, TP=10.0)
+    result = calculate_half_sl_statistics(trade)
+    one = result[result['RRR'] == '1:1'].set_index('Entry')['Notation']
+    three = result[result['RRR'] == '1:3'].set_index('Entry')['Notation']
+    assert one['Half SL'] == '0W - 0M - 1L'
+    assert one['Limit order on half'] == '1W - 0M - 0L'
+    assert three['Limit order on half'] == '1W - 0M - 0L'
+
+
+def test_half_sl_limit_needs_a_target_after_the_fill():
+    """A trade that never reached a target (TP 0) is not a win from the
+    limit either, even when its pullback stays inside the stop."""
+    trade = get_sample_data().iloc[[0]].assign(SL=4.0, Pullback=3.0, TP=0.0)
+    result = calculate_half_sl_statistics(trade)
+    limit = result[result['Entry'] == 'Limit order on half']
+    assert set(limit['Notation']) == {'0W - 0M - 1L'}
+
+
+def test_half_sl_handles_empty_data():
+    result = calculate_half_sl_statistics(get_empty_data())
+    assert set(result['Notation']) == {'0W - 0M - 0L'}
+    assert set(result['Win Rate']) == {'0.0%'}
