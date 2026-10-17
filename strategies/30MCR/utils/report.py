@@ -26,6 +26,8 @@ from typing import Callable, List, Tuple
 import pandas as pd
 
 from utils.continuation_reversal import (
+    BE_RULE_APPLIED,
+    BE_RULE_RRRS,
     RRR_RATIOS,
     RATE_COLUMNS,
     _calculate_stats_with_buffer,
@@ -178,6 +180,22 @@ def _sort_by_win_rate(stats: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+# The Strategies tables' short columns, kept narrow so Notation fits a
+# "52W – 14BE – 110L" cell on one line.
+STRATEGIES_COLUMN_WIDTHS = {
+    "Buffer": "6%", "Trend": "11%", "Cap SL": "6%", BE_RULE_APPLIED: "8%",
+    "Trades": "6%", "Notation": "16%", "Win Rate": "10%",
+}
+
+
+def _checkbox(checked: bool) -> str:
+    """A read-only checkbox for a yes/no table cell."""
+    state = " checked" if checked else ""
+    label = "Yes" if checked else "No"
+    return (f'<input type="checkbox" disabled{state} aria-label="{label}" '
+            f'style="accent-color: {POSITIVE}; margin: 0;">')
+
+
 def _strategies_section_for(rrr: int) -> Callable[[pd.DataFrame], str]:
     """Build the Strategies table for a single RRR, ranked by win rate."""
     def build(df: pd.DataFrame) -> str:
@@ -186,11 +204,16 @@ def _strategies_section_for(rrr: int) -> Callable[[pd.DataFrame], str]:
         # One RRR per table, named in the heading, so the column is dropped;
         # the Win Rate is still coloured against that RRR's breakeven.
         stats = stats[stats["RRR"] == f"1:{rrr}"].drop(columns="RRR")
+        if rrr in BE_RULE_RRRS:
+            stats[BE_RULE_APPLIED] = stats[BE_RULE_APPLIED].map(_checkbox)
+        else:
+            stats = stats.drop(columns=BE_RULE_APPLIED)
         # Distinct from the section anchor: a duplicate id would make
         # getElementById inside the sort script return the <section>.
         return create_html_table(
             _sort_by_win_rate(stats), sort_id=f"strategies-1-{rrr}-table",
             first_col_width=FIRST_COL_WIDTH, rrr=f"1:{rrr}",
+            column_widths=STRATEGIES_COLUMN_WIDTHS,
         ) + create_equity_chart(
             calculate_equity_curves(df, rrr), rrr,
             chart_id=f"strategies-1-{rrr}-equity")
@@ -336,7 +359,12 @@ SECTIONS.extend(
         "(<b>Continuation</b> or <b>Reversal</b> keeps only those setups). "
         "<b>Cap SL</b> caps the stop after the buffer: min(SL + buffer, cap), "
         "0 = no cap. "
-        f"Ranked by win rate. Breakeven at 1:{rrr} is {100 / (1 + rrr):.1f}%. "
+        + ("<b>BE Rule Applied</b> reruns every row with the stop moved to "
+           "entry once price runs 10 pips: a checked trade, or one past 10 "
+           "pips that missed its target, is break-even (BE), 0R, and left "
+           "out of the win rate. The stop is checked first. "
+           if rrr in BE_RULE_RRRS else "")
+        + f"Ranked by win rate. Breakeven at 1:{rrr} is {100 / (1 + rrr):.1f}%. "
         "The chart under the table walks every row trade by trade in date "
         "order and plots its cumulative R.",
         _strategies_section_for(rrr),

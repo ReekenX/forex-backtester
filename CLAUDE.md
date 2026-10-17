@@ -115,7 +115,7 @@ normal win rule. The flag is learned after the trade, like `Pullback` and
 `TP`, so it describes outcomes and must never be used as an entry filter.
 
 `break_even_outcomes(df, rrr, buffer, stop)` is the one place this rule lives
-- no page table reads it yet; it
+- the 1:2 and 1:3 Strategies tables read it; it
 returns wins, break-evens and losses, each trade in exactly one. A
 break-even returns 0R, so a win rate under the rule is wins over wins plus
 losses, which keeps 50% the 1:1 breakeven.
@@ -423,7 +423,15 @@ Where the pages still differ:
   rows; it is named like the `Cap SL Analysis` table, which caps the same
   way. 15C and 5OB still call their gate column `Max SL`. There is no `RRR` column: each table holds one RRR, named in its
   heading, and `create_html_table(rrr=...)` still colours `Win Rate` against
-  that RRR's breakeven. `Fixed SL X` rows run uncapped and unbuffered only. 15C and 5OB
+  that RRR's breakeven.
+  The 1:2 and 1:3 tables (`BE_RULE_RRRS`) run every row twice, with and
+  without the break-even rule, and say which in a `BE Rule Applied` checkbox
+  column. A BE row scores through `break_even_outcomes` on the row's own
+  buffered, capped stop: `Notation` is `W – BE – L` and `Win Rate` is
+  W / (W + L). Its equity curve takes 0R per break-even and is labelled
+  `... / BE`. 1:1 has no such column - nearly every 1:1 target sits inside
+  the 10-pip trigger. The short columns are narrowed through
+  `STRATEGIES_COLUMN_WIDTHS` so a BE Notation cell stays on one line. `Fixed SL X` rows run uncapped and unbuffered only. 15C and 5OB
   still carry the older Strategies shape - `Min SL` / `Max SL` gate columns,
   buffers `+0` to `+3`, and `Max SL X` rows - because `Trend` has no
   data-independent meaning there.

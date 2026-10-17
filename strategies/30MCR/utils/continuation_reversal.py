@@ -263,7 +263,8 @@ def _breakeven_class(value) -> str:
 def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
                       first_col_width: Optional[str] = None,
                       colour_columns: Tuple[str, ...] = (),
-                      rrr: Optional[str] = None) -> str:
+                      rrr: Optional[str] = None,
+                      column_widths: Optional[Dict[str, str]] = None) -> str:
     """
     Create a dark-mode HTML table with styled formatting.
 
@@ -276,6 +277,8 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
         colour_columns: Columns of 1:1 win rates to colour against 50%
         rrr: The RRR (e.g. "1:2") to colour the Win Rate column against when
             the table carries no RRR column of its own
+        column_widths: Widths (e.g. {"Buffer": "7%"}) for further columns,
+            so short ones give their room to wide ones in a fixed layout
 
     Returns:
         HTML string with a styled table
@@ -295,9 +298,10 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
     html += (f'<table class="analysis-table"{id_attr}{table_style}>'
              '\n        <thead>\n            <tr>\n')
 
+    column_widths = column_widths or {}
     for idx, col in enumerate(df.columns):
-        width_style = (f' style="width: {first_col_width};"'
-                       if idx == 0 and first_col_width else "")
+        width = first_col_width if idx == 0 else column_widths.get(col)
+        width_style = f' style="width: {width};"' if width else ""
         if col in sortable_cols:
             html += (
                 f'<th class="sortable"{width_style} title="Sort by win rate (desc)" '
@@ -1307,6 +1311,19 @@ FIXED_SL_STRATEGY_VALUES = list(range(2, 11))
 # Stop caps for the Strategies tables' Cap SL column. 0 means no cap.
 MAX_SL_CAPS = [0, 5, 6]
 
+# RRRs whose Strategies table tests every row with and without the BE rule.
+# At 1:1 nearly every target sits inside the BE_RULE_PIPS trigger, so the rule
+# barely moves a row there.
+BE_RULE_RRRS = [2, 3]
+
+# The Strategies tables' column saying whether a row ran under the BE rule.
+BE_RULE_APPLIED = 'BE Rule Applied'
+
+
+def _be_rule_options(rrr: float) -> List[bool]:
+    """Every row runs without the BE rule; BE_RULE_RRRS rows also run with it."""
+    return [False, True] if rrr in BE_RULE_RRRS else [False]
+
 
 def _fixed_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
     """Return a filter that replaces the SL column with a fixed x pips."""
@@ -1353,58 +1370,66 @@ def _apply_trend(df: pd.DataFrame, trend: str) -> pd.DataFrame:
     return df if trend == 'All' else df[df['Type'] == trend]
 
 
-def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
-                                 buffer: float, rrr_ratio: float = 1,
-                                 trend: str = 'All', max_sl: int = 0) -> Dict:
+def _strategy_outcomes(trades: pd.DataFrame, buffer: float, rrr: float,
+                       max_sl: int, be_rule: bool) -> Tuple[pd.Series,
+                                                            pd.Series,
+                                                            pd.Series]:
     """
-    Score a filtered set of trades with extra pips added to every SL.
+    (wins, break_evens, losses) of one Strategies row, every trade in one.
 
     Effective SL = SL + buffer, then capped at max_sl when max_sl > 0. The cap
     wins over the buffer: SL 3 + 1 under a 5 pip cap is 4, SL 5 + 1 is 5. A
     trade wins when it survives that stop and reaches the RRR target on it:
         Pullback < effective SL   AND   TP >= rrr * effective SL
+    With be_rule set the same stop goes through break_even_outcomes instead,
+    which turns some losses and wins into break-evens; without it there are
+    none.
     """
-    rrr_label = f"1:{rrr_ratio:g}"
-    total_trades = len(trades)
-
-    if total_trades == 0:
-        return {
-            "Strategy": strategy_name,
-            "Buffer": f"+{buffer}",
-            "Trend": trend,
-            "Cap SL": max_sl,
-            "RRR": rrr_label,
-            "Trades": 0,
-            "Notation": "0W – 0L",
-            "Win Rate": "0.0%",
-        }
-
     effective_sl = trades["SL"] + buffer
     if max_sl:
         effective_sl = effective_sl.clip(upper=float(max_sl))
-    winning_mask = (
-        (trades["Pullback"] < effective_sl)
-        & (trades["TP"] >= rrr_ratio * effective_sl)
-    )
+    if be_rule:
+        return break_even_outcomes(trades, rrr=rrr, stop=effective_sl)
+    wins = ((trades["Pullback"] < effective_sl)
+            & (trades["TP"] >= rrr * effective_sl))
+    return wins, pd.Series(False, index=trades.index), ~wins
 
-    wins = int(winning_mask.sum())
-    losses = total_trades - wins
 
-    return {
+def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
+                                 buffer: float, rrr_ratio: float = 1,
+                                 trend: str = 'All', max_sl: int = 0,
+                                 be_rule: bool = False) -> Dict:
+    """
+    Score a filtered set of trades under one Strategies row's stop rule - see
+    _strategy_outcomes.
+
+    Notation is "W – L", or "W – BE – L" under the BE rule. A break-even
+    returns 0R, so Win Rate is W / (W + L) - with no break-evens that is W
+    over every trade - which keeps the RRR's breakeven the line between
+    paying and not.
+    """
+    row = {
         "Strategy": strategy_name,
         "Buffer": f"+{buffer}",
         "Trend": trend,
         "Cap SL": max_sl,
-        "RRR": rrr_label,
-        "Trades": total_trades,
-        "Notation": f"{wins}W – {losses}L",
-        "Win Rate": f"{wins / total_trades * 100:.1f}%",
+        BE_RULE_APPLIED: be_rule,
+        "RRR": f"1:{rrr_ratio:g}",
+        "Trades": len(trades),
     }
+    wins, break_evens, losses = _strategy_outcomes(
+        trades, buffer, rrr_ratio, max_sl, be_rule)
+    won, even, lost = (int(wins.sum()), int(break_evens.sum()),
+                       int(losses.sum()))
+    row["Notation"] = (f"{won}W – {even}BE – {lost}L" if be_rule
+                       else f"{won}W – {lost}L")
+    row["Win Rate"] = _win_rate(won, won + lost)
+    return row
 
 
 def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
     """Sort by Strategy (natural order, numbers numerically), Trend, Cap SL,
-    then RRR."""
+    RRR, then the BE rule (off first)."""
     if result_df.empty:
         return result_df
 
@@ -1425,6 +1450,7 @@ def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
             TREND_FILTERS.index(result_df.at[i, 'Trend']),
             int(result_df.at[i, 'Cap SL']),
             rrr_key(result_df.at[i, 'RRR']),
+            bool(result_df.at[i, BE_RULE_APPLIED]),
         ),
     )
     return result_df.loc[sort_index].reset_index(drop=True)
@@ -1444,8 +1470,8 @@ def calculate_buffer_statistics(df: pd.DataFrame,
         strategy_names: Restrict to these strategy names (default: all)
 
     Returns:
-        DataFrame with one row per strategy / buffer / trend / cap / RRR
-        combination
+        DataFrame with one row per strategy / buffer / trend / cap / RRR /
+        BE rule combination - the BE rule only at BE_RULE_RRRS
     """
     strategies = get_buffer_strategies()
     if strategy_names is not None:
@@ -1458,9 +1484,10 @@ def calculate_buffer_statistics(df: pd.DataFrame,
             for max_sl in _caps_for(strategy_name):
                 for rrr in RRR_RATIOS:
                     for buffer in _buffers_for(strategy_name):
-                        results.append(_calculate_stats_with_buffer(
-                            filtered_df, strategy_name, buffer, rrr, trend,
-                            max_sl))
+                        for be_rule in _be_rule_options(rrr):
+                            results.append(_calculate_stats_with_buffer(
+                                filtered_df, strategy_name, buffer, rrr,
+                                trend, max_sl, be_rule))
 
     return _sort_strategy_rows(pd.DataFrame(results))
 
@@ -1564,9 +1591,9 @@ _EQUITY_CHART_SCRIPT = """
 
 
 def _strategy_curve_label(strategy_name: str, buffer: float, trend: str,
-                          max_sl: int) -> str:
+                          max_sl: int, be_rule: bool = False) -> str:
     """One line of text naming a Strategies table row, e.g.
-    'All Trades +1 / Reversal / cap 5' or 'Fixed SL 6 / Continuation'."""
+    'All Trades +1 / Reversal / cap 5 / BE' or 'Fixed SL 6 / Continuation'."""
     parts = [strategy_name]
     if not strategy_name.startswith("Fixed SL "):
         parts[0] += f" +{buffer:g}"
@@ -1574,6 +1601,8 @@ def _strategy_curve_label(strategy_name: str, buffer: float, trend: str,
         parts.append(trend)
     if max_sl:
         parts.append(f"cap {max_sl}")
+    if be_rule:
+        parts.append("BE")
     return " / ".join(parts)
 
 
@@ -1582,9 +1611,9 @@ def calculate_equity_curves(df: pd.DataFrame, rrr: float = 1) -> List[Dict]:
     Cumulative R of every Strategies table row, trade by trade, at one RRR.
 
     Trades are walked in date order; the export's own order breaks ties within
-    a day. A win adds the RRR in R, a loss takes 1R, under the same rule as
-    calculate_buffer_statistics: effective SL = SL + buffer, capped at Cap SL,
-    and win = Pullback < effective SL AND TP >= rrr x effective SL. Every curve
+    a day. A win adds the RRR in R, a loss takes 1R and a break-even 0R, under
+    the same rule as calculate_buffer_statistics (_strategy_outcomes), BE rule
+    rows included. Every curve
     runs over every trade, so a Continuation-only strategy sits flat through
     the Reversal trades it would not have taken and the curves line up in
     time. Transaction costs are not deducted.
@@ -1607,22 +1636,22 @@ def calculate_equity_curves(df: pd.DataFrame, rrr: float = 1) -> List[Dict]:
                      else ordered['Type'] == trend)
             for max_sl in _caps_for(strategy_name):
                 for buffer in _buffers_for(strategy_name):
-                    effective_sl = filtered['SL'] + buffer
-                    if max_sl:
-                        effective_sl = effective_sl.clip(upper=float(max_sl))
-                    won = ((filtered['Pullback'] < effective_sl)
-                           & (filtered['TP'] >= rrr * effective_sl))
-                    per_trade = pd.Series(-1.0, index=ordered.index)
-                    per_trade[won] = float(rrr)
-                    per_trade[~taken] = 0.0
-                    curve = [0.0] + per_trade.cumsum().round(6).tolist()
-                    curves.append({
-                        'label': _strategy_curve_label(
-                            strategy_name, buffer, trend, max_sl),
-                        'trades': int(taken.sum()),
-                        'outcome': curve[-1],
-                        'curve': curve,
-                    })
+                    for be_rule in _be_rule_options(rrr):
+                        won, even, _ = _strategy_outcomes(
+                            filtered, buffer, rrr, max_sl, be_rule)
+                        per_trade = pd.Series(-1.0, index=ordered.index)
+                        per_trade[won] = float(rrr)
+                        per_trade[even] = 0.0
+                        per_trade[~taken] = 0.0
+                        curve = [0.0] + per_trade.cumsum().round(6).tolist()
+                        curves.append({
+                            'label': _strategy_curve_label(
+                                strategy_name, buffer, trend, max_sl,
+                                be_rule),
+                            'trades': int(taken.sum()),
+                            'outcome': curve[-1],
+                            'curve': curve,
+                        })
     return sorted(curves, key=lambda c: -c['outcome'])
 
 
@@ -1763,10 +1792,14 @@ def create_equity_chart(curves: List[Dict], rrr: float = 1,
         out += (f'<text class="eq-label" x="{x_end + 16}" y="{slot + 4:.1f}">'
                 f'{escape(curve["label"])} {curve["outcome"]:+.0f}R</text>')
     out += '</svg><div class="eq-tip"></div>'
+    with_be = rrr in BE_RULE_RRRS
     out += (f'<p class="eq-caption">Cumulative R over {n_trades} trades in '
-            f'date order: +{rrr:g}R per win, -1R per loss, before costs. '
-            'Trades outside a strategy\'s trend stay flat. The best '
-            f'{len(top)} final outcomes are coloured.</p>')
+            f'date order: +{rrr:g}R per win, -1R per loss'
+            + (', 0R per break-even' if with_be else '')
+            + ', before costs. Trades outside a strategy\'s trend stay flat. '
+            + ('"BE" marks the rows run under the BE rule. ' if with_be
+               else '')
+            + f'The best {len(top)} final outcomes are coloured.</p>')
     out += '</div>' + _EQUITY_CHART_SCRIPT
     return out
 

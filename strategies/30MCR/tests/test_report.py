@@ -475,6 +475,34 @@ def test_strategies_tables_name_the_cap_column_cap_sl():
         assert 'Max SL' not in html
 
 
+def test_be_rule_column_sits_only_in_the_1_2_and_1_3_tables():
+    for rrr in RRR_RATIOS:
+        html = _section_html(f'strategies-1-{rrr}')
+        table = html[html.index('<table'):html.index('</table>')]
+        if rrr == 1:
+            assert 'BE Rule Applied' not in table
+            assert 'type="checkbox"' not in table
+        else:
+            assert '>BE Rule Applied<' in table
+            assert 'type="checkbox" disabled checked' in table
+            assert 'type="checkbox" disabled aria-label="No"' in table
+
+
+def test_strategies_tables_narrow_their_short_columns():
+    """So a 'W – BE – L' Notation cell fits on one line."""
+    html = _section_html('strategies-1-3')
+    assert 'style="width: 8%;">BE Rule Applied<' in html
+    assert 'style="width: 6%;">Buffer<' in html
+    assert 'style="width: 16%;">Notation<' in html
+
+
+def test_be_rule_rows_are_explained_in_the_1_2_and_1_3_notes():
+    notes = {anchor: note for anchor, _, _, note, _ in SECTIONS}
+    assert 'BE Rule Applied' not in notes['strategies-1-1']
+    for rrr in (2, 3):
+        assert '<b>BE Rule Applied</b>' in notes[f'strategies-1-{rrr}']
+
+
 def test_strategies_win_rate_is_coloured_against_its_own_rrr():
     """28.6% loses at 1:1 (breakeven 50%) and pays at 1:3 (breakeven
     25%), with no RRR column left to read it from."""

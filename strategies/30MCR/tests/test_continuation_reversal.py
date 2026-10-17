@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 from utils.continuation_reversal import (  # noqa: E402
     BE_RULE_COLUMN,
     BE_RULE_PIPS,
+    BE_RULE_RRRS,
     RATE_COLUMNS,
     break_even_outcomes,
     BUFFER_PIPS,
@@ -736,14 +737,58 @@ def test_buffer_statistics_carry_trend_and_max_sl_after_buffer():
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
     assert list(result.columns) == ['Strategy', 'Buffer', 'Trend', 'Cap SL',
-                                    'RRR', 'Trades', 'Notation', 'Win Rate']
-    keys = ['Strategy', 'Buffer', 'Trend', 'Cap SL', 'RRR']
+                                    'BE Rule Applied', 'RRR', 'Trades',
+                                    'Notation', 'Win Rate']
+    keys = ['Strategy', 'Buffer', 'Trend', 'Cap SL', 'RRR', 'BE Rule Applied']
     assert not result.duplicated(keys).any()
     all_trades = result[result['Strategy'] == 'All Trades']
     assert set(all_trades['Cap SL']) == set(MAX_SL_CAPS)
     assert MAX_SL_CAPS == [0, 5, 6]
     assert set(result['Trend']) == set(TREND_FILTERS)
     assert (result[result['Trend'] == 'All']['Trades'] == len(sample)).all()
+
+
+def test_buffer_statistics_run_every_row_with_and_without_the_be_rule():
+    """1:2 and 1:3 test every row both ways; 1:1 runs without the rule."""
+    assert BE_RULE_RRRS == [2, 3]
+    result = calculate_buffer_statistics(get_sample_data())
+    keys = ['Strategy', 'Buffer', 'Trend', 'Cap SL']
+    one = result[result['RRR'] == '1:1']
+    assert set(one['BE Rule Applied']) == {False}
+    for rrr in BE_RULE_RRRS:
+        rows = result[result['RRR'] == f'1:{rrr}']
+        off = rows[~rows['BE Rule Applied']]
+        on = rows[rows['BE Rule Applied']]
+        assert len(off) == len(on) == len(one)
+        assert (off[keys].reset_index(drop=True)
+                .equals(on[keys].reset_index(drop=True)))
+        assert on['Notation'].str.contains('BE').all()
+        assert not off['Notation'].str.contains('BE').any()
+
+
+def test_be_rule_row_leaves_break_evens_out_of_the_win_rate():
+    """At 1:3: SL 4 / TP 16 wins (target 12). SL 5 / TP 14 misses its 15
+    target but ran past 10 pips, so the stop at entry makes it break-even.
+    SL 6 is stopped out before anything. 1 win over 1 win + 1 loss."""
+    trades = pd.DataFrame({'SL': [4.0, 5.0, 6.0], 'Pullback': [1.0, 1.0, 6.0],
+                           'TP': [16.0, 14.0, 20.0],
+                           BE_RULE_COLUMN: [False, False, False]})
+    off = _calculate_stats_with_buffer(trades, 'x', 0, 3)
+    on = _calculate_stats_with_buffer(trades, 'x', 0, 3, be_rule=True)
+    assert off['Notation'] == '1W – 2L' and off['Win Rate'] == '33.3%'
+    assert on['Notation'] == '1W – 1BE – 1L' and on['Win Rate'] == '50.0%'
+    assert on['BE Rule Applied'] is True
+
+
+def test_be_rule_row_scores_the_buffered_capped_stop():
+    """2026-09-23 #1: checked, SL 3, Pullback 4.9 - stopped out on its own
+    stop, break-even once a 2 pip buffer lets it survive."""
+    trade = pd.DataFrame({'SL': [3.0], 'Pullback': [4.9], 'TP': [50.0],
+                          BE_RULE_COLUMN: [True]})
+    assert (_calculate_stats_with_buffer(trade, 'x', 0, 3, be_rule=True)
+            ['Notation'] == '0W – 0BE – 1L')
+    assert (_calculate_stats_with_buffer(trade, 'x', 2, 3, be_rule=True)
+            ['Notation'] == '0W – 1BE – 0L')
 
 
 def test_buffer_statistics_trend_keeps_only_its_setups():
@@ -992,6 +1037,22 @@ def test_equity_curve_outcome_matches_the_table_notation():
         curve = curves['All Trades +1 / Reversal / cap 5']
         assert curve['outcome'] == wins * rrr - losses
         assert curve['trades'] == wins + losses == row['Trades']
+
+
+def test_equity_curves_cover_the_be_rule_rows():
+    """Every 1:2 row, BE rule on and off, gets a curve; a BE curve scores a
+    break-even as 0R, so its outcome is W x RRR - L."""
+    df = load_data(CSV_PATH)
+    curves = {c['label']: c for c in calculate_equity_curves(df, 2)}
+    table = calculate_buffer_statistics(df)
+    assert len(curves) == len(table[table['RRR'] == '1:2'])
+    row = table[(table['Strategy'] == 'All Trades') & (table['Buffer'] == '+0')
+                & (table['Trend'] == 'All') & (table['Cap SL'] == 0)
+                & (table['RRR'] == '1:2') & table['BE Rule Applied']].iloc[0]
+    wins, evens, losses = (int(v[:-2] if v.endswith('BE') else v[:-1])
+                           for v in row['Notation'].split(' \u2013 '))
+    assert curves['All Trades +0 / BE']['outcome'] == wins * 2 - losses
+    assert 'All Trades +0' in curves
 
 
 def test_equity_curve_stays_flat_outside_its_trend():
