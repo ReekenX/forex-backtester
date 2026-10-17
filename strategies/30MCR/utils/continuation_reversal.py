@@ -262,7 +262,8 @@ def _breakeven_class(value) -> str:
 
 def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
                       first_col_width: Optional[str] = None,
-                      colour_columns: Tuple[str, ...] = ()) -> str:
+                      colour_columns: Tuple[str, ...] = (),
+                      rrr: Optional[str] = None) -> str:
     """
     Create a dark-mode HTML table with styled formatting.
 
@@ -273,6 +274,8 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
         first_col_width: When set, pins the label column to this width (e.g.
             "40%") and switches the table to fixed layout so it is honoured
         colour_columns: Columns of 1:1 win rates to colour against 50%
+        rrr: The RRR (e.g. "1:2") to colour the Win Rate column against when
+            the table carries no RRR column of its own
 
     Returns:
         HTML string with a styled table
@@ -319,7 +322,7 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
                 css_class = "strategy-col"
             elif col == "Win Rate":
                 css_class = _win_rate_class(
-                    value, row[rrr_col] if rrr_col else None)
+                    value, row[rrr_col] if rrr_col else rrr)
             elif col in colour_columns:
                 css_class = _breakeven_class(value)
             cls_attr = f' class="{css_class}"' if css_class else ""

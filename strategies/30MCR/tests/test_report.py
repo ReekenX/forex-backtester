@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 from utils.continuation_reversal import (  # noqa: E402
     RRR_RATIOS,
     calculate_buffer_statistics,
+    create_html_table,
     get_buffer_strategies,
     load_data,
 )
@@ -455,13 +456,21 @@ def test_strategies_tables_are_pre_sorted_by_win_rate():
     assert rates == sorted(rates, reverse=True)
 
 
-def test_strategies_tables_only_hold_their_own_rrr():
+def test_strategies_tables_carry_no_rrr_column():
+    """Each table holds one RRR, already named in its heading."""
     for rrr in RRR_RATIOS:
         html = _section_html(f'strategies-1-{rrr}')
-        others = {f'1:{r}' for r in RRR_RATIOS} - {f'1:{rrr}'}
-        assert f'>1:{rrr}</td>' in html
-        for other in others:
-            assert f'>{other}</td>' not in html
+        table = html[html.index('<table'):html.index('</table>')]
+        assert '>RRR<' not in table
+        assert '>1:' not in table
+
+
+def test_strategies_win_rate_is_coloured_against_its_own_rrr():
+    """28.6% loses at 1:1 (breakeven 50%) and pays at 1:3 (breakeven
+    25%), with no RRR column left to read it from."""
+    stats = pd.DataFrame({'Strategy': ['a'], 'Win Rate': ['28.6%']})
+    assert 'class="negative-edge">28.6%' in create_html_table(stats, rrr='1:1')
+    assert 'class="positive-edge">28.6%' in create_html_table(stats, rrr='1:3')
 
 
 def test_sort_by_win_rate_handles_empty_and_malformed():

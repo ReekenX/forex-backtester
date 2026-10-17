@@ -183,12 +183,14 @@ def _strategies_section_for(rrr: int) -> Callable[[pd.DataFrame], str]:
     def build(df: pd.DataFrame) -> str:
         names = [name for name, _ in get_buffer_strategies()]
         stats = calculate_buffer_statistics(df, names)
-        stats = stats[stats["RRR"] == f"1:{rrr}"]
+        # One RRR per table, named in the heading, so the column is dropped;
+        # the Win Rate is still coloured against that RRR's breakeven.
+        stats = stats[stats["RRR"] == f"1:{rrr}"].drop(columns="RRR")
         # Distinct from the section anchor: a duplicate id would make
         # getElementById inside the sort script return the <section>.
         return create_html_table(
             _sort_by_win_rate(stats), sort_id=f"strategies-1-{rrr}-table",
-            first_col_width=FIRST_COL_WIDTH,
+            first_col_width=FIRST_COL_WIDTH, rrr=f"1:{rrr}",
         ) + create_equity_chart(
             calculate_equity_curves(df, rrr), rrr,
             chart_id=f"strategies-1-{rrr}-equity")

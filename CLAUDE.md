@@ -420,7 +420,9 @@ Where the pages still differ:
   before the stop rule runs, so `Reversal` is High + Low Reversal only.
   Their `Max SL` column (`0` = no cap, 5, 6) caps the stop after the
   buffer, `min(SL + buffer, cap)`, and replaces the old `Max SL X` strategy
-  rows. `Fixed SL X` rows run uncapped and unbuffered only. 15C and 5OB
+  rows. There is no `RRR` column: each table holds one RRR, named in its
+  heading, and `create_html_table(rrr=...)` still colours `Win Rate` against
+  that RRR's breakeven. `Fixed SL X` rows run uncapped and unbuffered only. 15C and 5OB
   still carry the older Strategies shape - `Min SL` / `Max SL` gate columns,
   buffers `+0` to `+3`, and `Max SL X` rows - because `Trend` has no
   data-independent meaning there.
