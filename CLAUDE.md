@@ -340,7 +340,11 @@ shapes below are on all three pages - compare them side by side with
   table. `create_pullback_chart` reads the `W - M - L` cells back and draws
   tapped winners (`#3987e5`), missed winners (`#d95926`) and losers (recessive
   grey, since L is constant per stop). The `+ 1 pip buffer` rows start a
-  second group, as they score against a wider stop.
+  second group, as they score against a wider stop. 30MCR drops the table
+  and keeps only the chart, cut to two series: every trade in grey
+  (`#4a4a4a`, labelled with the trade count) and the missed trades in orange
+  (`#d95926`) at the end of each bar. `calculate_pullback_statistics` still
+  produces the `W - M - L` cells it reads.
 - **`TP Range Analysis` keeps its four-band table and adds a pip chart
   under it.** `create_tp_chart` gives every whole TP pip from 8 to 29 its own
   column (TP rounded down) and pools the rest into `30+`, set slightly apart.
@@ -491,7 +495,8 @@ its own module - keep a change to one in step with the others:
   `test_every_table_pins_its_first_column_to_30_percent` guards it.
 - **Table ids are not shared between the pages.** 15C's SL Range table is
   `sl-range-stats` and its Pullback table `pullback-analysis`; 5OB's and
-  30MCR's are `sl-range-table` and `pullback-table`. Each page's ids only have
+  30MCR's are `sl-range-table` and `pullback-table` (30MCR renders no
+  Pullback table, only its chart). Each page's ids only have
   to be unique within that page, so do not assume a test on one applies to the
   other.
 

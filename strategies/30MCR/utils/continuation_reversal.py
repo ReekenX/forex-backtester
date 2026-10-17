@@ -1058,15 +1058,10 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
-# Segment colours for the pullback chart: W and M take categorical slots 1
-# and 2 of the dark palette, the same pair as the Signal/Strategy charts. L is
-# a recessive grey - it is the same on every row of a stop, so it is context
-# rather than a series to compare.
-PULLBACK_SEGMENTS = [
-    ('W', 'Tapped winners', '#3987e5'),
-    ('M', 'Missed winners', '#d95926'),
-    ('L', 'Losers', '#4a4a4a'),
-]
+# Pullback chart colours: every trade in a recessive grey, as context, and the
+# trades the limit missed in categorical slot 2 - the one series to compare.
+PULLBACK_ALL = ('All trades', '#4a4a4a')
+PULLBACK_MISSED = ('Missed trades', '#d95926')
 
 _PULLBACK_CHART_CSS = """
     <style>
@@ -1102,14 +1097,15 @@ def _parse_wml(cell: str) -> Tuple[int, int, int]:
 
 def create_pullback_chart(stats: pd.DataFrame) -> str:
     """
-    One 100% stacked bar per Pullback row: tapped winners, missed winners and
-    losers, in the order the table names them.
+    One 100% bar per Pullback level: every trade in grey, with the trades the
+    limit missed - winners that never pulled back far enough to fill it - in
+    orange at the end of it.
 
-    Drawn from the table's own cells, so the two cannot disagree. Every row
-    covers every trade once, so the bars share one length and the W segment
-    shrinking into M as the limit goes deeper is the whole story. The buffered
-    rows start a second group, since they score against a wider stop. Counts
-    sit inside the segments that have room; every segment has a hover tooltip.
+    Every row covers every trade once, so the bars share one length and the
+    orange growing as the limit goes deeper is the whole story. The buffered
+    rows start a second group, since they score against a wider stop. The
+    grey carries the trade count, the orange the missed count where it has
+    room; both have a hover tooltip.
 
     Args:
         stats: DataFrame from calculate_pullback_statistics
@@ -1122,33 +1118,35 @@ def create_pullback_chart(stats: pd.DataFrame) -> str:
                 "padding: 10px;'>No data</p>")
 
     html = _PULLBACK_CHART_CSS + ('<div class="pb-chart" role="img" '
-                                  'aria-label="Tapped winners, missed winners '
-                                  'and losers by limit depth">'
-                                  '<div class="pb-legend">')
-    for key, name, colour in PULLBACK_SEGMENTS:
+                                  'aria-label="Missed trades of all trades '
+                                  'by limit depth"><div class="pb-legend">')
+    for name, colour in (PULLBACK_ALL, PULLBACK_MISSED):
         html += (f'<span><span class="pb-swatch" style="background-color: '
-                 f'{colour};"></span>{key} = {name}</span>')
+                 f'{colour};"></span>{name}</span>')
     html += '</div>'
 
     grouped = False
     for _, row in stats.iterrows():
         label = row['Pullback']
-        counts = _parse_wml(row['Trades'])
-        total = sum(counts) or 1
+        wins, missed, losses = _parse_wml(row['Trades'])
+        total = wins + missed + losses
         css = 'pb-row'
         if label.endswith('buffer') and not grouped:
             css += ' pb-group'
             grouped = True
         html += (f'<div class="{css}"><div>{label}</div>'
                  '<div class="pb-stack">')
-        for (key, name, colour), count in zip(PULLBACK_SEGMENTS, counts):
-            if count == 0:
-                continue
-            share = count / total * 100
+        name, colour = PULLBACK_ALL
+        html += (f'<div class="pb-seg" title="{label} - {name}: {total}" '
+                 f'style="flex: {total - missed}; background-color: '
+                 f'{colour};">{total}</div>')
+        if missed:
+            share = missed / total * 100
             # Room for the count only when the segment is wide enough.
-            text = str(count) if share >= 4 else ''
-            html += (f'<div class="pb-seg" title="{label} - {name}: {count} '
-                     f'({share:.1f}% of trades)" style="flex: {count}; '
+            text = str(missed) if share >= 4 else ''
+            name, colour = PULLBACK_MISSED
+            html += (f'<div class="pb-seg" title="{label} - {name}: {missed} '
+                     f'({share:.1f}% of trades)" style="flex: {missed}; '
                      f'background-color: {colour};">{text}</div>')
         html += '</div></div>'
 

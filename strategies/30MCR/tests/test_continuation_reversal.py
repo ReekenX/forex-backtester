@@ -658,20 +658,22 @@ def test_pullback_counts_match_the_sample():
     assert result['Half'] == '2W - 4M - 4L'
 
 
-def test_pullback_chart_stacks_w_m_l_from_the_table_cells():
+def test_pullback_chart_shows_all_trades_and_the_missed_ones():
     stats = calculate_pullback_statistics(get_sample_data())
     html = create_pullback_chart(stats)
     assert html.count('class="pb-stack"') == len(stats)
-    # '2 pips' is 3W - 3M - 4L in the sample: three segments, sized by count.
-    assert 'title="2 pips - Tapped winners: 3 (30.0% of trades)"' in html
-    assert 'title="2 pips - Missed winners: 3 (30.0% of trades)"' in html
-    assert 'title="2 pips - Losers: 4 (40.0% of trades)"' in html
+    # '2 pips' is 3W - 3M - 4L in the sample: grey for all ten, orange for
+    # the three the limit missed.
+    assert 'title="2 pips - All trades: 10"' in html
+    assert 'title="2 pips - Missed trades: 3 (30.0% of trades)"' in html
+    assert 'Tapped winners' not in html and 'Losers' not in html
 
 
-def test_pullback_chart_skips_empty_segments():
-    """Default misses nothing, so it draws no M segment at all."""
+def test_pullback_chart_skips_an_empty_missed_segment():
+    """Default misses nothing, so it draws no orange segment at all."""
     html = create_pullback_chart(calculate_pullback_statistics(get_sample_data()))
-    assert 'Default - Missed winners' not in html
+    assert 'Default - Missed trades' not in html
+    assert 'title="Default - All trades: 10"' in html
 
 
 def test_pullback_chart_starts_a_group_at_the_buffered_rows():

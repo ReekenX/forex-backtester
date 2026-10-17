@@ -132,10 +132,7 @@ def _tp_section(df: pd.DataFrame) -> str:
 
 
 def _pullback_section(df: pd.DataFrame) -> str:
-    stats = calculate_pullback_statistics(df)
-    return create_sortable_table(
-        stats, "pullback-table", sortable=False, first_col_width=FIRST_COL_WIDTH
-    ) + create_pullback_chart(stats)
+    return create_pullback_chart(calculate_pullback_statistics(df))
 
 
 def _sl_buffer_section(df: pd.DataFrame) -> str:
@@ -271,12 +268,11 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "Pullback",
         "Pullback Analysis",
         "Filling a limit order N pips into the pullback instead of taking the "
-        "signal. Half fills at half the stop. <b>+ 1 pip buffer</b> rows pad "
-        "the stop by a pip (win = Pullback &lt; SL + 1 AND TP &gt;= SL + 1); "
-        "the limit stays put. <b>W</b> = winners that pulled "
-        "back far enough to tap the limit, <b>M</b> = winners missed because "
-        "the limit was never tapped, <b>L</b> = losers whatever the pullback "
-        "(plain rows: win = Pullback &lt; SL AND TP &gt;= SL).",
+        "signal. Half fills at half the stop. <b>Missed trades</b> are "
+        "winners that never pulled back far enough to fill the limit; the "
+        "grey is every trade. <b>+ 1 pip buffer</b> rows pad the stop by a "
+        "pip (win = Pullback &lt; SL + 1 AND TP &gt;= SL + 1); the limit "
+        "stays put.",
         _pullback_section,
     ),
     (
