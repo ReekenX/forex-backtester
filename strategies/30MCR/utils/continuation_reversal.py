@@ -533,10 +533,11 @@ def calculate_weekday_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return _signal_strategy_rows(groups, 'Day')
 
 
-# Series colours for the Signal/Strategy charts: categorical slots 1 and 2 of the
+# Series colours for the Signal/Strategy charts: categorical slots 1-3 of the
 # dark-mode palette, validated against the #1e1e1e surface. Text never wears
 # them - values and labels stay in the page's text greys.
-CHART_SERIES = [('Signal', '#3987e5'), ('Strategy', '#d95926')]
+CHART_SERIES = [('Signal', '#3987e5'), ('Strategy', '#d95926'),
+                ('Strategy + 1 pip', '#199e70')]
 
 # Strategy is scored at 1:1, where a win rate has to clear 50% to pay.
 CHART_BREAKEVEN = 50
@@ -585,19 +586,19 @@ def _cell_rate(cell: str) -> float:
 
 def create_signal_strategy_chart(stats: pd.DataFrame) -> str:
     """
-    Paired horizontal bars of Signal and Strategy win rate, one pair per row.
+    Grouped horizontal bars of Signal, Strategy and Strategy + 1 pip win
+    rate, one group per row.
 
-    Drawn from the very table it sits under - a `<label>, Trades, Signal,
-    Strategy` frame - so the chart and the table cannot disagree. Both bars
-    share one 0-100% axis, with a dashed line at the 1:1 breakeven, so the gap
-    between the two readings - the cost of entry timing - and the distance to
-    breakeven read at a glance. Every bar carries its value at the tip and a
-    hover tooltip with the W/L counts.
+    Drawn from the very table it sits under - a `<label>, Trades` frame with
+    the RATE_COLUMNS - so the chart and the table cannot disagree. All three
+    bars share one 0-100% axis, with a dashed line at the 1:1 breakeven, so
+    the gap between Signal and Strategy - the cost of entry timing - what a
+    pip of stop buys back, and the distance to breakeven read at a glance.
+    Every bar carries its value at the tip and a hover tooltip.
 
     Args:
         stats: DataFrame whose first column labels the rows and which carries
-            Trades, Signal and Strategy columns, either as a bare win rate or
-            wrapped as "13W - 12L (52.0%)"
+            Trades and the CHART_SERIES columns as bare win rates
 
     Returns:
         HTML string with the chart, or a "No data" note for an empty frame

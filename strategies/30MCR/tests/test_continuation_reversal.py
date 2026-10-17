@@ -241,7 +241,7 @@ def test_chart_bars_follow_the_table_cells():
         calculate_weekday_statistics(get_sample_data()))
     for day in WEEKDAY_ORDER:
         assert f'{day}<span class="wr-count">' in html
-    assert html.count('class="wr-bar"') == 2 * len(WEEKDAY_ORDER)
+    assert html.count('class="wr-bar"') == 3 * len(WEEKDAY_ORDER)
     assert 'width: 75.0%' in html and 'width: 50.0%' in html
 
 
@@ -257,7 +257,9 @@ def test_chart_has_a_legend_breakeven_and_tooltips():
     html = create_signal_strategy_chart(
         calculate_weekday_statistics(get_sample_data()))
     assert '>Signal</span>' in html and '>Strategy</span>' in html
+    assert '>Strategy + 1 pip</span>' in html
     assert 'class="wr-breakeven" style="left: 50%;"' in html
+    assert 'title="Monday - Strategy + 1 pip: 50.0%"' in html
     assert 'title="Monday - Strategy: 50.0%"' in html
 
 

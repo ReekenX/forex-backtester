@@ -387,8 +387,9 @@ Where the pages still differ:
   (so on `Fixed SL` it reads the next size up, on `Cap SL` it is
   `min(SL, cap) + 1`). `_rate_columns` builds all three, so every table reads
   them the same way. Every rate is coloured against 50% - green above, red
-  below, plain on it - through `colour_columns`. The charts under them still
-  draw Signal and Strategy only. There is no BE Rule column: these tables
+  below, plain on it - through `colour_columns`. The charts under them - and
+  the `Adding Buffer` chart - draw all three as grouped bars, `Strategy + 1
+  pip` in categorical slot 3 (`#199e70`). There is no BE Rule column: these tables
   are 1:1, where almost every target sits inside the 10-pip trigger, so the
   rule barely moves them. `break_even_outcomes` stays for higher-RRR use.
 - **A `Streaks` table sits between the R Distribution charts and the
