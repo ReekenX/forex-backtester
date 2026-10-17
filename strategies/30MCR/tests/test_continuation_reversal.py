@@ -144,9 +144,10 @@ def test_load_data_keeps_every_trade_column():
     """Dropping the scratch columns must not drop a row or a trade column."""
     raw = pd.read_csv(CSV_PATH)
     df = load_data(CSV_PATH)
-    assert len(df) == len(raw)
-    assert list(df.columns)[:8] == ['Date', 'Weekday', 'Trade', 'Direction',
-                                    '30M', 'SL', 'Pullback', 'TP']
+    assert len(df) == raw['Date'].notna().sum()
+    assert list(df.columns)[:9] == ['Date', 'Weekday', 'Trade', 'Direction',
+                                    '30M', 'BE Rule (10 pips)', 'SL',
+                                    'Pullback', 'TP']
 
 
 def test_load_data_fills_blank_numbers_with_zero():
@@ -203,6 +204,18 @@ def test_load_data_maps_each_level_and_direction(tmp_path, level, direction,
     assert row['Type'] == setup.split()[-1]
 
 
+def test_load_data_drops_rows_without_a_date(tmp_path):
+    csv = tmp_path / 'trades.csv'
+    csv.write_text('Date,Weekday,Trade,Direction,30M,BE Rule (10 pips),'
+                   'SL,Pullback,TP\n'
+                   '2025-02-03,Monday,#1,Buy,High,TRUE,4,1,12\n'
+                   ',,,,,FALSE,,,\n'
+                   ',,,,,FALSE,,,\n')
+    df = load_data(str(csv))
+    assert len(df) == 1
+    assert bool(df.iloc[0]['BE Rule (10 pips)']) is True
+
+
 def test_load_data_matches_the_sheets_own_headline_rates():
     """The export labels its Signal and WR columns with the figures the sheet
     computed. They are dropped at load, but they are still the trader's own
@@ -212,7 +225,7 @@ def test_load_data_matches_the_sheets_own_headline_rates():
     signal = (df['TP'] > 0).sum() / total * 100
     strategy = ((df['Pullback'] < df['SL'])
                 & (df['TP'] >= df['SL'])).sum() / total * 100
-    assert round(signal, 1) == 50.0
+    assert round(signal, 1) == 50.6
     assert round(strategy, 1) == 33.5
 
 

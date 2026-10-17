@@ -88,8 +88,11 @@ Each strategy keeps its data inside its `strategies/<name>/` directory: `data.cs
 - **TP**: Take Profit in pips (empty = not profitable)
 
 **Break-even rule.** An optional management rule: once price runs 10 pips in
-the trade's favour, the stop moves to entry. Scored with the rule on, a trade
-reads one of three ways:
+the trade's favour, the stop moves to entry. The three numbers are learned in
+order - `SL` at entry, then `Pullback`, then `TP` - so the stop is checked
+first. A trade with `Pullback >= SL` (against the effective stop, buffer
+included) is a loss under the rule exactly as without it; the rule only
+reads trades that survived the stop:
 
 - **Checked (`TRUE`)** - a break-even trade, 0R. Price reached 10 pips, came
   back to entry and took the trade out before the target. Its recorded `TP` is
@@ -98,20 +101,28 @@ reads one of three ways:
   if `TP` reaches the target for the RRR (`TP >= RRR x SL`), otherwise it is
   break-even, 0R.
 - **Unchecked, `TP` of 10 pips or less** - the rule never triggered, so the
-  normal win rule applies, loss included.
+  normal win rule applies.
+
+So a stop buffer can change which branch a trade lands in. 2026-09-23 #1 is
+checked but recorded `SL 3.0, Pullback 4.9`: a loss on the recorded stop, a
+break-even trade with a 2-pip buffer.
 
 With the rule off, the column is ignored and every trade scores under the
 normal win rule. The flag is learned after the trade, like `Pullback` and
 `TP`, so it describes outcomes and must never be used as an entry filter.
+
+The checkbox exports `FALSE` on every empty sheet row, so those rows no longer
+read as blank lines. `load_data` drops any row without a `Date`; without that
+cut 817 empty rows scored as losses and pulled every win rate down to ~9%.
 
 Everything right of `TP` (currently `All`, `WR`, `+1pip`, `+1pip CAP(6)`
 and a run of `#DIV/0!` cells) is the spreadsheet's own scratch work - precomputed win rates and
 R totals for stop scenarios the page recomputes itself - and `load_data` drops
 it. Those headers are renamed and repeated between exports, so the cut is
 anchored on `TP`, never on a scratch name. The header figures are still a
-useful cross-check: the sheet's `All 50%` and `WR 33.5%` are exactly
+useful cross-check: the sheet's `All 50.6%` and `WR 33.5%` are exactly
 what `calculate_setup_statistics`'s Default row reports. The place the sheet
-disagrees is its `+1pip 41.1%` against this page's 40.5%: one trade recorded
+disagrees is its `+1pip 40.9%` against this page's 40.3%: one trade recorded
 `SL 4.7, Pullback 5.7` survives a 5.7-pip stop in the sheet and not here, because the project's win rule is
 `Pullback < SL`, strictly.
 

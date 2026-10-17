@@ -5,7 +5,7 @@ Backs the static HTML page rendered by utils.report: every table on that page
 is computed here, and nothing here needs a Jupyter kernel.
 
 CSV columns (strategies/30MCR/trades.csv):
-    Date, Weekday, Trade, Direction, 30M, SL, Pullback, TP
+    Date, Weekday, Trade, Direction, 30M, BE Rule (10 pips), SL, Pullback, TP
 
 Three things about this export shape the loader:
 
@@ -116,6 +116,9 @@ def load_data(filepath: str = DEFAULT_CSV) -> pd.DataFrame:
     df = pd.read_csv(filepath)
     df.columns = [_normalise_header(col) for col in df.columns]
     df = _drop_scratch_columns(df).copy()
+    # The BE Rule checkbox exports FALSE on every empty sheet row, so those
+    # rows no longer read as blank lines. A row without a date is not a trade.
+    df = df[df["Date"].astype(str).str.strip().ne("") & df["Date"].notna()]
 
     for col in ["SL", "Pullback", "TP"]:
         if col in df.columns:
