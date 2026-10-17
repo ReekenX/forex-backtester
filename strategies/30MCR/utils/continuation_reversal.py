@@ -75,6 +75,11 @@ LAST_TRADE_COLUMN = 'TP'
 
 DEFAULT_CSV = "../strategies/30MCR/trades.csv"
 
+# The break-even checkbox: price ran BE_RULE_PIPS in the trade's favour, came
+# back to entry and closed the trade there. See break_even_outcomes.
+BE_RULE_COLUMN = 'BE Rule (10 pips)'
+BE_RULE_PIPS = 10
+
 
 def _normalise_header(name: object) -> str:
     """
@@ -237,8 +242,20 @@ def _win_rate_class(value, rrr: Optional[str]) -> str:
     return "positive-edge" if wr > 100.0 / (1 + rrr_val) else "negative-edge"
 
 
+def _breakeven_class(value) -> str:
+    """Green above the 1:1 breakeven of 50%, red below, plain on it."""
+    match = _PCT_RE.search(str(value))
+    if not match:
+        return ""
+    rate = float(match.group(0).rstrip("%"))
+    if rate > 50:
+        return "positive-edge"
+    return "negative-edge" if rate < 50 else ""
+
+
 def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
-                      first_col_width: Optional[str] = None) -> str:
+                      first_col_width: Optional[str] = None,
+                      colour_columns: Tuple[str, ...] = ()) -> str:
     """
     Create a dark-mode HTML table with styled formatting.
 
@@ -248,6 +265,7 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
             whose cells carry a percentage click-to-sort by it, descending only
         first_col_width: When set, pins the label column to this width (e.g.
             "40%") and switches the table to fixed layout so it is honoured
+        colour_columns: Columns of 1:1 win rates to colour against 50%
 
     Returns:
         HTML string with a styled table
@@ -295,6 +313,8 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
             elif col == "Win Rate":
                 css_class = _win_rate_class(
                     value, row[rrr_col] if rrr_col else None)
+            elif col in colour_columns:
+                css_class = _breakeven_class(value)
             cls_attr = f' class="{css_class}"' if css_class else ""
             html += f"                <td{cls_attr}>{value}</td>\n"
         html += "            </tr>\n"
@@ -417,18 +437,97 @@ def _signal_strategy_rows(groups: List[Tuple],
     return pd.DataFrame(results)
 
 
+def _be_rule_flags(df: pd.DataFrame) -> pd.Series:
+    """The BE Rule checkbox as booleans. A missing column means unchecked."""
+    if BE_RULE_COLUMN not in df.columns:
+        return pd.Series(False, index=df.index)
+    flags = df[BE_RULE_COLUMN]
+    if flags.dtype == bool:
+        return flags
+    return flags.astype(str).str.strip().str.upper().eq('TRUE')
+
+
+def break_even_outcomes(df: pd.DataFrame, rrr: float = 1,
+                        buffer: float = 0) -> Tuple[pd.Series, pd.Series,
+                                                    pd.Series]:
+    """
+    Score every trade under the break-even rule: once price runs BE_RULE_PIPS
+    in the trade's favour, the stop moves to entry.
+
+    The numbers are learned in order - SL, then Pullback, then TP - so the
+    stop is checked first: Pullback >= SL is a loss with the rule on or off.
+    A trade that survived it reads one of three ways:
+
+    - its target sits within BE_RULE_PIPS: price reaches the target before
+      the rule can trigger, so the normal win rule applies, checkbox or not
+    - checked: price reached BE_RULE_PIPS and came back to entry before the
+      target - break-even
+    - unchecked with TP above BE_RULE_PIPS: the stop sits at entry, so it wins
+      if TP reaches the target and is break-even otherwise
+
+    Everything else - TP at BE_RULE_PIPS or below - scores as usual.
+
+    Args:
+        df: DataFrame with trading data
+        rrr: Reward multiple of the stop the target sits at
+        buffer: Pips added to the recorded stop
+
+    Returns:
+        (wins, break_evens, losses) boolean Series; every trade is in one
+    """
+    effective_sl = df['SL'] + buffer
+    target = rrr * effective_sl
+    survived = df['Pullback'] < effective_sl
+    reached = df['TP'] >= target
+    rule_applies = target > BE_RULE_PIPS
+
+    break_evens = survived & rule_applies & (
+        _be_rule_flags(df) | ((df['TP'] > BE_RULE_PIPS) & ~reached))
+    wins = survived & reached & ~break_evens
+    losses = ~(wins | break_evens)
+    return wins, break_evens, losses
+
+
+def _win_rate(wins: int, decided: int) -> str:
+    """'52.7%' - wins over the trades that ended in a win or a loss."""
+    return f"{(wins / decided * 100) if decided else 0.0:.1f}%"
+
+
 def calculate_weekday_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Per-weekday Signal and Strategy win rates.
+    Per-weekday win rates under four readings of the same trades.
+
+    Signal and Strategy are the grouping tables' two readings. Strategy + 1
+    pip pads the stop by TYPE_BUFFER_PIPS; Strategy + BE Rule scores the
+    recorded stop under break_even_outcomes. All are at 1:1. A break-even
+    trade returns 0R, so it is left out of its column's win rate - wins over
+    wins plus losses - which keeps 50% the line between paying and not.
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: Day, Trades, Signal, Strategy
+        DataFrame with columns: Day, Trades, Signal, Strategy,
+        Strategy + 1 pip, Strategy + BE Rule - each a bare "52.7%"
     """
-    groups = [(day, df[df['Weekday'] == day]) for day in WEEKDAY_ORDER]
-    return _signal_strategy_rows(groups, 'Day')
+    results = []
+    for day in WEEKDAY_ORDER:
+        trades = df[df['Weekday'] == day]
+        total = len(trades)
+        rows = _signal_strategy_rows(
+            [(day, trades), (day, trades, TYPE_BUFFER_PIPS)], 'Day')
+        wins, _, losses = break_even_outcomes(trades)
+        results.append({
+            'Day': day,
+            'Trades': total,
+            'Signal': _PCT_RE.search(rows.iloc[0]['Signal']).group(0),
+            'Strategy': _PCT_RE.search(rows.iloc[0]['Strategy']).group(0),
+            f'Strategy + {_pip_label(TYPE_BUFFER_PIPS)}':
+                _PCT_RE.search(rows.iloc[1]['Strategy']).group(0),
+            'Strategy + BE Rule': _win_rate(
+                int(wins.sum()), int(wins.sum() + losses.sum())),
+        })
+    return pd.DataFrame(results)
 
 
 # Series colours for the Signal/Strategy charts: categorical slots 1 and 2 of the
@@ -476,10 +575,9 @@ _CHART_CSS = """
 """
 
 
-def _parse_wl(cell: str) -> Tuple[int, int]:
-    """Read wins and losses back out of a '13W - 12L (52.0%)' cell."""
-    wins, losses = re.match(r'\s*(\d+)W - (\d+)L', cell).groups()
-    return int(wins), int(losses)
+def _cell_rate(cell: str) -> float:
+    """Read the win rate back out of a '13W - 12L (52.0%)' or '52.0%' cell."""
+    return float(_PCT_RE.search(str(cell)).group(0).rstrip('%'))
 
 
 def create_signal_strategy_chart(stats: pd.DataFrame) -> str:
@@ -495,7 +593,8 @@ def create_signal_strategy_chart(stats: pd.DataFrame) -> str:
 
     Args:
         stats: DataFrame whose first column labels the rows and which carries
-            Trades, Signal and Strategy columns in the _format_wl shape
+            Trades, Signal and Strategy columns, either in the _format_wl
+            shape or as a bare win rate
 
     Returns:
         HTML string with the chart, or a "No data" note for an empty frame
@@ -528,9 +627,7 @@ def create_signal_strategy_chart(stats: pd.DataFrame) -> str:
                  f'<span class="wr-count">{int(row["Trades"])} trades</span>'
                  '</div><div class="wr-track">')
         for name, colour in CHART_SERIES:
-            wins, losses = _parse_wl(row[name])
-            total = wins + losses
-            rate = wins / total * 100 if total else 0.0
+            rate = _cell_rate(row[name])
             html += (f'<div class="wr-bar-line" title="{label} - {name}: '
                      f'{row[name]}"><div class="wr-bar" style="width: '
                      f'{rate:.1f}%; background-color: {colour};"></div>'

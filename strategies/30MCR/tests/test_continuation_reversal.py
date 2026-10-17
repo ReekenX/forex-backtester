@@ -13,6 +13,9 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from utils.continuation_reversal import (  # noqa: E402
+    BE_RULE_COLUMN,
+    BE_RULE_PIPS,
+    break_even_outcomes,
     BUFFER_PIPS,
     MAX_SL_CAPS,
     PULLBACK_BUFFER_PIPS,
@@ -255,7 +258,7 @@ def test_chart_has_a_legend_breakeven_and_tooltips():
         calculate_weekday_statistics(get_sample_data()))
     assert '>Signal</span>' in html and '>Strategy</span>' in html
     assert 'class="wr-breakeven" style="left: 50%;"' in html
-    assert 'title="Monday - Strategy: 2W - 2L (50.0%)"' in html
+    assert 'title="Monday - Strategy: 50.0%"' in html
 
 
 def test_chart_draws_every_row_of_any_signal_strategy_table():
@@ -294,7 +297,8 @@ def test_format_wl_shape():
 def test_weekday_statistics_has_a_row_per_weekday():
     result = calculate_weekday_statistics(get_sample_data())
     assert list(result['Day']) == WEEKDAY_ORDER
-    assert list(result.columns) == ['Day', 'Trades', 'Signal', 'Strategy']
+    assert list(result.columns) == ['Day', 'Trades', 'Signal', 'Strategy',
+                                    'Strategy + 1 pip', 'Strategy + BE Rule']
 
 
 def test_weekday_statistics_counts_trades_per_day():
@@ -312,8 +316,101 @@ def test_signal_counts_the_stopped_out_winner_and_strategy_does_not():
     monday = get_sample_data().iloc[1:2]
     result = calculate_weekday_statistics(monday)
     row = result[result['Day'] == 'Monday'].iloc[0]
-    assert row['Signal'] == '1W - 0L (100.0%)'
-    assert row['Strategy'] == '0W - 1L (0.0%)'
+    assert row['Signal'] == '100.0%'
+    assert row['Strategy'] == '0.0%'
+
+
+def test_weekday_statistics_carries_only_win_rates():
+    result = calculate_weekday_statistics(get_sample_data())
+    for col in result.columns[2:]:
+        assert result[col].str.fullmatch(r'\d+\.\d%').all(), col
+
+
+def test_weekday_buffer_column_matches_the_setup_tables_buffer_rule():
+    """Monday at SL + 1: rows 1 and 4 survive and reach (TP 16 >= 5,
+    25 >= 8), row 2 still fails (6 >= 6), row 3 never reached a target."""
+    result = calculate_weekday_statistics(get_sample_data())
+    monday = result[result['Day'] == 'Monday'].iloc[0]
+    assert monday['Strategy + 1 pip'] == '50.0%'
+
+
+def _be_trades(rows):
+    return pd.DataFrame(rows, columns=['SL', 'Pullback', 'TP',
+                                       BE_RULE_COLUMN])
+
+
+def test_break_even_checks_the_stop_first():
+    """2026-09-23 #1: checked, but Pullback 4.9 took out the 3.0 stop
+    before the rule could act. A 2 pip buffer lets it survive into it."""
+    trades = _be_trades([(3.0, 4.9, 50.0, True)])
+    wins, bes, losses = break_even_outcomes(trades, rrr=4)
+    assert losses.iloc[0] and not bes.iloc[0]
+    wins, bes, losses = break_even_outcomes(trades, rrr=4, buffer=2)
+    assert bes.iloc[0]
+
+
+def test_break_even_scores_a_checked_trade_as_break_even():
+    trades = _be_trades([(14.0, 10.8, 24.0, True)])
+    wins, bes, losses = break_even_outcomes(trades)
+    assert bes.iloc[0] and not wins.iloc[0]
+
+
+def test_break_even_leaves_a_target_inside_the_trigger_alone():
+    """A 1.9 pip target is hit long before price runs 10 pips, so the
+    checkbox cannot turn it into a break-even trade."""
+    trades = _be_trades([(1.9, 0.5, 12.0, True)])
+    wins, bes, losses = break_even_outcomes(trades)
+    assert wins.iloc[0]
+    wins, bes, losses = break_even_outcomes(trades, rrr=6)
+    assert bes.iloc[0]
+
+
+def test_break_even_saves_an_unchecked_trade_past_the_trigger():
+    """Unchecked, TP 15 > 10: 1:3 on a 6 pip stop (18) is missed, so the
+    stop at entry makes it break-even rather than a loss. At 1:2 (12) it
+    wins."""
+    trades = _be_trades([(6.0, 2.0, 15.0, False)])
+    assert break_even_outcomes(trades, rrr=3)[1].iloc[0]
+    assert break_even_outcomes(trades, rrr=2)[0].iloc[0]
+
+
+def test_break_even_does_not_trigger_at_or_below_ten_pips():
+    trades = _be_trades([(6.0, 2.0, 10.0, False)])
+    wins, bes, losses = break_even_outcomes(trades, rrr=2)
+    assert losses.iloc[0]
+
+
+def test_break_even_puts_every_trade_in_exactly_one_outcome():
+    df = load_data(CSV_PATH)
+    for rrr in RRR_RATIOS:
+        wins, bes, losses = break_even_outcomes(df, rrr=rrr)
+        assert (wins.astype(int) + bes.astype(int)
+                + losses.astype(int) == 1).all()
+
+
+def test_break_even_reads_the_checkbox_as_text_too():
+    trades = _be_trades([(14.0, 1.0, 24.0, 'TRUE'), (14.0, 1.0, 24.0, 'FALSE')])
+    wins, bes, _ = break_even_outcomes(trades)
+    assert list(bes) == [True, False]
+    assert list(wins) == [False, True]
+
+
+def test_break_even_without_the_column_reads_every_trade_unchecked():
+    wins, bes, _ = break_even_outcomes(get_sample_data(), rrr=3)
+    assert not bes[get_sample_data()['TP'] <= BE_RULE_PIPS].any()
+
+
+def test_weekday_be_column_leaves_break_evens_out_of_the_rate():
+    """Two Monday trades: one wins at 1:1, one checked trade with a 14 pip
+    stop is break-even. 1 win over 1 decided trade, not 1 over 2."""
+    trades = pd.DataFrame({
+        'Weekday': ['Monday', 'Monday'], 'SL': [4.0, 14.0],
+        'Pullback': [1.0, 2.0], 'TP': [16.0, 24.0],
+        BE_RULE_COLUMN: [False, True]})
+    result = calculate_weekday_statistics(trades)
+    monday = result[result['Day'] == 'Monday'].iloc[0]
+    assert monday['Strategy'] == '100.0%'
+    assert monday['Strategy + BE Rule'] == '100.0%'
 
 
 BUFFERED_TYPES = [f'{t} + 1 pip buffer' for t in TYPE_ORDER]
@@ -365,10 +462,12 @@ def test_setup_buffer_rows_pad_the_stop_for_strategy_only():
 
 def test_grouping_tables_handle_an_empty_dataset():
     empty = get_empty_data()
-    for fn in (calculate_weekday_statistics, calculate_setup_statistics):
-        result = fn(empty)
-        assert (result['Trades'] == 0).all()
-        assert (result['Signal'] == '0W - 0L (0.0%)').all()
+    result = calculate_setup_statistics(empty)
+    assert (result['Trades'] == 0).all()
+    assert (result['Signal'] == '0W - 0L (0.0%)').all()
+    result = calculate_weekday_statistics(empty)
+    assert (result['Trades'] == 0).all()
+    assert (result.iloc[:, 2:] == '0.0%').all().all()
 
 
 # --- stop tables -----------------------------------------------------------

@@ -528,3 +528,14 @@ def test_half_sl_table_compares_the_three_entries_without_sorting():
         assert entry in html
     assert 'class="sortable"' not in html
     assert 'width: 40%' in html
+
+
+def test_weekday_table_colours_every_rate_against_breakeven():
+    """Sample Wednesday wins both trades (green), Monday wins one of two and
+    sits on 50% (plain), Thursday has no trades and reads 0% (red)."""
+    html = _section_html('weekday')
+    table = html[html.index('<table'):html.index('</table>')]
+    assert '>Notation<' not in table
+    assert 'class="positive-edge"' in table
+    assert 'class="negative-edge"' in table
+    assert '<td>50.0%</td>' in table

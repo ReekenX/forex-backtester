@@ -92,7 +92,10 @@ the trade's favour, the stop moves to entry. The three numbers are learned in
 order - `SL` at entry, then `Pullback`, then `TP` - so the stop is checked
 first. A trade with `Pullback >= SL` (against the effective stop, buffer
 included) is a loss under the rule exactly as without it; the rule only
-reads trades that survived the stop:
+reads trades that survived the stop, and only when their target sits beyond
+10 pips. A target inside 10 pips is hit before the rule can trigger, so the
+normal win rule applies there, checkbox or not (2026-08-24 #1, checked with
+`SL 1.9`, still wins at 1:1). Past that:
 
 - **Checked (`TRUE`)** - a break-even trade, 0R. Price reached 10 pips, came
   back to entry and took the trade out before the target. Its recorded `TP` is
@@ -110,6 +113,11 @@ break-even trade with a 2-pip buffer.
 With the rule off, the column is ignored and every trade scores under the
 normal win rule. The flag is learned after the trade, like `Pullback` and
 `TP`, so it describes outcomes and must never be used as an entry filter.
+
+`break_even_outcomes(df, rrr, buffer)` is the one place this rule lives; it
+returns wins, break-evens and losses, each trade in exactly one. A
+break-even returns 0R, so a win rate under the rule is wins over wins plus
+losses, which keeps 50% the 1:1 breakeven.
 
 The checkbox exports `FALSE` on every empty sheet row, so those rows no longer
 read as blank lines. `load_data` drops any row without a `Date`; without that
@@ -375,6 +383,13 @@ Where the pages still differ:
   Signal unchanged since it ignores the stop. There is no High/Low table and no Direction table -
   neither split said anything on its own.
 - **It has no `4H`, `EMA` or `Hour` column**, so none of those tables exist.
+- **Its `Weekday Analysis` carries win rates only**: `Day, Trades, Signal,
+  Strategy, Strategy + 1 pip, Strategy + BE Rule`, each a bare `"52.7%"`, all
+  at 1:1. `+ 1 pip` is SL + `TYPE_BUFFER_PIPS`; `BE Rule` reads
+  `break_even_outcomes`. Every rate is coloured against 50% - green above, red
+  below, plain on it - through `create_html_table(colour_columns=...)`. The
+  chart under it still draws Signal and Strategy; it reads the rate straight
+  from the cell, so it takes either cell shape.
 - **A `Streaks` table sits between the R Distribution charts and the
   Strategies tables.** `calculate_streak_statistics` reads the trades in
   date order and reports the longest unbroken run of wins and of losses

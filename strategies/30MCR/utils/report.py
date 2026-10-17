@@ -90,7 +90,8 @@ def _with_chart(stats: pd.DataFrame, table: str) -> str:
 
 def _weekday_section(df: pd.DataFrame) -> str:
     stats = calculate_weekday_statistics(df)
-    return _with_chart(stats, create_html_table(stats, first_col_width="40%"))
+    return _with_chart(stats, create_html_table(
+        stats, first_col_width="40%", colour_columns=tuple(stats.columns[2:])))
 
 
 def _setup_section(df: pd.DataFrame) -> str:
@@ -198,6 +199,17 @@ SIGNAL_STRATEGY_NOTE = (
     "the cost of entry timing."
 )
 
+WEEKDAY_NOTE = (
+    "Four readings of the same trades, all at 1:1. <b>Signal</b> = TP &gt; 0: "
+    "the idea was right, stop ignored. <b>Strategy</b> = Pullback &lt; SL AND "
+    "TP &gt;= SL: what trading it would have returned. <b>Strategy + 1 pip</b> "
+    "pads every stop by a pip. <b>Strategy + BE Rule</b> moves the stop to "
+    "entry once price runs 10 pips: a checked trade, or one past 10 pips that "
+    "missed its target, is break-even, 0R, and left out of the rate. The stop "
+    "is checked first, and a target inside 10 pips is hit before the rule can "
+    "act. Green is above the 50% breakeven, red below."
+)
+
 # (anchor, nav label, heading, note, builder) - the 15C page's section order,
 # with this export's own entry-time filters in the grouping block.
 SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
@@ -205,7 +217,7 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "weekday",
         "Weekday",
         "Weekday Analysis",
-        SIGNAL_STRATEGY_NOTE,
+        WEEKDAY_NOTE,
         _weekday_section,
     ),
     (
