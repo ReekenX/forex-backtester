@@ -293,7 +293,7 @@ def test_weekday_statistics_has_a_row_per_weekday():
     result = calculate_weekday_statistics(get_sample_data())
     assert list(result['Day']) == WEEKDAY_ORDER
     assert list(result.columns) == ['Day', 'Trades', 'Signal', 'Strategy',
-                                    'Strategy + 1 pip', 'Strategy + BE Rule']
+                                    'Strategy + 1 pip']
 
 
 def test_weekday_statistics_counts_trades_per_day():
@@ -395,19 +395,6 @@ def test_break_even_without_the_column_reads_every_trade_unchecked():
     assert not bes[get_sample_data()['TP'] <= BE_RULE_PIPS].any()
 
 
-def test_weekday_be_column_leaves_break_evens_out_of_the_rate():
-    """Two Monday trades: one wins at 1:1, one checked trade with a 14 pip
-    stop is break-even. 1 win over 1 decided trade, not 1 over 2."""
-    trades = pd.DataFrame({
-        'Weekday': ['Monday', 'Monday'], 'SL': [4.0, 14.0],
-        'Pullback': [1.0, 2.0], 'TP': [16.0, 24.0],
-        BE_RULE_COLUMN: [False, True]})
-    result = calculate_weekday_statistics(trades)
-    monday = result[result['Day'] == 'Monday'].iloc[0]
-    assert monday['Strategy'] == '100.0%'
-    assert monday['Strategy + BE Rule'] == '100.0%'
-
-
 BUFFERED_TYPES = [f'{t} + 1 pip buffer' for t in TYPE_ORDER]
 
 
@@ -449,7 +436,7 @@ def test_setup_buffer_column_pads_the_stop_for_strategy_only():
             == result.loc['Reversal', 'Strategy'])
 
 
-def test_every_rate_table_carries_the_four_readings():
+def test_every_rate_table_carries_the_three_readings():
     sample = get_sample_data()
     for fn in (calculate_weekday_statistics, calculate_setup_statistics,
                calculate_sl_statistics, calculate_sl_fixed_statistics,
@@ -467,18 +454,6 @@ def test_fixed_sl_buffer_column_reads_the_next_size_up():
     for pips in SL_FIXED_PIPS[:-1]:
         assert (result.loc[f'{pips} pips', 'Strategy + 1 pip']
                 == result.loc[f'{pips + 1} pips', 'Strategy'])
-
-
-def test_cap_sl_be_rule_scores_the_capped_stop():
-    """SL 14, checked: on its own stop the 14 pip target sits past the
-    10 pip trigger, so it is break-even and leaves the rate. Capped at 9 the
-    target is inside the trigger and the trade simply wins."""
-    trades = pd.DataFrame({'SL': [14.0], 'Pullback': [2.0], 'TP': [24.0],
-                           BE_RULE_COLUMN: [True]})
-    result = calculate_sl_max_statistics(trades).set_index('Cap SL')
-    assert result.loc['Default', 'Strategy'] == '100.0%'
-    assert result.loc['Default', 'Strategy + BE Rule'] == '0.0%'
-    assert result.loc['9 pips', 'Strategy + BE Rule'] == '100.0%'
 
 
 def test_grouping_tables_handle_an_empty_dataset():

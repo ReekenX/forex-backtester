@@ -85,7 +85,7 @@ BE_RULE_PIPS = 10
 TYPE_BUFFER_PIPS = 1
 
 # The win-rate columns of every Signal/Strategy table. See _rate_columns.
-RATE_COLUMNS = ['Signal', 'Strategy', 'Strategy + 1 pip', 'Strategy + BE Rule']
+RATE_COLUMNS = ['Signal', 'Strategy', 'Strategy + 1 pip']
 
 
 def _normalise_header(name: object) -> str:
@@ -407,7 +407,7 @@ def _strategy_wins(trades: pd.DataFrame, effective_sl) -> pd.Series:
 
 def _rate_columns(trades: pd.DataFrame, effective_sl) -> Dict[str, str]:
     """
-    The four readings every Signal/Strategy table carries, each a bare
+    The three readings every Signal/Strategy table carries, each a bare
     "52.7%" at 1:1.
 
     Signal: TP > 0 - the trade idea was right and price reached a target. The
@@ -421,10 +421,6 @@ def _rate_columns(trades: pd.DataFrame, effective_sl) -> Dict[str, str]:
     Strategy + 1 pip: the same rule with the row's stop padded by
     TYPE_BUFFER_PIPS, as in Adding Buffer.
 
-    Strategy + BE Rule: the row's stop under break_even_outcomes. A
-    break-even trade returns 0R, so it is left out of the rate - wins over
-    wins plus losses - which keeps 50% the line between paying and not.
-
     Args:
         trades: The trades of one table row
         effective_sl: The row's stop - a per-trade Series or one number
@@ -435,15 +431,12 @@ def _rate_columns(trades: pd.DataFrame, effective_sl) -> Dict[str, str]:
     total = len(trades)
     if not total:
         return {name: _win_rate(0, 0) for name in RATE_COLUMNS}
-    wins, _, losses = break_even_outcomes(trades, stop=effective_sl)
     return {
         'Signal': _win_rate(int((trades['TP'] > 0).sum()), total),
         'Strategy': _win_rate(
             int(_strategy_wins(trades, effective_sl).sum()), total),
         RATE_COLUMNS[2]: _win_rate(int(_strategy_wins(
             trades, effective_sl + TYPE_BUFFER_PIPS).sum()), total),
-        'Strategy + BE Rule': _win_rate(
-            int(wins.sum()), int(wins.sum() + losses.sum())),
     }
 
 

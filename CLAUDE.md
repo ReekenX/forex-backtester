@@ -114,7 +114,8 @@ With the rule off, the column is ignored and every trade scores under the
 normal win rule. The flag is learned after the trade, like `Pullback` and
 `TP`, so it describes outcomes and must never be used as an entry filter.
 
-`break_even_outcomes(df, rrr, buffer)` is the one place this rule lives; it
+`break_even_outcomes(df, rrr, buffer, stop)` is the one place this rule lives
+- no page table reads it yet; it
 returns wins, break-evens and losses, each trade in exactly one. A
 break-even returns 0R, so a win rate under the rule is wins over wins plus
 losses, which keeps 50% the 1:1 breakeven.
@@ -381,14 +382,15 @@ Where the pages still differ:
 - **It has no `4H`, `EMA` or `Hour` column**, so none of those tables exist.
 - **Its Signal/Strategy tables carry win rates only** - `Weekday`, `Setup`,
   `SL Range`, `Fixed SL` and `Cap SL` are `<label>, Trades, Signal,
-  Strategy, Strategy + 1 pip, Strategy + BE Rule` (`RATE_COLUMNS`), each a
-  bare `"52.7%"`, all at 1:1 on the row's own stop. `+ 1 pip` pads that stop
-  by `TYPE_BUFFER_PIPS` (so on `Fixed SL` it reads the next size up, on
-  `Cap SL` it is `min(SL, cap) + 1`); `BE Rule` scores it through
-  `break_even_outcomes`. `_rate_columns` builds all four, so every table
-  reads them the same way. Every rate is coloured against 50% - green above,
-  red below, plain on it - through `colour_columns`. The charts under them
-  still draw Signal and Strategy only.
+  Strategy, Strategy + 1 pip` (`RATE_COLUMNS`), each a bare `"52.7%"`, all at
+  1:1 on the row's own stop. `+ 1 pip` pads that stop by `TYPE_BUFFER_PIPS`
+  (so on `Fixed SL` it reads the next size up, on `Cap SL` it is
+  `min(SL, cap) + 1`). `_rate_columns` builds all three, so every table reads
+  them the same way. Every rate is coloured against 50% - green above, red
+  below, plain on it - through `colour_columns`. The charts under them still
+  draw Signal and Strategy only. There is no BE Rule column: these tables
+  are 1:1, where almost every target sits inside the 10-pip trigger, so the
+  rule barely moves them. `break_even_outcomes` stays for higher-RRR use.
 - **A `Streaks` table sits between the R Distribution charts and the
   Strategies tables.** `calculate_streak_statistics` reads the trades in
   date order and reports the longest unbroken run of wins and of losses
@@ -463,7 +465,7 @@ its own module - keep a change to one in step with the others:
   into one cell. `SL Range Analysis`, `Fixed SL Analysis` and
   `Cap SL Analysis` are the exceptions: they carry `<label>, Trades, Signal, Strategy` like the weekday
   and alignment tables, each cell combined as `"12W - 3L (52.7%)"` by
-  `_format_wl` - on 15C and 5OB. 30MCR's carry the four bare rates of
+  `_format_wl` - on 15C and 5OB. 30MCR's carry the three bare rates of
   `RATE_COLUMNS` instead (see "How the pages differ").
   Their `Strategy` column is still the family's shared win rule, which is what
   `test_every_stop_table_opens_with_the_same_default_row` compares against.
