@@ -55,7 +55,6 @@ from utils.continuation_reversal import (  # noqa: E402
     create_html_table,
     create_pullback_chart,
     create_r_histogram_combined,
-    create_r_histogram_exact,
     create_signal_strategy_chart,
     create_sortable_table,
     create_tp_chart,
@@ -821,13 +820,10 @@ def test_r_counts_ignore_sub_1r_trades():
     assert counts.sum() == 7  # the three 0R rows fall outside 1R-10R
 
 
-def test_r_histograms_render_every_level():
-    combined = create_r_histogram_combined(get_sample_data())
-    exact = create_r_histogram_exact(get_sample_data())
-    for html in (combined, exact):
-        for level in range(1, 11):
-            assert f'>{level}R<' in html
-    assert 'R Distribution (Exact)' in exact
+def test_r_histogram_renders_every_level():
+    html = create_r_histogram_combined(get_sample_data())
+    for level in range(1, 11):
+        assert f'>{level}R<' in html
 
 
 def test_cumulative_histogram_never_falls_below_the_exact_one():

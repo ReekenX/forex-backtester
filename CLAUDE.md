@@ -398,7 +398,7 @@ Where the pages still differ:
   pip` in categorical slot 3 (`#199e70`). There is no BE Rule column: these tables
   are 1:1, where almost every target sits inside the 10-pip trigger, so the
   rule barely moves them. `break_even_outcomes` stays for higher-RRR use.
-- **A `Streaks` table sits between the R Distribution charts and the
+- **A `Streaks` table sits between the R Distribution chart and the
   Strategies tables.** `calculate_streak_statistics` reads the trades in
   date order and reports the longest unbroken run of wins and of losses
   under the family's 1:1 win rule, with the run's first and last trade
@@ -412,6 +412,8 @@ Where the pages still differ:
   fill; scored on Pullback - SL / 2 and TP + SL / 2). `Notation` is
   `W - M - L` like `Pullback`, with M = limit never filled; `Win Rate` is
   W / (W + L) and `Outcome` W x RRR - L.
+- **It has one R Distribution chart, the cumulative one.** The `R
+  Distribution (Exact)` chart 15C and 5OB still carry is gone.
 - **It has no Three Setups trade log.** The page ends on the Strategies
   tables, and those test buffers of `+0` and `+1` only. Their `Trend`
   column (`All`, `Continuation`, `Reversal`) filters on the setup's `Type`

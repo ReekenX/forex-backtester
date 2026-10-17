@@ -1844,19 +1844,3 @@ def create_r_histogram_combined(df: pd.DataFrame) -> str:
     cumulative = pd.Series({r: raw_counts.loc[r:].sum() for r in R_LEVELS})
     return _create_r_histogram(cumulative, "R Distribution")
 
-
-def create_r_histogram_exact(df: pd.DataFrame) -> str:
-    """
-    Plain R counts (1R-10R), not cumulative.
-
-    Each trade is counted once, in the bucket of the highest whole R it
-    reached, so the bars sum to the number of trades with an R value.
-
-    Args:
-        df: DataFrame with an R column
-
-    Returns:
-        HTML string with a styled horizontal bar chart
-    """
-    return _create_r_histogram(calculate_r_counts(df), "R Distribution (Exact)")
-

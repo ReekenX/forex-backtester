@@ -45,7 +45,6 @@ from utils.continuation_reversal import (
     create_equity_chart,
     create_pullback_chart,
     create_r_histogram_combined,
-    create_r_histogram_exact,
     create_signal_strategy_chart,
     create_sortable_table,
     create_tp_chart,
@@ -292,14 +291,6 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "Cumulative: a "
         "trade reaching 3R also passed through 1R and 2R.",
         create_r_histogram_combined,
-    ),
-    (
-        "r-distribution-exact",
-        "R Distribution (Exact)",
-        "R Distribution (Exact)",
-        "Each trade counted once, in the bucket of the highest whole R it "
-        "reached.",
-        create_r_histogram_exact,
     ),
     (
         "streaks",
