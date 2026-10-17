@@ -341,9 +341,9 @@ shapes below are on all three pages - compare them side by side with
   tapped winners (`#3987e5`), missed winners (`#d95926`) and losers (recessive
   grey, since L is constant per stop). The `+ 1 pip buffer` rows start a
   second group, as they score against a wider stop. 30MCR drops the table
-  and keeps only the chart, cut to two series: every trade in grey
-  (`#4a4a4a`, labelled with the trade count) and the missed trades in orange
-  (`#d95926`) at the end of each bar. `calculate_pullback_statistics` still
+  and keeps only the chart, cut to two series: the missed trades in orange
+  (`#d95926`) from the left of each bar, then every trade in grey
+  (`#4a4a4a`, labelled with the trade count). `calculate_pullback_statistics` still
   produces the `W - M - L` cells it reads.
 - **`TP Range Analysis` keeps its four-band table and adds a pip chart
   under it.** `create_tp_chart` gives every whole TP pip from 8 to 29 its own

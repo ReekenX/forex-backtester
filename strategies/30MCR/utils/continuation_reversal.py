@@ -1097,9 +1097,9 @@ def _parse_wml(cell: str) -> Tuple[int, int, int]:
 
 def create_pullback_chart(stats: pd.DataFrame) -> str:
     """
-    One 100% bar per Pullback level: every trade in grey, with the trades the
-    limit missed - winners that never pulled back far enough to fill it - in
-    orange at the end of it.
+    One 100% bar per Pullback level: the trades the limit missed - winners
+    that never pulled back far enough to fill it - in orange from the left,
+    and every trade in grey after it.
 
     Every row covers every trade once, so the bars share one length and the
     orange growing as the limit goes deeper is the whole story. The buffered
@@ -1120,7 +1120,7 @@ def create_pullback_chart(stats: pd.DataFrame) -> str:
     html = _PULLBACK_CHART_CSS + ('<div class="pb-chart" role="img" '
                                   'aria-label="Missed trades of all trades '
                                   'by limit depth"><div class="pb-legend">')
-    for name, colour in (PULLBACK_ALL, PULLBACK_MISSED):
+    for name, colour in (PULLBACK_MISSED, PULLBACK_ALL):
         html += (f'<span><span class="pb-swatch" style="background-color: '
                  f'{colour};"></span>{name}</span>')
     html += '</div>'
@@ -1136,10 +1136,6 @@ def create_pullback_chart(stats: pd.DataFrame) -> str:
             grouped = True
         html += (f'<div class="{css}"><div>{label}</div>'
                  '<div class="pb-stack">')
-        name, colour = PULLBACK_ALL
-        html += (f'<div class="pb-seg" title="{label} - {name}: {total}" '
-                 f'style="flex: {total - missed}; background-color: '
-                 f'{colour};">{total}</div>')
         if missed:
             share = missed / total * 100
             # Room for the count only when the segment is wide enough.
@@ -1148,6 +1144,10 @@ def create_pullback_chart(stats: pd.DataFrame) -> str:
             html += (f'<div class="pb-seg" title="{label} - {name}: {missed} '
                      f'({share:.1f}% of trades)" style="flex: {missed}; '
                      f'background-color: {colour};">{text}</div>')
+        name, colour = PULLBACK_ALL
+        html += (f'<div class="pb-seg" title="{label} - {name}: {total}" '
+                 f'style="flex: {total - missed}; background-color: '
+                 f'{colour};">{total}</div>')
         html += '</div></div>'
 
     html += '</div>'

@@ -667,6 +667,9 @@ def test_pullback_chart_shows_all_trades_and_the_missed_ones():
     assert 'title="2 pips - All trades: 10"' in html
     assert 'title="2 pips - Missed trades: 3 (30.0% of trades)"' in html
     assert 'Tapped winners' not in html and 'Losers' not in html
+    # Missed leads each bar, starting from the left edge.
+    assert (html.index('2 pips - Missed trades')
+            < html.index('2 pips - All trades'))
 
 
 def test_pullback_chart_skips_an_empty_missed_segment():
