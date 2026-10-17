@@ -425,8 +425,9 @@ Where the pages still differ:
   heading, and `create_html_table(rrr=...)` still colours `Win Rate` against
   that RRR's breakeven.
   The 1:2 and 1:3 tables (`BE_RULE_RRRS`) run every row twice, with and
-  without the break-even rule, and say which in a `BE Rule Applied` checkbox
-  column. A BE row scores through `break_even_outcomes` on the row's own
+  without the break-even rule, and say which in a `BE Rule Applied`
+  column: a green ticked checkbox when applied, an empty cell otherwise. The
+  box is not `disabled` (browsers grey that out); it ignores clicks instead. A BE row scores through `break_even_outcomes` on the row's own
   buffered, capped stop: `Notation` is `W – BE – L` and `Win Rate` is
   W / (W + L). Its equity curve takes 0R per break-even and is labelled
   `... / BE`. 1:1 has no such column - nearly every 1:1 target sits inside

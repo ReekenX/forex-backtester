@@ -189,11 +189,14 @@ STRATEGIES_COLUMN_WIDTHS = {
 
 
 def _checkbox(checked: bool) -> str:
-    """A read-only checkbox for a yes/no table cell."""
-    state = " checked" if checked else ""
-    label = "Yes" if checked else "No"
-    return (f'<input type="checkbox" disabled{state} aria-label="{label}" '
-            f'style="accent-color: {POSITIVE}; margin: 0;">')
+    """A ticked checkbox for a yes cell, nothing for a no cell. Not disabled -
+    browsers grey a disabled box out - but it ignores clicks and focus."""
+    if not checked:
+        return ""
+    return ('<input type="checkbox" checked aria-label="Yes" tabindex="-1" '
+            'onclick="return false;" '
+            f'style="accent-color: {POSITIVE}; margin: 0; width: 12px; '
+            'height: 12px; vertical-align: middle; cursor: default;">')
 
 
 def _strategies_section_for(rrr: int) -> Callable[[pd.DataFrame], str]:

@@ -484,8 +484,11 @@ def test_be_rule_column_sits_only_in_the_1_2_and_1_3_tables():
             assert 'type="checkbox"' not in table
         else:
             assert '>BE Rule Applied<' in table
-            assert 'type="checkbox" disabled checked' in table
-            assert 'type="checkbox" disabled aria-label="No"' in table
+            # Ticked when applied, an empty cell otherwise - never a greyed
+            # out disabled box.
+            assert 'type="checkbox" checked' in table
+            assert 'disabled' not in table
+            assert table.count('type="checkbox"') * 2 == table.count('<tr>') - 1
 
 
 def test_strategies_tables_narrow_their_short_columns():
