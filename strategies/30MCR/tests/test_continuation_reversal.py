@@ -660,27 +660,38 @@ def test_pullback_counts_match_the_sample():
 
 def test_pullback_chart_shows_all_trades_and_the_missed_ones():
     stats = calculate_pullback_statistics(get_sample_data())
-    html = create_pullback_chart(stats)
+    html = create_pullback_chart(stats, 7)
     assert html.count('class="pb-stack"') == len(stats)
-    # '2 pips' is 3W - 3M - 4L in the sample: grey for all ten, orange for
-    # the three the limit missed.
-    assert 'title="2 pips - All trades: 10"' in html
-    assert 'title="2 pips - Missed trades: 3 (30.0% of trades)"' in html
+    # Seven sample trades reached a target. '2 pips' is 3W - 3M - 4L: the
+    # bar spans the seven winners, orange for the three the limit missed.
+    assert 'title="2 pips - Winning trades (TP > 0): 7"' in html
+    assert 'title="2 pips - Missed trades: 3 (42.9% of winners)"' in html
     assert 'Tapped winners' not in html and 'Losers' not in html
     # Missed leads each bar, starting from the left edge.
     assert (html.index('2 pips - Missed trades')
-            < html.index('2 pips - All trades'))
+            < html.index('2 pips - Winning trades'))
+
+
+def test_pullback_chart_missed_trades_are_always_winners():
+    """Every missed trade reached its target, so on the real data no row
+    misses more trades than there are winners."""
+    df = load_data(CSV_PATH)
+    signals = int((df['TP'] > 0).sum())
+    for cell in calculate_pullback_statistics(df)['Trades']:
+        assert int(cell.split(' - ')[1][:-1]) <= signals
 
 
 def test_pullback_chart_skips_an_empty_missed_segment():
     """Default misses nothing, so it draws no orange segment at all."""
-    html = create_pullback_chart(calculate_pullback_statistics(get_sample_data()))
+    html = create_pullback_chart(
+        calculate_pullback_statistics(get_sample_data()), 7)
     assert 'Default - Missed trades' not in html
-    assert 'title="Default - All trades: 10"' in html
+    assert 'title="Default - Winning trades (TP > 0): 7"' in html
 
 
 def test_pullback_chart_starts_a_group_at_the_buffered_rows():
-    html = create_pullback_chart(calculate_pullback_statistics(get_sample_data()))
+    html = create_pullback_chart(
+        calculate_pullback_statistics(get_sample_data()), 7)
     assert html.count('pb-group') == 2  # the CSS rule and one row
     assert html.index('pb-row pb-group') < html.index('1 pip + 1 pip buffer')
     assert html.index('>Half<') < html.index('pb-row pb-group')
@@ -688,7 +699,7 @@ def test_pullback_chart_starts_a_group_at_the_buffered_rows():
 
 def test_pullback_chart_handles_an_empty_table():
     empty = calculate_pullback_statistics(get_sample_data()).iloc[0:0]
-    assert 'No data' in create_pullback_chart(empty)
+    assert 'No data' in create_pullback_chart(empty, 0)
 
 
 def test_pullback_buffer_rows_pad_the_stop_but_not_the_limit():

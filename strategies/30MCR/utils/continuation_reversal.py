@@ -1058,9 +1058,10 @@ def calculate_pullback_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
-# Pullback chart colours: every trade in a recessive grey, as context, and the
-# trades the limit missed in categorical slot 2 - the one series to compare.
-PULLBACK_ALL = ('All trades', '#4a4a4a')
+# Pullback chart colours: every winning trade (TP > 0) in a recessive grey, as
+# context, and the trades the limit missed in categorical slot 2 - the one
+# series to compare.
+PULLBACK_ALL = ('Winning trades (TP > 0)', '#4a4a4a')
 PULLBACK_MISSED = ('Missed trades', '#d95926')
 
 _PULLBACK_CHART_CSS = """
@@ -1095,20 +1096,23 @@ def _parse_wml(cell: str) -> Tuple[int, int, int]:
     return int(wins), int(missed), int(losses)
 
 
-def create_pullback_chart(stats: pd.DataFrame) -> str:
+def create_pullback_chart(stats: pd.DataFrame, signals: int) -> str:
     """
-    One 100% bar per Pullback level: the trades the limit missed - winners
-    that never pulled back far enough to fill it - in orange from the left,
-    and every trade in grey after it.
+    One 100% bar per Pullback level, spanning every winning trade - TP > 0,
+    whatever the pullback: the ones the limit missed - winners that never
+    pulled back far enough to fill it - in orange from the left, the rest in
+    grey after it.
 
-    Every row covers every trade once, so the bars share one length and the
-    orange growing as the limit goes deeper is the whole story. The buffered
+    A missed trade reached its target, so it is always one of the winners,
+    and the bars share one length; the orange growing as the limit goes
+    deeper is the whole story. The buffered
     rows start a second group, since they score against a wider stop. The
     grey carries the trade count, the orange the missed count where it has
     room; both have a hover tooltip.
 
     Args:
         stats: DataFrame from calculate_pullback_statistics
+        signals: Number of winning trades, TP > 0 - the Signal count
 
     Returns:
         HTML string with the chart, or a "No data" note for an empty frame
@@ -1118,7 +1122,7 @@ def create_pullback_chart(stats: pd.DataFrame) -> str:
                 "padding: 10px;'>No data</p>")
 
     html = _PULLBACK_CHART_CSS + ('<div class="pb-chart" role="img" '
-                                  'aria-label="Missed trades of all trades '
+                                  'aria-label="Missed trades of all winners '
                                   'by limit depth"><div class="pb-legend">')
     for name, colour in (PULLBACK_MISSED, PULLBACK_ALL):
         html += (f'<span><span class="pb-swatch" style="background-color: '
@@ -1128,8 +1132,8 @@ def create_pullback_chart(stats: pd.DataFrame) -> str:
     grouped = False
     for _, row in stats.iterrows():
         label = row['Pullback']
-        wins, missed, losses = _parse_wml(row['Trades'])
-        total = wins + missed + losses
+        _, missed, _ = _parse_wml(row['Trades'])
+        total = max(signals, missed)
         css = 'pb-row'
         if label.endswith('buffer') and not grouped:
             css += ' pb-group'
@@ -1142,7 +1146,7 @@ def create_pullback_chart(stats: pd.DataFrame) -> str:
             text = str(missed) if share >= 4 else ''
             name, colour = PULLBACK_MISSED
             html += (f'<div class="pb-seg" title="{label} - {name}: {missed} '
-                     f'({share:.1f}% of trades)" style="flex: {missed}; '
+                     f'({share:.1f}% of winners)" style="flex: {missed}; '
                      f'background-color: {colour};">{text}</div>')
         name, colour = PULLBACK_ALL
         html += (f'<div class="pb-seg" title="{label} - {name}: {total}" '
