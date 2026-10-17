@@ -405,14 +405,16 @@ def test_tp_range_keeps_its_table_and_adds_a_pip_chart_below():
     assert html.index('<table') < html.index('class="tp-chart"')
 
 
-def test_signal_strategy_tables_pin_their_first_column():
-    """Weekday, the grouping tables, SL Range, Fixed SL, TP Range and Pullback
-    all pin 40% so they line up down the page."""
-    for anchor in ('weekday', 'setup', 'sl-range', 'sl-fixed', 'sl-max',
-                   'tp-range', 'pullback'):
-        html = _section_html(anchor)
-        assert 'width: 40%' in html, anchor
-        assert 'table-layout: fixed' in html, anchor
+def test_every_table_pins_its_first_column_to_30_percent():
+    """Every table on the page pins one label width so they line up."""
+    for anchor, _, _, _, builder in SECTIONS:
+        html = builder(get_sample_data())
+        tables = html.count('<table')
+        if not tables:
+            continue
+        assert html.count('table-layout: fixed') == tables, anchor
+        assert html.count('style="width: 30%;"') == tables, anchor
+        assert 'width: 40%' not in html and 'width: 50%' not in html, anchor
 
 
 def test_grouping_tables_carry_both_readings():
@@ -437,11 +439,6 @@ def test_stop_tables_are_not_sortable_but_others_are():
         assert 'class="sortable"' not in _section_html(anchor), anchor
     for anchor in ('setup', 'sl-fixed', 'sl-max'):
         assert 'class="sortable"' in _section_html(anchor), anchor
-
-
-def test_adding_buffer_keeps_the_wider_label_column():
-    html = _section_html('sl-buffer')
-    assert 'width: 50%' in html
 
 
 def test_strategies_split_one_table_per_rrr():
@@ -527,7 +524,6 @@ def test_half_sl_table_compares_the_three_entries_without_sorting():
     for entry in ('>Default<', '>Half SL<', '>Limit order on half<'):
         assert entry in html
     assert 'class="sortable"' not in html
-    assert 'width: 40%' in html
 
 
 def test_weekday_table_colours_every_rate_against_breakeven():

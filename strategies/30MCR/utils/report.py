@@ -83,6 +83,11 @@ SCROLL_STORAGE_KEY = "30mcr-scroll"
 SORT_STORAGE_KEY = "30mcr-sorts"
 
 
+# Every table on the page pins its label column to this width, so they all
+# line up and the result columns get the room.
+FIRST_COL_WIDTH = "30%"
+
+
 def _with_chart(stats: pd.DataFrame, table: str) -> str:
     """Put the Signal/Strategy chart under the table it was drawn from."""
     return table + create_signal_strategy_chart(stats)
@@ -91,43 +96,43 @@ def _with_chart(stats: pd.DataFrame, table: str) -> str:
 def _weekday_section(df: pd.DataFrame) -> str:
     stats = calculate_weekday_statistics(df)
     return _with_chart(stats, create_html_table(
-        stats, first_col_width="40%", colour_columns=tuple(stats.columns[2:])))
+        stats, first_col_width=FIRST_COL_WIDTH, colour_columns=tuple(stats.columns[2:])))
 
 
 def _setup_section(df: pd.DataFrame) -> str:
     stats = calculate_setup_statistics(df)
     return _with_chart(stats, create_html_table(
-        stats, sort_id="setup-table", first_col_width="40%"))
+        stats, sort_id="setup-table", first_col_width=FIRST_COL_WIDTH))
 
 
 def _sl_section(df: pd.DataFrame) -> str:
     stats = calculate_sl_statistics(df)
     return _with_chart(stats, create_sortable_table(
-        stats, "sl-range-table", sortable=False, first_col_width="40%"))
+        stats, "sl-range-table", sortable=False, first_col_width=FIRST_COL_WIDTH))
 
 
 def _sl_fixed_section(df: pd.DataFrame) -> str:
     stats = calculate_sl_fixed_statistics(df)
     return _with_chart(stats, create_sortable_table(
-        stats, "sl-fixed-table", first_col_width="40%"))
+        stats, "sl-fixed-table", first_col_width=FIRST_COL_WIDTH))
 
 
 def _sl_max_section(df: pd.DataFrame) -> str:
     stats = calculate_sl_max_statistics(df)
     return _with_chart(stats, create_sortable_table(
-        stats, "sl-max-table", first_col_width="40%"))
+        stats, "sl-max-table", first_col_width=FIRST_COL_WIDTH))
 
 
 def _tp_section(df: pd.DataFrame) -> str:
     return create_html_table(
-        calculate_tp_statistics(df), first_col_width="40%"
+        calculate_tp_statistics(df), first_col_width=FIRST_COL_WIDTH
     ) + create_tp_chart(df)
 
 
 def _pullback_section(df: pd.DataFrame) -> str:
     stats = calculate_pullback_statistics(df)
     return create_sortable_table(
-        stats, "pullback-table", sortable=False, first_col_width="40%"
+        stats, "pullback-table", sortable=False, first_col_width=FIRST_COL_WIDTH
     ) + create_pullback_chart(stats)
 
 
@@ -136,7 +141,7 @@ def _sl_buffer_section(df: pd.DataFrame) -> str:
     # scenarios in the Signal/Strategy shape the other charts use.
     return create_sortable_table(
         calculate_sl_buffer_statistics(df), "sl-buffer-table", sortable=False,
-        first_col_width="50%"
+        first_col_width=FIRST_COL_WIDTH
     ) + create_signal_strategy_chart(
         calculate_sl_buffer_statistics(df, with_signal=True))
 
@@ -144,13 +149,13 @@ def _sl_buffer_section(df: pd.DataFrame) -> str:
 def _streaks_section(df: pd.DataFrame) -> str:
     return create_sortable_table(
         calculate_streak_statistics(df), "streaks-table", sortable=False,
-        first_col_width="40%"
+        first_col_width=FIRST_COL_WIDTH
     )
 
 
 def _half_sl_section(df: pd.DataFrame) -> str:
     return create_html_table(
-        calculate_half_sl_statistics(df), first_col_width="40%")
+        calculate_half_sl_statistics(df), first_col_width=FIRST_COL_WIDTH)
 
 
 def _sort_by_win_rate(stats: pd.DataFrame) -> pd.DataFrame:
@@ -183,7 +188,8 @@ def _strategies_section_for(rrr: int) -> Callable[[pd.DataFrame], str]:
         # Distinct from the section anchor: a duplicate id would make
         # getElementById inside the sort script return the <section>.
         return create_html_table(
-            _sort_by_win_rate(stats), sort_id=f"strategies-1-{rrr}-table"
+            _sort_by_win_rate(stats), sort_id=f"strategies-1-{rrr}-table",
+            first_col_width=FIRST_COL_WIDTH,
         ) + create_equity_chart(
             calculate_equity_curves(df, rrr), rrr,
             chart_id=f"strategies-1-{rrr}-equity")

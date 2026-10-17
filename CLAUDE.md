@@ -480,10 +480,12 @@ its own module - keep a change to one in step with the others:
   `sortable=False`. `Fixed SL Analysis` and `Cap SL Analysis` are the
   exceptions - their rows are stop sizes to compare, so they stay
   click-to-sort.
-- **Label column width is `40%` everywhere except `Adding Buffer`**, which
-  still carries the older `50%`. `Weekday`, the alignment tables, `SL Range`,
-  `Fixed SL`, `Cap SL`, `TP Range` and `Pullback` all pin `first_col_width="40%"` so they
-  line up down the page.
+- **Label column width is `40%` everywhere except `Adding Buffer`** on 15C
+  and 5OB, which still carries the older `50%`. `Weekday`, the alignment
+  tables, `SL Range`, `Fixed SL`, `Cap SL`, `TP Range` and `Pullback` all pin
+  `first_col_width="40%"` so they line up down the page. 30MCR pins every
+  table - Strategies included - to `FIRST_COL_WIDTH` (`30%`) in `report.py`;
+  `test_every_table_pins_its_first_column_to_30_percent` guards it.
 - **Table ids are not shared between the pages.** 15C's SL Range table is
   `sl-range-stats` and its Pullback table `pullback-analysis`; 5OB's and
   30MCR's are `sl-range-table` and `pullback-table`. Each page's ids only have
