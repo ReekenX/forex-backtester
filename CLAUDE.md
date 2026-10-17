@@ -82,9 +82,27 @@ Each strategy keeps its data inside its `strategies/<name>/` directory: `data.cs
 - **Trade**: Trade identifier. The export wraps a computed figure under the column name in the same header cell (`Trade\n69`), so `load_data` normalises every header to its first line
 - **Direction**: Trade direction (Buy or Sell)
 - **30M**: The 30-minute level the signal formed at - `High` or `Low`. `load_data` reads it against `Direction` to derive `Type`: `High` + `Buy` and `Low` + `Sell` are `Continuation`, the other two pairings are `Reversal`. `Setup` joins the two (`High Continuation`, `High Reversal`, `Low Continuation`, `Low Reversal`). All are known at entry, so all are tradeable filters
+- **BE Rule (10 pips)**: Checkbox exported as `TRUE` / `FALSE`. Feeds the break-even scenario below. It sits left of `TP`, so `load_data` keeps it
 - **SL**: Stop Loss in pips
 - **Pullback**: Pullback in pips
 - **TP**: Take Profit in pips (empty = not profitable)
+
+**Break-even rule.** An optional management rule: once price runs 10 pips in
+the trade's favour, the stop moves to entry. Scored with the rule on, a trade
+reads one of three ways:
+
+- **Checked (`TRUE`)** - a break-even trade, 0R. Price reached 10 pips, came
+  back to entry and took the trade out before the target. Its recorded `TP` is
+  where price went afterwards, so it must not score as a win.
+- **Unchecked, `TP` above 10 pips** - the trade can no longer lose. It wins
+  if `TP` reaches the target for the RRR (`TP >= RRR x SL`), otherwise it is
+  break-even, 0R.
+- **Unchecked, `TP` of 10 pips or less** - the rule never triggered, so the
+  normal win rule applies, loss included.
+
+With the rule off, the column is ignored and every trade scores under the
+normal win rule. The flag is learned after the trade, like `Pullback` and
+`TP`, so it describes outcomes and must never be used as an entry filter.
 
 Everything right of `TP` (currently `All`, `WR`, `+1pip`, `+1pip CAP(6)`
 and a run of `#DIV/0!` cells) is the spreadsheet's own scratch work - precomputed win rates and
