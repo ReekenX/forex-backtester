@@ -1304,7 +1304,7 @@ def calculate_half_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
 FIXED_SL_STRATEGY_VALUES = list(range(2, 11))
 
-# Stop caps for the Strategies tables' Max SL column. 0 means no cap.
+# Stop caps for the Strategies tables' Cap SL column. 0 means no cap.
 MAX_SL_CAPS = [0, 5, 6]
 
 
@@ -1323,7 +1323,7 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
 
     "Fixed SL X" replaces SL with X. It runs with buffer 0 and no cap only -
     a buffer or a cap would just turn it into another fixed size. Capping is
-    the Max SL column's job, on All Trades.
+    the Cap SL column's job, on All Trades.
     """
     strategies: List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]] = [
         ("All Trades", lambda df: df),
@@ -1372,7 +1372,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
             "Strategy": strategy_name,
             "Buffer": f"+{buffer}",
             "Trend": trend,
-            "Max SL": max_sl,
+            "Cap SL": max_sl,
             "RRR": rrr_label,
             "Trades": 0,
             "Notation": "0W – 0L",
@@ -1394,7 +1394,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
         "Strategy": strategy_name,
         "Buffer": f"+{buffer}",
         "Trend": trend,
-        "Max SL": max_sl,
+        "Cap SL": max_sl,
         "RRR": rrr_label,
         "Trades": total_trades,
         "Notation": f"{wins}W – {losses}L",
@@ -1403,7 +1403,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
 
 
 def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
-    """Sort by Strategy (natural order, numbers numerically), Trend, Max SL,
+    """Sort by Strategy (natural order, numbers numerically), Trend, Cap SL,
     then RRR."""
     if result_df.empty:
         return result_df
@@ -1423,7 +1423,7 @@ def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
         key=lambda i: (
             strategy_key(result_df.at[i, 'Strategy']),
             TREND_FILTERS.index(result_df.at[i, 'Trend']),
-            int(result_df.at[i, 'Max SL']),
+            int(result_df.at[i, 'Cap SL']),
             rrr_key(result_df.at[i, 'RRR']),
         ),
     )
@@ -1583,7 +1583,7 @@ def calculate_equity_curves(df: pd.DataFrame, rrr: float = 1) -> List[Dict]:
 
     Trades are walked in date order; the export's own order breaks ties within
     a day. A win adds the RRR in R, a loss takes 1R, under the same rule as
-    calculate_buffer_statistics: effective SL = SL + buffer, capped at Max SL,
+    calculate_buffer_statistics: effective SL = SL + buffer, capped at Cap SL,
     and win = Pullback < effective SL AND TP >= rrr x effective SL. Every curve
     runs over every trade, so a Continuation-only strategy sits flat through
     the Reversal trades it would not have taken and the curves line up in

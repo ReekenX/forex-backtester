@@ -465,6 +465,16 @@ def test_strategies_tables_carry_no_rrr_column():
         assert '>1:' not in table
 
 
+def test_strategies_tables_name_the_cap_column_cap_sl():
+    """Same name as the Cap SL Analysis table, which caps the stop the same
+    way."""
+    for rrr in RRR_RATIOS:
+        html = _section_html(f'strategies-1-{rrr}')
+        table = html[html.index('<table'):html.index('</table>')]
+        assert '>Cap SL<' in table
+        assert 'Max SL' not in html
+
+
 def test_strategies_win_rate_is_coloured_against_its_own_rrr():
     """28.6% loses at 1:1 (breakeven 50%) and pays at 1:3 (breakeven
     25%), with no RRR column left to read it from."""

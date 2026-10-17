@@ -334,7 +334,7 @@ SECTIONS.extend(
         f"Strategies (1:{rrr} RRR)",
         "All Trades / Fixed SL across SL buffers and setup trends "
         "(<b>Continuation</b> or <b>Reversal</b> keeps only those setups). "
-        "<b>Max SL</b> caps the stop after the buffer: min(SL + buffer, cap), "
+        "<b>Cap SL</b> caps the stop after the buffer: min(SL + buffer, cap), "
         "0 = no cap. "
         f"Ranked by win rate. Breakeven at 1:{rrr} is {100 / (1 + rrr):.1f}%. "
         "The chart under the table walks every row trade by trade in date "

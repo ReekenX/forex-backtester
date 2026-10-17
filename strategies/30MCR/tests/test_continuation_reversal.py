@@ -716,7 +716,7 @@ def test_pullback_buffer_rows_pad_the_stop_but_not_the_limit():
 # --- Strategies tables ----------------------------------------------------
 
 def test_get_buffer_strategies_covers_all_trades_and_fixed_sl():
-    """Capping moved to the Max SL column, so there are no Max SL strategies."""
+    """Capping moved to the Cap SL column, so there are no Max SL strategies."""
     names = [name for name, _ in get_buffer_strategies()]
     assert names[0] == 'All Trades'
     assert any(n.startswith('Fixed SL ') for n in names)
@@ -735,12 +735,12 @@ def test_buffer_statistics_carry_trend_and_max_sl_after_buffer():
     the whole sample - a cap changes the stop, never the trades taken."""
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
-    assert list(result.columns) == ['Strategy', 'Buffer', 'Trend', 'Max SL',
+    assert list(result.columns) == ['Strategy', 'Buffer', 'Trend', 'Cap SL',
                                     'RRR', 'Trades', 'Notation', 'Win Rate']
-    keys = ['Strategy', 'Buffer', 'Trend', 'Max SL', 'RRR']
+    keys = ['Strategy', 'Buffer', 'Trend', 'Cap SL', 'RRR']
     assert not result.duplicated(keys).any()
     all_trades = result[result['Strategy'] == 'All Trades']
-    assert set(all_trades['Max SL']) == set(MAX_SL_CAPS)
+    assert set(all_trades['Cap SL']) == set(MAX_SL_CAPS)
     assert MAX_SL_CAPS == [0, 5, 6]
     assert set(result['Trend']) == set(TREND_FILTERS)
     assert (result[result['Trend'] == 'All']['Trades'] == len(sample)).all()
@@ -765,7 +765,7 @@ def test_fixed_sl_strategies_run_without_a_buffer_or_cap():
     names = [n for n, _ in get_buffer_strategies() if n != 'All Trades']
     result = calculate_buffer_statistics(get_sample_data(), names)
     assert set(result['Buffer']) == {'+0'}
-    assert set(result['Max SL']) == {0}
+    assert set(result['Cap SL']) == {0}
 
 
 def test_max_sl_caps_the_buffered_stop():
@@ -986,7 +986,7 @@ def test_equity_curve_outcome_matches_the_table_notation():
         curves = {c['label']: c for c in calculate_equity_curves(df, rrr)}
         table = calculate_buffer_statistics(df)
         row = table[(table['Strategy'] == 'All Trades') & (table['Buffer'] == '+1')
-                    & (table['Trend'] == 'Reversal') & (table['Max SL'] == 5)
+                    & (table['Trend'] == 'Reversal') & (table['Cap SL'] == 5)
                     & (table['RRR'] == f'1:{rrr}')].iloc[0]
         wins, losses = (int(v[:-1]) for v in row['Notation'].split(' \u2013 '))
         curve = curves['All Trades +1 / Reversal / cap 5']
