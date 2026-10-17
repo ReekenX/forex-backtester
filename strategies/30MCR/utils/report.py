@@ -27,6 +27,7 @@ import pandas as pd
 
 from utils.continuation_reversal import (
     RRR_RATIOS,
+    RATE_COLUMNS,
     _calculate_stats_with_buffer,
     calculate_buffer_statistics,
     calculate_equity_curves,
@@ -93,34 +94,35 @@ def _with_chart(stats: pd.DataFrame, table: str) -> str:
     return table + create_signal_strategy_chart(stats)
 
 
+def _rate_table(stats: pd.DataFrame, table_id: str,
+                sortable: bool = True) -> str:
+    """A Signal/Strategy table: win rates coloured against 50%, its chart
+    underneath."""
+    return _with_chart(stats, create_sortable_table(
+        stats, table_id, sortable=sortable, first_col_width=FIRST_COL_WIDTH,
+        colour_columns=tuple(RATE_COLUMNS)))
+
+
 def _weekday_section(df: pd.DataFrame) -> str:
-    stats = calculate_weekday_statistics(df)
-    return _with_chart(stats, create_html_table(
-        stats, first_col_width=FIRST_COL_WIDTH, colour_columns=tuple(stats.columns[2:])))
+    return _rate_table(calculate_weekday_statistics(df), "weekday-table",
+                       sortable=False)
 
 
 def _setup_section(df: pd.DataFrame) -> str:
-    stats = calculate_setup_statistics(df)
-    return _with_chart(stats, create_html_table(
-        stats, sort_id="setup-table", first_col_width=FIRST_COL_WIDTH))
+    return _rate_table(calculate_setup_statistics(df), "setup-table")
 
 
 def _sl_section(df: pd.DataFrame) -> str:
-    stats = calculate_sl_statistics(df)
-    return _with_chart(stats, create_sortable_table(
-        stats, "sl-range-table", sortable=False, first_col_width=FIRST_COL_WIDTH))
+    return _rate_table(calculate_sl_statistics(df), "sl-range-table",
+                       sortable=False)
 
 
 def _sl_fixed_section(df: pd.DataFrame) -> str:
-    stats = calculate_sl_fixed_statistics(df)
-    return _with_chart(stats, create_sortable_table(
-        stats, "sl-fixed-table", first_col_width=FIRST_COL_WIDTH))
+    return _rate_table(calculate_sl_fixed_statistics(df), "sl-fixed-table")
 
 
 def _sl_max_section(df: pd.DataFrame) -> str:
-    stats = calculate_sl_max_statistics(df)
-    return _with_chart(stats, create_sortable_table(
-        stats, "sl-max-table", first_col_width=FIRST_COL_WIDTH))
+    return _rate_table(calculate_sl_max_statistics(df), "sl-max-table")
 
 
 def _tp_section(df: pd.DataFrame) -> str:
@@ -196,24 +198,16 @@ def _strategies_section_for(rrr: int) -> Callable[[pd.DataFrame], str]:
     return build
 
 
-SIGNAL_STRATEGY_NOTE = (
-    "Two readings of the same trades. <b>Signal</b> = TP &gt; 0: the idea was "
-    "right and price reached a target, stop ignored - so it includes trades "
-    "whose Pullback exceeded SL, where the direction was correct but the entry "
-    "was too early. <b>Strategy</b> = Pullback &lt; SL AND TP &gt;= SL: what "
-    "trading it at 1:1 would actually have returned. The gap between them is "
-    "the cost of entry timing."
-)
-
-WEEKDAY_NOTE = (
-    "Four readings of the same trades, all at 1:1. <b>Signal</b> = TP &gt; 0: "
-    "the idea was right, stop ignored. <b>Strategy</b> = Pullback &lt; SL AND "
-    "TP &gt;= SL: what trading it would have returned. <b>Strategy + 1 pip</b> "
-    "pads every stop by a pip. <b>Strategy + BE Rule</b> moves the stop to "
-    "entry once price runs 10 pips: a checked trade, or one past 10 pips that "
-    "missed its target, is break-even, 0R, and left out of the rate. The stop "
-    "is checked first, and a target inside 10 pips is hit before the rule can "
-    "act. Green is above the 50% breakeven, red below."
+RATE_COLUMNS_NOTE = (
+    "Four 1:1 win rates per row, on that row's stop. <b>Signal</b> = TP &gt; "
+    "0: the idea was right, stop ignored, so it repeats wherever only the "
+    "stop changes. <b>Strategy</b> = Pullback &lt; SL AND TP &gt;= SL: what "
+    "trading it would have returned. <b>Strategy + 1 pip</b> pads the stop by "
+    "a pip. <b>Strategy + BE Rule</b> moves the stop to entry once price runs "
+    "10 pips: a checked trade, or one past 10 pips that missed its target, is "
+    "break-even, 0R, and left out of the rate. The stop is checked first, and "
+    "a target inside 10 pips is hit before the rule can act. Green is above "
+    "the 50% breakeven, red below."
 )
 
 # (anchor, nav label, heading, note, builder) - the 15C page's section order,
@@ -223,31 +217,26 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "weekday",
         "Weekday",
         "Weekday Analysis",
-        WEEKDAY_NOTE,
+        RATE_COLUMNS_NOTE,
         _weekday_section,
     ),
     (
         "setup",
         "Setup",
         "Setup Analysis",
-        "Trades split by what the 30-minute structure did before the signal, "
-        "the same two readings as the weekday table: continuation through the "
-        "level against reversal off it. The setup is known before the trade "
-        "is taken, so it is a tradeable filter. Default is every trade, and "
-        "the two type rows sum to it. <b>+ 1 pip buffer</b> rows repeat each "
-        "type with the stop padded by a pip (Strategy = Pullback &lt; SL + 1 "
-        "AND TP &gt;= SL + 1); Signal ignores the stop, so it does not move. "
-        "The Signal and Strategy headers are click-to-sort.",
+        "Trades split by what the 30-minute structure did before the signal: "
+        "continuation through the level against reversal off it. The setup "
+        "is known before the trade is taken, so it is a tradeable filter. "
+        "Default is every trade, and the two type rows sum to it. Same four "
+        "readings as the weekday table; every rate header is click-to-sort.",
         _setup_section,
     ),
     (
         "sl-range",
         "SL Range",
         "SL Range Analysis",
-        "Win rate per safe-stop band, under the same two readings as the "
-        "weekday table: <b>Signal</b> = TP &gt; 0 (the idea was right, stop "
-        "ignored), <b>Strategy</b> = Pullback &lt; SL AND TP &gt;= SL (what "
-        "trading the band at 1:1 would have returned).",
+        "Win rates per safe-stop band, under the same four readings as the "
+        "weekday table.",
         _sl_section,
     ),
     (
@@ -258,7 +247,9 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "survival check and the 1:1 target move to it. Default keeps the "
         "recorded stops as a baseline. <b>Signal</b> (TP &gt; 0) does not "
         "depend on the stop, so it repeats down the table as the ceiling; "
-        "<b>Strategy</b> says how much of that ceiling each stop size captures.",
+        "<b>Strategy</b> says how much of that ceiling each stop size "
+        "captures. <b>+ 1 pip</b> pads the fixed size, and <b>BE Rule</b> "
+        "scores it, as in the weekday table.",
         _sl_fixed_section,
     ),
     (
@@ -270,7 +261,8 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "are tightened, so both the survival check and the 1:1 target move "
         "to the cap. <b>Signal</b> (TP &gt; 0) repeats down the table as the "
         "ceiling; <b>Strategy</b> = Pullback &lt; capped SL AND TP &gt;= "
-        "capped SL.",
+        "capped SL. <b>+ 1 pip</b> pads the capped stop, and <b>BE Rule</b> "
+        "scores it, as in the weekday table.",
         _sl_max_section,
     ),
     (

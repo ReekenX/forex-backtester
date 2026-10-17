@@ -321,8 +321,8 @@ shapes below are on all three pages - compare them side by side with
   `SL Range`, `Fixed SL` and `Cap SL`.
   `create_signal_strategy_chart` draws Signal and Strategy as paired bars per
   row on one 0-100% axis, with a dashed line at the 50% breakeven of 1:1. It
-  reads the W/L counts back out of the table's own cells, so the two cannot
-  disagree; the chart keeps the table's original order when a column is
+  reads the win rate back out of the table's own cells - a bare `"52.7%"` on
+  30MCR, `"12W - 3L (52.7%)"` on 15C and 5OB - so the two cannot disagree; the chart keeps the table's original order when a column is
   click-sorted. Series colours are categorical slots 1 and 2 of the dark
   palette (`#3987e5`, `#d95926`); text stays in the page's greys.
 - **`Cap SL Analysis` sits right below `Fixed SL`** on every page: the
@@ -373,23 +373,22 @@ Where the pages still differ:
 
 - **It derives `R` the same way 5OB does**, `TP / SL` signed negative when
   `Pullback >= SL`, because its export has no `R` column either.
-- **Its grouping block is one table, `Setup`.** It carries three levels of
-  the same split: `Default`, then a row per setup, then `Continuation` and
-  `Reversal` pooling the setups that end the same way. Those last two overlap
-  the setup rows, so the `Trades` column does not sum - each block covers every
-  trade once. The setup is known at entry, so it is a tradeable filter, and the
-  table is click-to-sort. `Continuation + 1 pip buffer` and `Reversal + 1 pip
-  buffer` close the table: Strategy scored on SL + 1 (`TYPE_BUFFER_PIPS`),
-  Signal unchanged since it ignores the stop. There is no High/Low table and no Direction table -
-  neither split said anything on its own.
+- **Its grouping block is one table, `Setup`**: `Default`, then
+  `Continuation` and `Reversal`, which sum to it. The type is known at entry,
+  so it is a tradeable filter, and the table is click-to-sort. There is no
+  High/Low table and no Direction table - neither split said anything on its
+  own.
 - **It has no `4H`, `EMA` or `Hour` column**, so none of those tables exist.
-- **Its `Weekday Analysis` carries win rates only**: `Day, Trades, Signal,
-  Strategy, Strategy + 1 pip, Strategy + BE Rule`, each a bare `"52.7%"`, all
-  at 1:1. `+ 1 pip` is SL + `TYPE_BUFFER_PIPS`; `BE Rule` reads
-  `break_even_outcomes`. Every rate is coloured against 50% - green above, red
-  below, plain on it - through `create_html_table(colour_columns=...)`. The
-  chart under it still draws Signal and Strategy; it reads the rate straight
-  from the cell, so it takes either cell shape.
+- **Its Signal/Strategy tables carry win rates only** - `Weekday`, `Setup`,
+  `SL Range`, `Fixed SL` and `Cap SL` are `<label>, Trades, Signal,
+  Strategy, Strategy + 1 pip, Strategy + BE Rule` (`RATE_COLUMNS`), each a
+  bare `"52.7%"`, all at 1:1 on the row's own stop. `+ 1 pip` pads that stop
+  by `TYPE_BUFFER_PIPS` (so on `Fixed SL` it reads the next size up, on
+  `Cap SL` it is `min(SL, cap) + 1`); `BE Rule` scores it through
+  `break_even_outcomes`. `_rate_columns` builds all four, so every table
+  reads them the same way. Every rate is coloured against 50% - green above,
+  red below, plain on it - through `colour_columns`. The charts under them
+  still draw Signal and Strategy only.
 - **A `Streaks` table sits between the R Distribution charts and the
   Strategies tables.** `calculate_streak_statistics` reads the trades in
   date order and reports the longest unbroken run of wins and of losses
@@ -464,7 +463,8 @@ its own module - keep a change to one in step with the others:
   into one cell. `SL Range Analysis`, `Fixed SL Analysis` and
   `Cap SL Analysis` are the exceptions: they carry `<label>, Trades, Signal, Strategy` like the weekday
   and alignment tables, each cell combined as `"12W - 3L (52.7%)"` by
-  `_format_wl`.
+  `_format_wl` - on 15C and 5OB. 30MCR's carry the four bare rates of
+  `RATE_COLUMNS` instead (see "How the pages differ").
   Their `Strategy` column is still the family's shared win rule, which is what
   `test_every_stop_table_opens_with_the_same_default_row` compares against.
   `_sl_scenario_statistics` emits that shape via `with_signal=True`, so the win

@@ -80,6 +80,13 @@ DEFAULT_CSV = "../strategies/30MCR/trades.csv"
 BE_RULE_COLUMN = 'BE Rule (10 pips)'
 BE_RULE_PIPS = 10
 
+# Pips the "Strategy + 1 pip" column and the "<type> + 1 pip buffer" rows of
+# the Streaks table pad the stop with.
+TYPE_BUFFER_PIPS = 1
+
+# The win-rate columns of every Signal/Strategy table. See _rate_columns.
+RATE_COLUMNS = ['Signal', 'Strategy', 'Strategy + 1 pip', 'Strategy + BE Rule']
+
 
 def _normalise_header(name: object) -> str:
     """
@@ -325,7 +332,8 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
 
 def create_sortable_table(df: pd.DataFrame, table_id: str,
                           sortable: bool = True,
-                          first_col_width: Optional[str] = None) -> str:
+                          first_col_width: Optional[str] = None,
+                          colour_columns: Tuple[str, ...] = ()) -> str:
     """
     Build a plain label/statistics table, optionally with click-to-sort headers.
 
@@ -337,6 +345,7 @@ def create_sortable_table(df: pd.DataFrame, table_id: str,
             re-sort would scramble
         first_col_width: CSS width for the label column (e.g. "40%"), which
             also fixes the table layout so same-shaped tables line up
+        colour_columns: Columns of 1:1 win rates to colour against 50%
 
     Returns:
         HTML string with a dark-mode styled table
@@ -372,7 +381,10 @@ def create_sortable_table(df: pd.DataFrame, table_id: str,
     for _, row in df.iterrows():
         html += "            <tr>\n"
         for col in columns:
-            html += f"                <td>{row[col]}</td>\n"
+            css_class = (_breakeven_class(row[col])
+                         if col in colour_columns else "")
+            cls_attr = f' class="{css_class}"' if css_class else ""
+            html += f"                <td{cls_attr}>{row[col]}</td>\n"
         html += "            </tr>\n"
 
     html += "        </tbody>\n    </table>\n"
@@ -383,58 +395,77 @@ def create_sortable_table(df: pd.DataFrame, table_id: str,
 # Signal / Strategy grouping tables
 # ---------------------------------------------------------------------------
 
-def _format_wl(wins: int, losses: int, total: int) -> str:
-    """Format wins/losses/win rate into a compact '13W - 12L (52.0%)'."""
-    win_rate = (wins / total * 100) if total > 0 else 0.0
-    return f"{wins}W - {losses}L ({win_rate:.1f}%)"
-
-
-def _signal_strategy_rows(groups: List[Tuple],
-                          column: str) -> pd.DataFrame:
+def _strategy_wins(trades: pd.DataFrame, effective_sl) -> pd.Series:
     """
-    Score each group of trades under both readings of a trade.
+    The family's 1:1 win rule: the trade survived its stop and reached a
+    target as far away as that stop.
+
+        Pullback < effective SL   AND   TP >= effective SL
+    """
+    return (trades['Pullback'] < effective_sl) & (trades['TP'] >= effective_sl)
+
+
+def _rate_columns(trades: pd.DataFrame, effective_sl) -> Dict[str, str]:
+    """
+    The four readings every Signal/Strategy table carries, each a bare
+    "52.7%" at 1:1.
 
     Signal: TP > 0 - the trade idea was right and price reached a target. The
     stop is ignored on purpose, so this counts trades whose Pullback exceeded
     SL: the direction was correct but the entry was too early to survive it.
 
-    Strategy: Pullback < SL AND TP >= SL - what trading it at 1:1 would
-    actually have returned. The trade had to survive its stop AND reach a 1:1
-    target, so it is always a subset of Signal.
+    Strategy: the 1:1 win rule (_strategy_wins) on the row's stop - what
+    trading it would actually have returned. Always a subset of Signal; the
+    gap between the two is the cost of entry timing.
 
-    The gap between the two is the cost of entry timing. Every grouping table
-    on the page comes through here so they cannot drift apart on the rule.
+    Strategy + 1 pip: the same rule with the row's stop padded by
+    TYPE_BUFFER_PIPS, as in Adding Buffer.
 
-    A group may carry a third element, a buffer in pips: its Strategy reads
-    the stop as SL + buffer, as in Adding Buffer. Signal ignores the stop, so
-    the buffer leaves it alone.
+    Strategy + BE Rule: the row's stop under break_even_outcomes. A
+    break-even trade returns 0R, so it is left out of the rate - wins over
+    wins plus losses - which keeps 50% the line between paying and not.
 
     Args:
-        groups: (label, trades) or (label, trades, buffer) tuples, one per row
-            of the table
+        trades: The trades of one table row
+        effective_sl: The row's stop - a per-trade Series or one number
+
+    Returns:
+        Dict of column name to win rate
+    """
+    total = len(trades)
+    if not total:
+        return {name: _win_rate(0, 0) for name in RATE_COLUMNS}
+    wins, _, losses = break_even_outcomes(trades, stop=effective_sl)
+    return {
+        'Signal': _win_rate(int((trades['TP'] > 0).sum()), total),
+        'Strategy': _win_rate(
+            int(_strategy_wins(trades, effective_sl).sum()), total),
+        RATE_COLUMNS[2]: _win_rate(int(_strategy_wins(
+            trades, effective_sl + TYPE_BUFFER_PIPS).sum()), total),
+        'Strategy + BE Rule': _win_rate(
+            int(wins.sum()), int(wins.sum() + losses.sum())),
+    }
+
+
+def _signal_strategy_rows(groups: List[Tuple[str, pd.DataFrame]],
+                          column: str) -> pd.DataFrame:
+    """
+    Score each group of trades on its recorded stops under the four readings
+    of _rate_columns. Every grouping table on the page comes through here so
+    they cannot drift apart on the rule.
+
+    Args:
+        groups: (label, trades) tuples, one per row of the table
         column: Name for the leading column (e.g. 'Day', 'Setup')
 
     Returns:
-        DataFrame with columns: <column>, Trades, Signal, Strategy
+        DataFrame with columns: <column>, Trades, then RATE_COLUMNS
     """
-    results = []
-
-    for label, trades, *buffer in groups:
-        total = len(trades)
-        effective_sl = trades['SL'] + (buffer[0] if buffer else 0)
-        signals = int((trades['TP'] > 0).sum()) if total else 0
-        strategy = int((
-            (trades['Pullback'] < effective_sl) & (trades['TP'] >= effective_sl)
-        ).sum()) if total else 0
-
-        results.append({
-            column: label,
-            'Trades': total,
-            'Signal': _format_wl(signals, total - signals, total),
-            'Strategy': _format_wl(strategy, total - strategy, total),
-        })
-
-    return pd.DataFrame(results)
+    return pd.DataFrame([
+        {column: label, 'Trades': len(trades),
+         **_rate_columns(trades, trades['SL'])}
+        for label, trades in groups
+    ])
 
 
 def _be_rule_flags(df: pd.DataFrame) -> pd.Series:
@@ -448,8 +479,8 @@ def _be_rule_flags(df: pd.DataFrame) -> pd.Series:
 
 
 def break_even_outcomes(df: pd.DataFrame, rrr: float = 1,
-                        buffer: float = 0) -> Tuple[pd.Series, pd.Series,
-                                                    pd.Series]:
+                        buffer: float = 0,
+                        stop=None) -> Tuple[pd.Series, pd.Series, pd.Series]:
     """
     Score every trade under the break-even rule: once price runs BE_RULE_PIPS
     in the trade's favour, the stop moves to entry.
@@ -470,12 +501,14 @@ def break_even_outcomes(df: pd.DataFrame, rrr: float = 1,
     Args:
         df: DataFrame with trading data
         rrr: Reward multiple of the stop the target sits at
-        buffer: Pips added to the recorded stop
+        buffer: Pips added to the stop
+        stop: The stop before the buffer - a per-trade Series or one number.
+            Defaults to the recorded SL
 
     Returns:
         (wins, break_evens, losses) boolean Series; every trade is in one
     """
-    effective_sl = df['SL'] + buffer
+    effective_sl = (df['SL'] if stop is None else stop) + buffer
     target = rrr * effective_sl
     survived = df['Pullback'] < effective_sl
     reached = df['TP'] >= target
@@ -495,39 +528,16 @@ def _win_rate(wins: int, decided: int) -> str:
 
 def calculate_weekday_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Per-weekday win rates under four readings of the same trades.
-
-    Signal and Strategy are the grouping tables' two readings. Strategy + 1
-    pip pads the stop by TYPE_BUFFER_PIPS; Strategy + BE Rule scores the
-    recorded stop under break_even_outcomes. All are at 1:1. A break-even
-    trade returns 0R, so it is left out of its column's win rate - wins over
-    wins plus losses - which keeps 50% the line between paying and not.
+    Per-weekday win rates under the four readings of _rate_columns.
 
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: Day, Trades, Signal, Strategy,
-        Strategy + 1 pip, Strategy + BE Rule - each a bare "52.7%"
+        DataFrame with columns: Day, Trades, then RATE_COLUMNS
     """
-    results = []
-    for day in WEEKDAY_ORDER:
-        trades = df[df['Weekday'] == day]
-        total = len(trades)
-        rows = _signal_strategy_rows(
-            [(day, trades), (day, trades, TYPE_BUFFER_PIPS)], 'Day')
-        wins, _, losses = break_even_outcomes(trades)
-        results.append({
-            'Day': day,
-            'Trades': total,
-            'Signal': _PCT_RE.search(rows.iloc[0]['Signal']).group(0),
-            'Strategy': _PCT_RE.search(rows.iloc[0]['Strategy']).group(0),
-            f'Strategy + {_pip_label(TYPE_BUFFER_PIPS)}':
-                _PCT_RE.search(rows.iloc[1]['Strategy']).group(0),
-            'Strategy + BE Rule': _win_rate(
-                int(wins.sum()), int(wins.sum() + losses.sum())),
-        })
-    return pd.DataFrame(results)
+    groups = [(day, df[df['Weekday'] == day]) for day in WEEKDAY_ORDER]
+    return _signal_strategy_rows(groups, 'Day')
 
 
 # Series colours for the Signal/Strategy charts: categorical slots 1 and 2 of the
@@ -593,8 +603,8 @@ def create_signal_strategy_chart(stats: pd.DataFrame) -> str:
 
     Args:
         stats: DataFrame whose first column labels the rows and which carries
-            Trades, Signal and Strategy columns, either in the _format_wl
-            shape or as a bare win rate
+            Trades, Signal and Strategy columns, either as a bare win rate or
+            wrapped as "13W - 12L (52.0%)"
 
     Returns:
         HTML string with the chart, or a "No data" note for an empty frame
@@ -655,11 +665,6 @@ def _ordered_labels(values: pd.Series, preferred: List[str]) -> List[str]:
     return [label for label in preferred if label in present] + extras
 
 
-# Pips the "<type> + 1 pip buffer" rows of the Setup and Streaks tables pad
-# the stop with.
-TYPE_BUFFER_PIPS = 1
-
-
 def _type_buffer_label(label: str) -> str:
     """'Continuation' -> 'Continuation + 1 pip buffer'."""
     return f"{label} + {_pip_label(TYPE_BUFFER_PIPS)} buffer"
@@ -671,9 +676,7 @@ def calculate_setup_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
     The type - continuation through the 30-minute level or reversal off it -
     is known at entry, so it is a tradeable filter. "Default" is every trade;
-    the two type rows split it, so they sum to it. Each type then repeats as
-    "<type> + 1 pip buffer", its Strategy scored on SL + TYPE_BUFFER_PIPS as
-    in Adding Buffer. The four level-specific
+    the two type rows split it, so they sum to it. The four level-specific
     setups ("High Continuation" and so on) are not listed: the level alone
     says nothing, only the type it forms with Direction does.
 
@@ -681,15 +684,11 @@ def calculate_setup_statistics(df: pd.DataFrame) -> pd.DataFrame:
         df: DataFrame with trading data, including a Type column
 
     Returns:
-        DataFrame with columns: Setup, Trades, Signal, Strategy
+        DataFrame with columns: Setup, Trades, then RATE_COLUMNS
     """
     types = _ordered_labels(df['Type'], TYPE_ORDER)
     groups: List[Tuple] = [('Default', df)]
     groups.extend((label, df[df['Type'] == label]) for label in types)
-    groups.extend(
-        (_type_buffer_label(label), df[df['Type'] == label], TYPE_BUFFER_PIPS)
-        for label in types
-    )
     return _signal_strategy_rows(groups, 'Setup')
 
 
@@ -719,7 +718,7 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: SL Range, Trades, Signal, Strategy
+        DataFrame with columns: SL Range, Trades, then RATE_COLUMNS
     """
     groups: List[Tuple[str, pd.DataFrame]] = [('Default', df)]
     groups.extend(
@@ -762,30 +761,25 @@ def _sl_scenario_statistics(df: pd.DataFrame,
         scenarios: (label, effective SL) pairs. The effective SL is either a
             per-trade Series or a single number applied to every trade
         column: Name for the leading column (e.g. 'Fixed SL')
-        with_signal: Emit `<column>, Trades, Signal, Strategy` instead of
-            `<column>, Trades, Notation, Win Rate`, matching the grouping
+        with_signal: Emit `<column>, Trades` and the RATE_COLUMNS instead
+            of `<column>, Trades, Notation, Win Rate`, matching the grouping
             tables. Signal (TP > 0) does not depend on the stop, so it repeats
             down every row - it is the ceiling no stop size beats, and each
             row's Strategy says how much of it that stop captures
 
     Returns:
         DataFrame with columns: <column>, Trades, Notation, Win Rate - or
-        <column>, Trades, Signal, Strategy when with_signal is set
+        <column>, Trades, then RATE_COLUMNS when with_signal is set
     """
     total = len(df)
-    signals = int((df['TP'] > 0).sum()) if total else 0
     results = []
 
     for label, effective_sl in scenarios:
-        wins = int((
-            (df['Pullback'] < effective_sl) & (df['TP'] >= effective_sl)
-        ).sum()) if total else 0
-
         row = {column: label, 'Trades': total}
         if with_signal:
-            row['Signal'] = _format_wl(signals, total - signals, total)
-            row['Strategy'] = _format_wl(wins, total - wins, total)
+            row.update(_rate_columns(df, effective_sl))
         else:
+            wins = int(_strategy_wins(df, effective_sl).sum()) if total else 0
             win_rate = (wins / total * 100) if total > 0 else 0.0
             row['Notation'] = f"{wins}W - {total - wins}L"
             row['Win Rate'] = f"{win_rate:.1f}%"
@@ -811,7 +805,7 @@ def calculate_sl_buffer_statistics(df: pd.DataFrame,
 
     Returns:
         DataFrame with columns: SL Buffer, Trades, Notation, Win Rate - or
-        SL Buffer, Trades, Signal, Strategy when with_signal is set
+        SL Buffer, Trades, then RATE_COLUMNS when with_signal is set
     """
     scenarios: List[Tuple[str, object]] = [
         ("Default" if pips == 0 else _pip_label(pips), df['SL'] + pips)
@@ -833,7 +827,7 @@ def calculate_sl_fixed_statistics(df: pd.DataFrame) -> pd.DataFrame:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: Fixed SL, Trades, Signal, Strategy
+        DataFrame with columns: Fixed SL, Trades, then RATE_COLUMNS
     """
     scenarios: List[Tuple[str, object]] = [('Default', df['SL'])]
     scenarios.extend((_pip_label(pips), float(pips)) for pips in SL_FIXED_PIPS)
@@ -853,7 +847,7 @@ def calculate_sl_max_statistics(df: pd.DataFrame) -> pd.DataFrame:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: Cap SL, Trades, Signal, Strategy
+        DataFrame with columns: Cap SL, Trades, then RATE_COLUMNS
     """
     scenarios: List[Tuple[str, object]] = [('Default', df['SL'])]
     scenarios.extend(

@@ -135,7 +135,7 @@ def test_build_report_renders_data_values():
 def test_build_report_empty_dataset():
     html = build_report(get_empty_data(), '2025-02-06 10:00:00', 'abc123')
     assert html.startswith('<!DOCTYPE html>')
-    assert '0W - 0L (0.0%)' in html
+    assert '>0.0%<' in html
 
 
 # --- summary cards --------------------------------------------------------
