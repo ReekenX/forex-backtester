@@ -387,11 +387,11 @@ Where the pages still differ:
   own.
 - **It has no `4H`, `EMA` or `Hour` column**, so none of those tables exist.
 - **Its Signal/Strategy tables carry win rates only** - `Weekday`, `Setup`,
-  `SL Range`, `Fixed SL` and `Cap SL` are `<label>, Trades, Signal,
-  Strategy, Strategy + 1 pip` (`RATE_COLUMNS`), each a bare `"52.7%"`, all at
-  1:1 on the row's own stop. `+ 1 pip` pads that stop by `TYPE_BUFFER_PIPS`
-  (so on `Fixed SL` it reads the next size up, on `Cap SL` it is
-  `min(SL, cap) + 1`). `_rate_columns` builds all three, so every table reads
+  `SL Range` and `Cap SL` are `<label>, Trades, Signal, Strategy, Strategy
+  + 1 pip` (`RATE_COLUMNS`), each a bare `"52.7%"`, all at 1:1 on the row's
+  own stop. `+ 1 pip` pads that stop by `TYPE_BUFFER_PIPS` (on `Cap SL` it
+  is `min(SL, cap) + 1`). `Fixed SL` drops the `+ 1 pip` column: a fixed
+  stop plus a pip is the next row down, so its chart draws two bars a row. `_rate_columns` builds all three, so every table reads
   them the same way. Every rate is coloured against 50% - green above, red
   below, plain on it - through `colour_columns`. The charts under them - and
   the `Adding Buffer` chart - draw all three as grouped bars, `Strategy + 1

@@ -441,21 +441,21 @@ def test_setup_buffer_column_pads_the_stop_for_strategy_only():
 def test_every_rate_table_carries_the_three_readings():
     sample = get_sample_data()
     for fn in (calculate_weekday_statistics, calculate_setup_statistics,
-               calculate_sl_statistics, calculate_sl_fixed_statistics,
-               calculate_sl_max_statistics):
+               calculate_sl_statistics, calculate_sl_max_statistics):
         result = fn(sample)
         assert list(result.columns)[2:] == RATE_COLUMNS, fn.__name__
         for col in RATE_COLUMNS:
             assert result[col].str.fullmatch(r'\d+\.\d%').all(), fn.__name__
 
 
-def test_fixed_sl_buffer_column_reads_the_next_size_up():
-    """A fixed stop padded by a pip is the next fixed size."""
-    result = calculate_sl_fixed_statistics(get_sample_data()).set_index(
-        'Fixed SL')
-    for pips in SL_FIXED_PIPS[:-1]:
-        assert (result.loc[f'{pips} pips', 'Strategy + 1 pip']
-                == result.loc[f'{pips + 1} pips', 'Strategy'])
+def test_fixed_sl_has_no_buffer_column():
+    """A fixed stop padded by a pip is the next fixed size - the row below -
+    so the column would only repeat it. Its chart draws two bars a row."""
+    result = calculate_sl_fixed_statistics(get_sample_data())
+    assert 'Strategy + 1 pip' not in result.columns
+    html = create_signal_strategy_chart(result)
+    assert html.count('class="wr-bar"') == 2 * len(result)
+    assert '>Strategy + 1 pip</span>' not in html
 
 
 def test_grouping_tables_handle_an_empty_dataset():
@@ -501,7 +501,7 @@ def test_sl_buffer_widens_the_target_with_the_stop():
 
 def test_sl_fixed_statistics_reports_signal_and_strategy():
     result = calculate_sl_fixed_statistics(get_sample_data())
-    assert list(result.columns) == ['Fixed SL', 'Trades'] + RATE_COLUMNS
+    assert list(result.columns) == ['Fixed SL', 'Trades', 'Signal', 'Strategy']
     assert result.iloc[0]['Fixed SL'] == 'Default'
     assert list(result['Fixed SL'])[1:] == [f'{p} pips' for p in SL_FIXED_PIPS]
 

@@ -618,8 +618,11 @@ def create_signal_strategy_chart(stats: pd.DataFrame) -> str:
 
     html = _CHART_CSS + '<div class="wr-chart" role="img" aria-label="'
     html += f'Signal and Strategy win rate by {label_column}">'
+    # A table may carry only some of the series - Fixed SL has no + 1 pip.
+    series = [(name, colour) for name, colour in CHART_SERIES
+              if name in stats.columns]
     html += '<div class="wr-legend">'
-    for name, colour in CHART_SERIES:
+    for name, colour in series:
         html += (f'<span><span class="wr-swatch" '
                  f'style="background-color: {colour};"></span>{name}</span>')
     html += (f'<span><span class="wr-swatch" style="border: 1px dashed '
@@ -637,7 +640,7 @@ def create_signal_strategy_chart(stats: pd.DataFrame) -> str:
         html += (f'<div class="wr-row"><div class="wr-label">{label}'
                  f'<span class="wr-count">{int(row["Trades"])} trades</span>'
                  '</div><div class="wr-track">')
-        for name, colour in CHART_SERIES:
+        for name, colour in series:
             rate = _cell_rate(row[name])
             html += (f'<div class="wr-bar-line" title="{label} - {name}: '
                      f'{row[name]}"><div class="wr-bar" style="width: '
@@ -824,15 +827,20 @@ def calculate_sl_fixed_statistics(df: pd.DataFrame) -> pd.DataFrame:
     so both the survival check and the 1:1 target move to that size. The first
     row keeps the recorded stops, as a baseline to read the rest against.
 
+    There is no Strategy + 1 pip column: a fixed stop padded by a pip is just
+    the next fixed size, already the row below.
+
     Args:
         df: DataFrame with trading data
 
     Returns:
-        DataFrame with columns: Fixed SL, Trades, then RATE_COLUMNS
+        DataFrame with columns: Fixed SL, Trades, Signal, Strategy
     """
     scenarios: List[Tuple[str, object]] = [('Default', df['SL'])]
     scenarios.extend((_pip_label(pips), float(pips)) for pips in SL_FIXED_PIPS)
-    return _sl_scenario_statistics(df, scenarios, 'Fixed SL', with_signal=True)
+    return _sl_scenario_statistics(df, scenarios, 'Fixed SL',
+                                   with_signal=True).drop(
+        columns=RATE_COLUMNS[2])
 
 
 def calculate_sl_max_statistics(df: pd.DataFrame) -> pd.DataFrame:

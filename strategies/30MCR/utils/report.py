@@ -269,7 +269,7 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "recorded stops as a baseline. <b>Signal</b> (TP &gt; 0) does not "
         "depend on the stop, so it repeats down the table as the ceiling; "
         "<b>Strategy</b> says how much of that ceiling each stop size "
-        "captures. <b>+ 1 pip</b> pads the fixed size.",
+        "captures.",
         _sl_fixed_section,
     ),
     (
