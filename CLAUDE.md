@@ -29,6 +29,7 @@ Current strategies:
 - **5OB1CC** - 5-minute Order Block, 1-minute Confirmation Candle (`strategies/5OB1CC/`)
 - **15LS1CC** - 15-minute Leg Structure, 1-minute Confirmation Candle (`strategies/15LS1CC/`)
 - **30MCR** - 30-minute Continuation/Reversal (`strategies/30MCR/`)
+- **30MCR Fixed** - 30MCR traded on a fixed 5-pip stop, scored on a `Reward` column (`strategies/30MCR-fixed/`). Report-only, see "30MCR Fixed" below
 
 ## Background About Trades
 
@@ -276,6 +277,7 @@ Three pages, one template, one output directory:
 | 30MCR | `labs/render_30MCR.py` | `labs/build/30MCR.html` | `trades.csv` |
 | 15LS1CC | `labs/render.py` | `labs/build/15C.html` | `v5_data.csv` |
 | 5OB1CC | `labs/render_5OB.py` | `labs/build/5OB.html` | `data.csv` |
+| 30MCR Fixed | `labs/render_30MCR_fixed.py` | `labs/build/30MCR-fixed.html` | `trades.csv` |
 
 Pair any of them with a file watcher for the normal working loop:
 
@@ -449,6 +451,28 @@ Where the pages still differ:
   this page's disagree.
 - **Headers are normalised to their first line** before anything reads them:
   the export wraps a computed figure under the column name in the same cell.
+
+### 30MCR Fixed
+
+`make report-30mcr-fixed` / `open-30mcr-fixed` / `watch-30mcr-fixed`. A copy
+of the 30MCR page whose export differs in three ways:
+
+- **`SL` is 5 pips on every trade.** There is no recorded safe stop to vary.
+- **`TP` is replaced by `Reward`**: the most the trade could have made, in R,
+  after commissions, exported as `3R`. Blank loads as 0. The win rule is
+  `Pullback < SL AND Reward >= RRR`; Signal is `Reward > 0`. `R` is `Reward`,
+  signed negative when `Pullback >= SL`. Everything right of `Reward` is
+  sheet scratch and is dropped.
+- **There is no `BE Rule` column.**
+
+Because costs are already inside `Reward`, it cannot be turned back into pips
+to re-score a trade on another stop. So every stop-scenario table (`SL Range`,
+`Fixed SL`, `Cap SL`, `TP Range`, `Pullback`, `Adding Buffer`, `Half SL`, the
+`+ 1 pip` readings and the BE rule) is left off. The page is `Weekday`,
+`Setup`, `R Distribution`, `Streaks` and one Strategies table per RRR - rows
+are the three trends, with an `Outcome` column and an equity chart. The
+sheet's `WR 43.8%` header is one trade above the page's 43.2%: it counts a
+trade with `Pullback == SL` as surviving.
 
 ### Conventions for report sections
 
