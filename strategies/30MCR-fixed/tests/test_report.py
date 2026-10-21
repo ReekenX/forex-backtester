@@ -372,7 +372,7 @@ def test_stop_scenario_tables_are_gone():
     nothing for the stop tables to vary."""
     html = build_report(get_sample_data(), '2025-02-06 10:00:00', 'abc123')
     for gone in ('SL Range', 'Fixed SL', 'Cap SL', 'Adding Buffer',
-                 'Pullback Analysis', 'Half SL', 'TP Range', '+ 1 pip',
+                 'Pullback Analysis', '>Half SL<', 'TP Range', '+ 1 pip',
                  'BE Rule', 'Buffer'):
         assert gone not in html, gone
 

@@ -56,6 +56,13 @@ BE_AT_1R_RRRS = [2, 3]
 # Appended to a trend's label on the rows that apply that rule.
 BE_AT_1R_SUFFIX = ' + BE at 1R'
 
+# The same RRRs again, with the stop pulled to half the risk at 1R instead.
+HALF_SL_AT_1R_RRRS = BE_AT_1R_RRRS
+HALF_SL_AT_1R_SUFFIX = ' + Half SL at 1R'
+
+# What a trade stopped out on the half stop loses, in R.
+HALF_SL_LOSS = -0.5
+
 # Setup types the Strategies tables filter on. "All" keeps every trade; the
 # rest keep the setups that end that way, e.g. Reversal = High + Low Reversal.
 TREND_FILTERS = ['All', 'Continuation', 'Reversal']
@@ -752,14 +759,65 @@ def be_at_1r_results(trades: pd.DataFrame, rrr: float) -> pd.Series:
     return results
 
 
-def _strategy_rows(rrr: int) -> List[Tuple[str, str, bool]]:
-    """(label, trend, BE at 1R) for every row of one RRR's Strategies table:
-    the trends, then the trends again under the rule where it applies."""
-    rows = [(trend, trend, False) for trend in TREND_FILTERS]
-    if rrr in BE_AT_1R_RRRS:
-        rows += [(trend + BE_AT_1R_SUFFIX, trend, True)
-                 for trend in TREND_FILTERS]
+def half_sl_at_1r_results(trades: pd.DataFrame, rrr: float) -> pd.Series:
+    """
+    Each trade's R at 1:RRR with the stop pulled to SL / 2 once it reached 1R.
+
+    The stop is checked first, as in strategy_wins: a trade with Pullback >= SL
+    or Reward under 1R never triggered the rule and loses 1R. Past 1R the
+    trade risks only HALF_SL_LOSS. It wins if Reward reached the target and
+    Pullback stayed under SL / 2; otherwise the half stop took it, -0.5R.
+
+    Pullback is the deepest the trade went at any point, not only after 1R,
+    so a pullback past SL / 2 that came before 1R - when the full stop was
+    still in place - is scored as a half-stop loss too. That makes the rule
+    read conservatively.
+
+    At 1:1 the target is the trigger, so the trade is closed at 1R first.
+
+    Returns:
+        Series of +RRR (win), -0.5 (half-stop loss) or -1.0 (loss), on
+        trades' index
+    """
+    reached = (trades['Pullback'] < trades['SL']) & (trades['Reward'] >= 1)
+    hit = trades['Reward'] >= rrr
+    results = pd.Series(-1.0, index=trades.index)
+    if rrr <= 1:
+        results[reached & hit] = float(rrr)
+        return results
+    results[reached] = HALF_SL_LOSS
+    results[reached & hit & (trades['Pullback'] < trades['SL'] / 2)] = float(rrr)
+    return results
+
+
+# How each row of a Strategies table is scored: None is the plain win rule.
+_RULES = {
+    'be': (BE_AT_1R_SUFFIX, BE_AT_1R_RRRS, be_at_1r_results),
+    'half': (HALF_SL_AT_1R_SUFFIX, HALF_SL_AT_1R_RRRS, half_sl_at_1r_results),
+}
+
+
+def _strategy_rows(rrr: int) -> List[Tuple[str, str, Optional[str]]]:
+    """(label, trend, rule) for every row of one RRR's Strategies table: the
+    trends, then the trends again under each rule that applies at that RRR."""
+    rows = [(trend, trend, None) for trend in TREND_FILTERS]
+    for rule, (suffix, rrrs, _) in _RULES.items():
+        if rrr in rrrs:
+            rows += [(trend + suffix, trend, rule) for trend in TREND_FILTERS]
     return rows
+
+
+def _rule_results(trades: pd.DataFrame, rrr: int,
+                  rule: Optional[str]) -> pd.Series:
+    """Each trade's R at 1:RRR under one row's rule."""
+    if rule is None:
+        return strategy_wins(trades, rrr).map({True: float(rrr), False: -1.0})
+    return _RULES[rule][2](trades, rrr)
+
+
+def _format_r(value: float) -> str:
+    """'+3R', or '+3.5R' when a half-stop loss leaves a half."""
+    return f'{value:+.1f}R' if value % 1 else f'{value:+.0f}R'
 
 
 def calculate_strategy_statistics(df: pd.DataFrame) -> pd.DataFrame:
@@ -778,6 +836,11 @@ def calculate_strategy_statistics(df: pd.DataFrame) -> pd.DataFrame:
     scored by be_at_1r_results. Its Notation is W – BE – L and its Win Rate
     W / (W + L): a break-even is 0R, so it counts on neither side.
 
+    At the RRRs in HALF_SL_AT_1R_RRRS each trend repeats again as
+    '<trend> + Half SL at 1R', scored by half_sl_at_1r_results. Its Notation
+    is W – HL – L, HL the half-stop losses, and its Win Rate W / Trades: a
+    half-stop loss is still a loss. Outcome = W x RRR - 0.5 x HL - L.
+
     Args:
         df: DataFrame with trading data, including a Type column
 
@@ -787,18 +850,20 @@ def calculate_strategy_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     results = []
     for rrr in RRR_RATIOS:
-        for label, trend, be in _strategy_rows(rrr):
+        for label, trend, rule in _strategy_rows(rrr):
             trades = _apply_trend(df, trend)
-            if be:
-                outcome = be_at_1r_results(trades, rrr)
-                won = int((outcome > 0).sum())
+            outcome = _rule_results(trades, rrr, rule)
+            won = int((outcome > 0).sum())
+            lost = int((outcome == -1).sum())
+            if rule == 'be':
                 even = int((outcome == 0).sum())
-                lost = len(trades) - won - even
                 notation = f'{won}W – {even}BE – {lost}L'
                 rate = _win_rate(won, won + lost)
+            elif rule == 'half':
+                half = int((outcome == HALF_SL_LOSS).sum())
+                notation = f'{won}W – {half}HL – {lost}L'
+                rate = _win_rate(won, len(trades))
             else:
-                won = int(strategy_wins(trades, rrr).sum())
-                lost = len(trades) - won
                 notation = f'{won}W – {lost}L'
                 rate = _win_rate(won, len(trades))
             results.append({
@@ -807,7 +872,7 @@ def calculate_strategy_statistics(df: pd.DataFrame) -> pd.DataFrame:
                 'Trades': len(trades),
                 'Notation': notation,
                 'Win Rate': rate,
-                'Outcome': f'{won * rrr - lost:+d}R',
+                'Outcome': _format_r(float(outcome.sum())),
             })
     return pd.DataFrame(results)
 
@@ -1014,7 +1079,8 @@ def calculate_equity_curves(df: pd.DataFrame, rrr: float = 1) -> List[Dict]:
 
     Trades are walked in date order; the export's own order breaks ties within
     a day. A win adds the RRR in R and a loss takes 1R, under strategy_wins -
-    or under be_at_1r_results on a '+ BE at 1R' row, where a break-even adds 0.
+    or under the row's rule on a '+ BE at 1R' or '+ Half SL at 1R' row, where
+    a break-even adds 0 and a half-stop loss takes 0.5R.
     Every curve runs over every trade, so a Continuation-only row sits flat
     through the Reversal trades it would not have taken and the curves line
     up in time.
@@ -1029,21 +1095,16 @@ def calculate_equity_curves(df: pd.DataFrame, rrr: float = 1) -> List[Dict]:
         after each trade, starting from 0, so len(df) + 1 long)
     """
     ordered = df.sort_values('Date', kind='stable') if len(df) else df
-    won = strategy_wins(ordered, rrr)
     curves = []
-    for label, trend, be in _strategy_rows(rrr):
+    for label, trend, rule in _strategy_rows(rrr):
         taken = (pd.Series(True, index=ordered.index) if trend == 'All'
                  else ordered['Type'] == trend)
-        if be:
-            per_trade = be_at_1r_results(ordered, rrr)
-        else:
-            per_trade = pd.Series(-1.0, index=ordered.index)
-            per_trade[won] = float(rrr)
+        per_trade = _rule_results(ordered, rrr, rule).copy()
         per_trade[~taken] = 0.0
         curve = [0.0] + per_trade.cumsum().round(6).tolist()
         curves.append({
             'label': (('All Trades' if trend == 'All' else trend)
-                      + (BE_AT_1R_SUFFIX if be else '')),
+                      + label[len(trend):]),
             'trades': int(taken.sum()),
             'outcome': curve[-1],
             'curve': curve,
@@ -1115,7 +1176,7 @@ def create_equity_chart(curves: List[Dict], rrr: float = 1,
     for colour, curve in zip(EQUITY_COLOURS, top):
         out += (f'<span><span class="eq-swatch" style="background-color: '
                 f'{colour};"></span>{escape(curve["label"])} '
-                f'({curve["outcome"]:+.0f}R)</span>')
+                f'({_format_r(curve["outcome"])})</span>')
     if rest:
         out += (f'<span><span class="eq-swatch" style="background-color: '
                 f'{EQUITY_OTHER_COLOUR};"></span>{len(rest)} other '
@@ -1186,7 +1247,7 @@ def create_equity_chart(curves: List[Dict], rrr: float = 1,
         out += (f'<circle cx="{x_end:.1f}" cy="{y:.1f}" r="3" '
                 f'fill="{colour}" stroke="#1e1e1e" stroke-width="2"/>')
         out += (f'<text class="eq-label" x="{x_end + 16}" y="{slot + 4:.1f}">'
-                f'{escape(curve["label"])} {curve["outcome"]:+.0f}R</text>')
+                f'{escape(curve["label"])} {_format_r(curve["outcome"])}</text>')
     out += '</svg><div class="eq-tip"></div>'
     out += (f'<p class="eq-caption">Cumulative R over {n_trades} trades in '
             f'date order: +{rrr:g}R per win, -1R per loss. Trades outside a '

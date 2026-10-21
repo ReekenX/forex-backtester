@@ -24,7 +24,9 @@ from utils.continuation_reversal import (  # noqa: E402
     _drop_scratch_columns,
     _normalise_header,
     BE_AT_1R_RRRS,
+    HALF_SL_AT_1R_RRRS,
     be_at_1r_results,
+    half_sl_at_1r_results,
     calculate_equity_curves,
     calculate_r_counts,
     calculate_scaling_rrr_statistics,
@@ -288,7 +290,7 @@ def test_streak_statistics_empty_dataset():
 def test_strategy_statistics_has_a_row_per_trend_and_rrr():
     stats = calculate_strategy_statistics(get_sample_data())
     assert len(stats) == len(TREND_FILTERS) * (
-        len(RRR_RATIOS) + len(BE_AT_1R_RRRS))
+        len(RRR_RATIOS) + len(BE_AT_1R_RRRS) + len(HALF_SL_AT_1R_RRRS))
     assert list(stats.columns) == ['Trend', 'RRR', 'Trades', 'Notation',
                                    'Win Rate', 'Outcome']
 
@@ -534,3 +536,60 @@ def test_equity_curves_carry_the_be_rows():
             label = ('All Trades' if trend == 'All' else trend) + ' + BE at 1R'
             assert (f"{curves[label]['outcome']:+.0f}R"
                     == rows.loc[trend + ' + BE at 1R', 'Outcome'])
+
+
+# --- half SL at 1R --------------------------------------------------------
+
+def _half_trades():
+    """One trade per branch of the rule, all on a 5-pip stop (half = 2.5)."""
+    return pd.DataFrame({
+        'SL': [5.0] * 6,
+        #           stop  <1R  tight deep  short edge
+        'Pullback': [5.2, 1.0, 1.0, 3.0, 1.0, 2.5],
+        'Reward':   [4.0, 0.0, 4.0, 4.0, 2.0, 4.0],
+        'Type': ['Continuation'] * 6,
+    })
+
+
+def test_half_sl_at_1r_at_1_to_3():
+    """A pullback of exactly SL / 2 reaches the half stop, like Pullback ==
+    SL reaches the full one."""
+    assert half_sl_at_1r_results(_half_trades(), 3).tolist() == [
+        -1.0, -1.0, 3.0, -0.5, -0.5, -0.5]
+
+
+def test_half_sl_at_1r_at_1_to_2():
+    assert half_sl_at_1r_results(_half_trades(), 2).tolist() == [
+        -1.0, -1.0, 2.0, -0.5, 2.0, -0.5]
+
+
+def test_half_sl_at_1r_changes_nothing_at_1_to_1():
+    trades = _half_trades()
+    expected = strategy_wins(trades, 1).map({True: 1.0, False: -1.0})
+    assert half_sl_at_1r_results(trades, 1).tolist() == expected.tolist()
+
+
+def test_strategy_statistics_score_half_sl_rows():
+    stats = calculate_strategy_statistics(get_sample_data()).set_index(
+        ['Trend', 'RRR'])
+    row = stats.loc[('All + Half SL at 1R', '1:3')]
+    # Survived past 1R: rows 0 (3R, pullback 1.0), 3 (1R), 4 (2R, 4.9),
+    # 6 (10R, 0.0) and 8 (1R). Rows 0 and 6 reach 3R inside the half stop;
+    # the other three are taken at -0.5R. Rows 1 and 5 hit the full stop and
+    # three never reached 1R.
+    assert row['Notation'] == '2W – 3HL – 5L'
+    assert row['Win Rate'] == '20.0%'
+    assert row['Outcome'] == '-0.5R'
+
+
+def test_equity_curves_carry_the_half_sl_rows():
+    df = get_sample_data()
+    stats = calculate_strategy_statistics(df)
+    for rrr in HALF_SL_AT_1R_RRRS:
+        curves = {c['label']: c for c in calculate_equity_curves(df, rrr)}
+        rows = stats[stats['RRR'] == f'1:{rrr}'].set_index('Trend')
+        for trend in TREND_FILTERS:
+            label = ('All Trades' if trend == 'All' else trend)
+            out = curves[label + ' + Half SL at 1R']['outcome']
+            text = f'{out:+.1f}R' if out % 1 else f'{out:+.0f}R'
+            assert text == rows.loc[trend + ' + Half SL at 1R', 'Outcome']

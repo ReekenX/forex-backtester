@@ -497,6 +497,15 @@ reached the target, 0R otherwise. A blank `Scaling` keeps the normal rule.
 Notation is `W – BE – L`, Win Rate W / (W + L), and the equity curve takes
 0R per break-even. 1:1 has no such rows - its target is the trigger.
 
+The same tables then repeat every trend once more as `<trend> + Half SL at
+1R` (`HALF_SL_AT_1R_RRRS`, scored by `half_sl_at_1r_results`): once the
+trade reaches 1R the stop is pulled to SL / 2. Past 1R it wins if `Reward`
+reached the target and `Pullback < SL / 2`; anything else loses 0.5R.
+`Pullback` is the trade's deepest point overall, not only after 1R, so a dip
+past SL / 2 before 1R counts against it - the rule reads conservatively.
+Notation is `W – HL – L`, Win Rate W / Trades, and `Outcome` can carry a
+half (`-24.5R`).
+
 ### Conventions for report sections
 
 Sections are declared in `report.py`'s `SECTIONS` list as

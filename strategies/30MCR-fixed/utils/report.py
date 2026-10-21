@@ -27,6 +27,7 @@ import pandas as pd
 
 from utils.continuation_reversal import (
     BE_AT_1R_RRRS,
+    HALF_SL_AT_1R_RRRS,
     RRR_RATIOS,
     RATE_COLUMNS,
     calculate_equity_curves,
@@ -239,6 +240,13 @@ BE_AT_1R_NOTE = (
     "the target and is 0R otherwise. A blank Scaling keeps the normal rule. "
     "Notation is W – BE – L and Win Rate W / (W + L).")
 
+HALF_SL_AT_1R_NOTE = (
+    " <b>+ Half SL at 1R</b> rows pull the stop to SL / 2 once the trade "
+    "reaches 1R: a win needs Reward at the target and Pullback under SL / 2, "
+    "anything else past 1R loses 0.5R. Pullback is the deepest point of the "
+    "whole trade, so a dip past SL / 2 before 1R counts against it too. "
+    "Notation is W – HL – L, HL the half-stop losses; Win Rate is W / Trades.")
+
 # One Strategies table per RRR, each ranked by win rate descending.
 SECTIONS.extend(
     (
@@ -250,7 +258,8 @@ SECTIONS.extend(
         f"Ranked by win rate. Breakeven at 1:{rrr} is {100 / (1 + rrr):.1f}%. "
         "The chart under the table walks every row trade by trade in date "
         "order and plots its cumulative R."
-        + (BE_AT_1R_NOTE if rrr in BE_AT_1R_RRRS else ""),
+        + (BE_AT_1R_NOTE if rrr in BE_AT_1R_RRRS else "")
+        + (HALF_SL_AT_1R_NOTE if rrr in HALF_SL_AT_1R_RRRS else ""),
         _strategies_section_for(rrr),
     )
     for rrr in RRR_RATIOS
