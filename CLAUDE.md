@@ -468,6 +468,9 @@ of the 30MCR page whose export differs in three ways:
   reached 1R, exported as `3R` (how far it ran) or `-1R` (stopped out). A
   blank means no second trade and loads as NaN, not 0. The scratch cut keeps
   it and drops everything to its right.
+  A trade with `Pullback` higher than `SL` was stopped out before it
+  reached 1R, so its scaling trade never happened - whatever the `Scaling`
+  cell says. 2026-10-21 #1 (`Pullback 5.1`, `Scaling -1R`) is one of these.
 
 Because costs are already inside `Reward`, it cannot be turned back into pips
 to re-score a trade on another stop. So every stop-scenario table (`SL Range`,
