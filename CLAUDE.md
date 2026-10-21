@@ -471,7 +471,7 @@ to re-score a trade on another stop. So every stop-scenario table (`SL Range`,
 `+ 1 pip` readings and the BE rule) is left off. The page is `Weekday`,
 `Setup`, `R Distribution`, `Streaks` and one Strategies table per RRR - rows
 are the three trends, with an `Outcome` column and an equity chart. The
-sheet's `WR 43.8%` header is one trade above the page's 43.2%: it counts a
+sheet's `WR 43.9%` header is one trade above the page's 43.4%: it counts a
 trade with `Pullback == SL` as surviving.
 
 ### Conventions for report sections

@@ -76,7 +76,7 @@ def _normalise_header(name: object) -> str:
     Reduce a header cell to its first line, trimmed.
 
     The export wraps a computed figure under the column name in the same cell,
-    so "Trade\\n176" and "Signal \\n54.5%" arrive as one header each. Only the
+    so "Trade\\n196" and "Signal \\n54.1%" arrive as one header each. Only the
     first line is the name.
     """
     return str(name).split("\n")[0].strip()

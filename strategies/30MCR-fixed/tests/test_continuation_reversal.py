@@ -149,20 +149,27 @@ def test_load_data_drops_rows_without_a_date(tmp_path):
 
 
 def test_load_data_matches_the_sheets_signal_rate():
-    """The sheet's 'Signal 54.5%' header figure is Reward > 0 on every trade."""
+    """The sheet's 'Signal 54.1%' header figure is Reward > 0 on every trade."""
     df = load_data(CSV_PATH)
-    assert f"{(df['Reward'] > 0).mean() * 100:.1f}%" == '54.5%'
+    assert f"{(df['Reward'] > 0).mean() * 100:.1f}%" == '54.1%'
 
 
 def test_strategy_rate_is_one_trade_below_the_sheets_wr():
-    """The sheet's 'WR 43.8%' counts the one trade whose Pullback equals its
+    """The sheet's 'WR 43.9%' counts the one trade whose Pullback equals its
     SL as a survivor. The project rule is strict, Pullback < SL, so the page
-    reads one win fewer: 76 of 176, 43.2%."""
+    reads one win fewer: 85 of 196, 43.4%."""
     df = load_data(CSV_PATH)
     wins = strategy_wins(df)
     on_the_stop = (df['Pullback'] == df['SL']) & (df['Reward'] >= 1)
-    assert f'{(wins | on_the_stop).mean() * 100:.1f}%' == '43.8%'
-    assert f'{wins.mean() * 100:.1f}%' == '43.2%'
+    assert f'{(wins | on_the_stop).mean() * 100:.1f}%' == '43.9%'
+    assert f'{wins.mean() * 100:.1f}%' == '43.4%'
+
+
+def test_load_data_drops_the_scaling_column():
+    """Scaling sits right of Reward, so the scratch cut drops it."""
+    df = load_data(CSV_PATH)
+    assert 'Scaling' not in df.columns
+    assert 'Signal' not in df.columns
 
 
 def test_load_data_leaves_the_csv_alone():
