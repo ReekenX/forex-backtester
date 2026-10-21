@@ -32,7 +32,7 @@ test:
 	@poetry run python -m pytest strategies/5OB1CC/tests/ -v
 
 report:
-	@poetry run python labs/render_30MCR.py
+	@poetry run python labs/render_30MCR_fixed.py
 
 report-15c:
 	@poetry run python labs/render.py
@@ -40,8 +40,8 @@ report-15c:
 report-5ob:
 	@poetry run python labs/render_5OB.py
 
-report-30mcr-fixed:
-	@poetry run python labs/render_30MCR_fixed.py
+report-30mcr:
+	@poetry run python labs/render_30MCR.py
 
 open: report
 	@open labs/build/$(REPORT_PAGE)
@@ -62,7 +62,7 @@ endef
 
 watch:
 	$(require_watchexec)
-	@watchexec -w strategies/30MCR -e py,csv -- poetry run python labs/render_30MCR.py
+	@watchexec -w strategies/30MCR-fixed -e py,csv -- poetry run python labs/render_30MCR_fixed.py
 
 watch-15c:
 	$(require_watchexec)
