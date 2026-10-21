@@ -488,6 +488,15 @@ ceiling. `calculate_scaling_rrr_statistics` scores the second trade on a
 fixed target (a run short of it is -1R) beside `Base`, the first trade's
 Strategies Outcome, and `Combined`, the two summed.
 
+The 1:2 and 1:3 Strategies tables (`BE_AT_1R_RRRS`) repeat every trend as
+`<trend> + BE at 1R`: the stop moves to entry once the trade reaches 1R,
+scored by `be_at_1r_results`. A trade stopped out (`Pullback >= SL`) or
+short of 1R loses as usual. Past 1R, `Scaling -1R` means price came back to
+entry first, 0R. Any other `Scaling` means it never did: a win if `Reward`
+reached the target, 0R otherwise. A blank `Scaling` keeps the normal rule.
+Notation is `W – BE – L`, Win Rate W / (W + L), and the equity curve takes
+0R per break-even. 1:1 has no such rows - its target is the trigger.
+
 ### Conventions for report sections
 
 Sections are declared in `report.py`'s `SECTIONS` list as

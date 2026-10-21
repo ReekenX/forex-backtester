@@ -23,6 +23,8 @@ from utils.continuation_reversal import (  # noqa: E402
     WEEKDAY_ORDER,
     _drop_scratch_columns,
     _normalise_header,
+    BE_AT_1R_RRRS,
+    be_at_1r_results,
     calculate_equity_curves,
     calculate_r_counts,
     calculate_scaling_rrr_statistics,
@@ -285,7 +287,8 @@ def test_streak_statistics_empty_dataset():
 
 def test_strategy_statistics_has_a_row_per_trend_and_rrr():
     stats = calculate_strategy_statistics(get_sample_data())
-    assert len(stats) == len(TREND_FILTERS) * len(RRR_RATIOS)
+    assert len(stats) == len(TREND_FILTERS) * (
+        len(RRR_RATIOS) + len(BE_AT_1R_RRRS))
     assert list(stats.columns) == ['Trend', 'RRR', 'Trades', 'Notation',
                                    'Win Rate', 'Outcome']
 
@@ -449,8 +452,9 @@ def test_scaling_rrr_statistics_score_a_short_runner_as_a_loss():
 def test_scaling_rrr_combined_is_base_plus_the_second_trade():
     df = _with_scaling(get_sample_data())
     stats = calculate_scaling_rrr_statistics(df)
-    base = calculate_strategy_statistics(df)
-    assert stats['Base'].tolist() == base['Outcome'].tolist()
+    base = calculate_strategy_statistics(df).set_index(['Trend', 'RRR'])
+    assert stats['Base'].tolist() == [
+        base.loc[(t, r), 'Outcome'] for t, r in zip(stats['Trend'], stats['RRR'])]
     for _, row in stats.iterrows():
         total = int(row['Base'].rstrip('R')) + int(row['Outcome'].rstrip('R'))
         assert int(row['Combined'].rstrip('R')) == total
@@ -459,3 +463,74 @@ def test_scaling_rrr_combined_is_base_plus_the_second_trade():
 def test_scaling_rrr_statistics_on_empty_data():
     stats = calculate_scaling_rrr_statistics(get_sample_data().iloc[0:0])
     assert (stats['Scaled'] == 0).all()
+
+
+# --- break-even at 1R -----------------------------------------------------
+
+def _be_trades():
+    """One trade per branch of the rule, all on a 5-pip stop."""
+    return pd.DataFrame({
+        'SL': [5.0] * 7,
+        #           stop  <1R  back  back  safe  safe  blank
+        'Pullback': [5.2, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        'Reward':   [4.0, 0.0, 9.0, 1.0, 4.0, 2.0, 2.0],
+        'Scaling':  [3.0, None, -1.0, -1.0, 3.0, 1.0, None],
+        'Type': ['Continuation'] * 7,
+    })
+
+
+def test_be_at_1r_at_1_to_3():
+    assert be_at_1r_results(_be_trades(), 3).tolist() == [
+        -1.0, -1.0, 0.0, 0.0, 3.0, 0.0, -1.0]
+
+
+def test_be_at_1r_at_1_to_2():
+    assert be_at_1r_results(_be_trades(), 2).tolist() == [
+        -1.0, -1.0, 0.0, 0.0, 2.0, 2.0, 2.0]
+
+
+def test_be_at_1r_changes_nothing_at_1_to_1():
+    """The target is the trigger, so a trade that reached 1R is closed there."""
+    trades = _be_trades()
+    expected = strategy_wins(trades, 1).map({True: 1.0, False: -1.0})
+    assert be_at_1r_results(trades, 1).tolist() == expected.tolist()
+
+
+def test_be_at_1r_without_a_scaling_column_is_the_normal_rule():
+    trades = _be_trades().drop(columns='Scaling')
+    expected = strategy_wins(trades, 3).map({True: 3.0, False: -1.0})
+    assert be_at_1r_results(trades, 3).tolist() == expected.tolist()
+
+
+def test_strategy_statistics_add_be_rows_only_where_the_rule_applies():
+    stats = calculate_strategy_statistics(get_sample_data())
+    for rrr in RRR_RATIOS:
+        trends = stats[stats['RRR'] == f'1:{rrr}']['Trend'].tolist()
+        be = [t for t in trends if t.endswith(' + BE at 1R')]
+        assert len(be) == (len(TREND_FILTERS) if rrr in BE_AT_1R_RRRS else 0)
+
+
+def test_strategy_statistics_score_be_rows():
+    df = get_sample_data()
+    df['Scaling'] = [-1.0, None, None, -1.0, None, 1.0, 9.0, None, 4.0, None]
+    stats = calculate_strategy_statistics(df).set_index(['Trend', 'RRR'])
+    row = stats.loc[('All + BE at 1R', '1:3')]
+    # Rows 0 and 3 came back to entry and row 8 stayed safe short of 3R:
+    # three break-evens. Row 6 ran to 10R untouched: the win. Row 4 has no
+    # second trade, so the normal rule loses it, as it does rows 1 and 5,
+    # which hit the stop, and the three that never reached 1R.
+    assert row['Notation'] == '1W – 3BE – 6L'
+    assert row['Win Rate'] == '14.3%'
+    assert row['Outcome'] == '-3R'
+
+
+def test_equity_curves_carry_the_be_rows():
+    df = get_sample_data()
+    stats = calculate_strategy_statistics(df)
+    for rrr in BE_AT_1R_RRRS:
+        curves = {c['label']: c for c in calculate_equity_curves(df, rrr)}
+        rows = stats[stats['RRR'] == f'1:{rrr}'].set_index('Trend')
+        for trend in TREND_FILTERS:
+            label = ('All Trades' if trend == 'All' else trend) + ' + BE at 1R'
+            assert (f"{curves[label]['outcome']:+.0f}R"
+                    == rows.loc[trend + ' + BE at 1R', 'Outcome'])

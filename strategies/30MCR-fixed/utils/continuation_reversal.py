@@ -49,6 +49,13 @@ import pandas as pd
 # RRR ratios to test (1:3 is the ceiling - see CLAUDE.md)
 RRR_RATIOS = [1, 2, 3]
 
+# RRRs whose Strategies tables also run every trend with the stop moved to
+# entry at 1R. At 1:1 the target is the trigger, so the rule changes nothing.
+BE_AT_1R_RRRS = [2, 3]
+
+# Appended to a trend's label on the rows that apply that rule.
+BE_AT_1R_SUFFIX = ' + BE at 1R'
+
 # Setup types the Strategies tables filter on. "All" keeps every trade; the
 # rest keep the setups that end that way, e.g. Reversal = High + Low Reversal.
 TREND_FILTERS = ['All', 'Continuation', 'Reversal']
@@ -710,6 +717,51 @@ def _apply_trend(df: pd.DataFrame, trend: str) -> pd.DataFrame:
     return df if trend == 'All' else df[df['Type'] == trend]
 
 
+def be_at_1r_results(trades: pd.DataFrame, rrr: float) -> pd.Series:
+    """
+    Each trade's R at 1:RRR with the stop moved to entry once it reached 1R.
+
+    The stop is checked first, as in strategy_wins: a trade with Pullback >= SL
+    never reached 1R alive, and one with Reward under 1R never triggered the
+    rule, so both lose 1R. Past 1R, Scaling - the second trade opened there,
+    with its stop at this trade's entry - says whether price came back:
+
+    - Scaling -1R: price returned to entry first. Break-even, 0R, whatever
+      Reward the trade reached later.
+    - Scaling positive: price never returned, so the trade could not lose. It
+      wins if Reward reached the target, otherwise it is break-even, 0R.
+    - Scaling blank: the export does not say, so the normal win rule applies.
+
+    At 1:1 the target is the trigger, so the trade is closed at 1R first.
+
+    Returns:
+        Series of +RRR (win), 0.0 (break-even) or -1.0 (loss), on trades' index
+    """
+    scaling = (trades[SCALING_COLUMN] if SCALING_COLUMN in trades.columns
+               else pd.Series(float('nan'), index=trades.index))
+    reached = (trades['Pullback'] < trades['SL']) & (trades['Reward'] >= 1)
+    hit = trades['Reward'] >= rrr
+    returned = scaling == -1
+    protected = scaling.notna() & ~returned
+
+    results = pd.Series(-1.0, index=trades.index)
+    results[reached & hit] = float(rrr)
+    if rrr > 1:
+        results[reached & returned] = 0.0
+        results[reached & protected & ~hit] = 0.0
+    return results
+
+
+def _strategy_rows(rrr: int) -> List[Tuple[str, str, bool]]:
+    """(label, trend, BE at 1R) for every row of one RRR's Strategies table:
+    the trends, then the trends again under the rule where it applies."""
+    rows = [(trend, trend, False) for trend in TREND_FILTERS]
+    if rrr in BE_AT_1R_RRRS:
+        rows += [(trend + BE_AT_1R_SUFFIX, trend, True)
+                 for trend in TREND_FILTERS]
+    return rows
+
+
 def calculate_strategy_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Score every setup trend at every RRR.
@@ -722,25 +774,39 @@ def calculate_strategy_statistics(df: pd.DataFrame) -> pd.DataFrame:
     Reward is net of costs, so a win's R is already net; a loss is counted as
     the plain -1R.
 
+    At the RRRs in BE_AT_1R_RRRS each trend repeats as '<trend> + BE at 1R',
+    scored by be_at_1r_results. Its Notation is W – BE – L and its Win Rate
+    W / (W + L): a break-even is 0R, so it counts on neither side.
+
     Args:
         df: DataFrame with trading data, including a Type column
 
     Returns:
         DataFrame with columns: Trend, RRR, Trades, Notation, Win Rate,
-        Outcome - trends in TREND_FILTERS order, RRRs ascending within each
+        Outcome - RRRs ascending, the rows of _strategy_rows within each
     """
     results = []
-    for trend in TREND_FILTERS:
-        trades = _apply_trend(df, trend)
-        for rrr in RRR_RATIOS:
-            won = int(strategy_wins(trades, rrr).sum())
-            lost = len(trades) - won
+    for rrr in RRR_RATIOS:
+        for label, trend, be in _strategy_rows(rrr):
+            trades = _apply_trend(df, trend)
+            if be:
+                outcome = be_at_1r_results(trades, rrr)
+                won = int((outcome > 0).sum())
+                even = int((outcome == 0).sum())
+                lost = len(trades) - won - even
+                notation = f'{won}W – {even}BE – {lost}L'
+                rate = _win_rate(won, won + lost)
+            else:
+                won = int(strategy_wins(trades, rrr).sum())
+                lost = len(trades) - won
+                notation = f'{won}W – {lost}L'
+                rate = _win_rate(won, len(trades))
             results.append({
-                'Trend': trend,
+                'Trend': label,
                 'RRR': f'1:{rrr}',
                 'Trades': len(trades),
-                'Notation': f'{won}W – {lost}L',
-                'Win Rate': _win_rate(won, len(trades)),
+                'Notation': notation,
+                'Win Rate': rate,
                 'Outcome': f'{won * rrr - lost:+d}R',
             })
     return pd.DataFrame(results)
@@ -947,7 +1013,8 @@ def calculate_equity_curves(df: pd.DataFrame, rrr: float = 1) -> List[Dict]:
     Cumulative R of every Strategies table row, trade by trade, at one RRR.
 
     Trades are walked in date order; the export's own order breaks ties within
-    a day. A win adds the RRR in R and a loss takes 1R, under strategy_wins.
+    a day. A win adds the RRR in R and a loss takes 1R, under strategy_wins -
+    or under be_at_1r_results on a '+ BE at 1R' row, where a break-even adds 0.
     Every curve runs over every trade, so a Continuation-only row sits flat
     through the Reversal trades it would not have taken and the curves line
     up in time.
@@ -964,15 +1031,19 @@ def calculate_equity_curves(df: pd.DataFrame, rrr: float = 1) -> List[Dict]:
     ordered = df.sort_values('Date', kind='stable') if len(df) else df
     won = strategy_wins(ordered, rrr)
     curves = []
-    for trend in TREND_FILTERS:
+    for label, trend, be in _strategy_rows(rrr):
         taken = (pd.Series(True, index=ordered.index) if trend == 'All'
                  else ordered['Type'] == trend)
-        per_trade = pd.Series(-1.0, index=ordered.index)
-        per_trade[won] = float(rrr)
+        if be:
+            per_trade = be_at_1r_results(ordered, rrr)
+        else:
+            per_trade = pd.Series(-1.0, index=ordered.index)
+            per_trade[won] = float(rrr)
         per_trade[~taken] = 0.0
         curve = [0.0] + per_trade.cumsum().round(6).tolist()
         curves.append({
-            'label': 'All Trades' if trend == 'All' else trend,
+            'label': (('All Trades' if trend == 'All' else trend)
+                      + (BE_AT_1R_SUFFIX if be else '')),
             'trades': int(taken.sum()),
             'outcome': curve[-1],
             'curve': curve,

@@ -26,6 +26,7 @@ from typing import Callable, List, Tuple
 import pandas as pd
 
 from utils.continuation_reversal import (
+    BE_AT_1R_RRRS,
     RRR_RATIOS,
     RATE_COLUMNS,
     calculate_equity_curves,
@@ -231,6 +232,13 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
     ),
 ]
 
+BE_AT_1R_NOTE = (
+    " <b>+ BE at 1R</b> rows move the stop to entry once the trade reaches "
+    "1R, read off Scaling: -1R means price came back to entry first, 0R; "
+    "any other value means it never did, so the trade wins if Reward reached "
+    "the target and is 0R otherwise. A blank Scaling keeps the normal rule. "
+    "Notation is W – BE – L and Win Rate W / (W + L).")
+
 # One Strategies table per RRR, each ranked by win rate descending.
 SECTIONS.extend(
     (
@@ -241,7 +249,8 @@ SECTIONS.extend(
         f"Reward &gt;= {rrr}R; Outcome = W x {rrr} - L. "
         f"Ranked by win rate. Breakeven at 1:{rrr} is {100 / (1 + rrr):.1f}%. "
         "The chart under the table walks every row trade by trade in date "
-        "order and plots its cumulative R.",
+        "order and plots its cumulative R."
+        + (BE_AT_1R_NOTE if rrr in BE_AT_1R_RRRS else ""),
         _strategies_section_for(rrr),
     )
     for rrr in RRR_RATIOS
