@@ -25,6 +25,8 @@ from utils.continuation_reversal import (  # noqa: E402
     _normalise_header,
     calculate_equity_curves,
     calculate_r_counts,
+    calculate_scaling_rrr_statistics,
+    calculate_scaling_statistics,
     calculate_setup_statistics,
     calculate_strategy_statistics,
     calculate_streak_statistics,
@@ -165,11 +167,36 @@ def test_strategy_rate_is_one_trade_below_the_sheets_wr():
     assert f'{wins.mean() * 100:.1f}%' == '43.4%'
 
 
-def test_load_data_drops_the_scaling_column():
-    """Scaling sits right of Reward, so the scratch cut drops it."""
+def test_load_data_keeps_scaling_and_drops_the_scratch_after_it():
     df = load_data(CSV_PATH)
-    assert 'Scaling' not in df.columns
+    assert 'Scaling' in df.columns
     assert 'Signal' not in df.columns
+
+
+def test_load_data_parses_scaling_and_keeps_blanks_apart(tmp_path):
+    path = tmp_path / 'trades.csv'
+    path.write_text(
+        'Date,Weekday,"Trade\n3",Direction,30M,SL,Pullback,Reward,Scaling,'
+        '"Signal \n50%"\n'
+        '2025-02-03,Monday,#1,Buy,High,5.0,1.0,4R,3R,x\n'
+        '2025-02-03,Monday,#2,Buy,High,5.0,1.0,9R,-1R,x\n'
+        '2025-02-03,Monday,#3,Buy,High,5.0,1.0,,,x\n')
+    df = load_data(str(path))
+    assert df['Scaling'].tolist()[:2] == [3.0, -1.0]
+    assert pd.isna(df['Scaling'].iloc[2])
+
+
+def test_load_data_without_a_scaling_column_opens_no_second_trades(tmp_path):
+    df = load_data(_write(tmp_path, [
+        '2025-02-03,Monday,#1,Buy,High,5.0,1.0,3R,,']))
+    assert df['Scaling'].isna().all()
+
+
+def test_drop_scratch_columns_keeps_scaling():
+    df = pd.DataFrame([[1, 2, 3, 4]],
+                      columns=['SL', 'Reward', 'Scaling', 'X'])
+    assert list(_drop_scratch_columns(df).columns) == [
+        'SL', 'Reward', 'Scaling']
 
 
 def test_load_data_leaves_the_csv_alone():
@@ -366,3 +393,69 @@ def test_r_histogram_is_cumulative():
     # 7 trades reach 1R or more, 1 reaches 10R.
     assert '>7</span>' in html
     assert 'R Distribution' in html
+
+
+# --- scaling --------------------------------------------------------------
+
+def _with_scaling(df):
+    """Rows 0, 1, 4 and 6 reached 1R and opened a second trade (row 1 was
+    stopped out on the first, as the export allows). Row 3 also reached 1R
+    but has no second trade recorded."""
+    df = df.copy()
+    df['Scaling'] = [2.0, 3.0, None, None, -1.0, None, 9.0, None, None, None]
+    return df
+
+
+def test_scaling_statistics_count_the_second_trades():
+    stats = calculate_scaling_statistics(_with_scaling(get_sample_data()))
+    row = stats.iloc[0]
+    assert row['Trend'] == 'All'
+    assert row['Trades'] == 10
+    assert row['Scaled'] == '4 (40.0%)'
+    assert row['Notation'] == '3W – 1L'
+    assert row['Win Rate'] == '75.0%'
+    assert row['Avg R'] == '+3.25R'
+    assert row['Avg Win'] == '+4.67R'
+    assert row['Best'] == '9R'
+
+
+def test_scaling_statistics_type_rows_sum_to_all():
+    stats = calculate_scaling_statistics(_with_scaling(get_sample_data()))
+    assert stats['Trend'].tolist() == TREND_FILTERS
+    assert stats['Trades'].iloc[1] + stats['Trades'].iloc[2] == 10
+    scaled = [int(v.split()[0]) for v in stats['Scaled']]
+    assert scaled[1] + scaled[2] == scaled[0]
+
+
+def test_scaling_statistics_without_second_trades():
+    stats = calculate_scaling_statistics(get_sample_data())
+    row = stats.iloc[0]
+    assert row['Scaled'] == '0 (0.0%)'
+    assert row['Notation'] == '0W – 0L'
+    assert row['Win Rate'] == '0.0%'
+    assert row['Avg R'] == row['Avg Win'] == row['Best'] == 'N/A'
+
+
+def test_scaling_rrr_statistics_score_a_short_runner_as_a_loss():
+    stats = calculate_scaling_rrr_statistics(_with_scaling(get_sample_data()))
+    every = stats[stats['Trend'] == 'All'].set_index('RRR')
+    # 2R, 3R, -1R, 9R: at 1:3 the 2R runner falls short and loses.
+    assert every.loc['1:1', 'Notation'] == '3W – 1L'
+    assert every.loc['1:1', 'Outcome'] == '+2R'
+    assert every.loc['1:3', 'Notation'] == '2W – 2L'
+    assert every.loc['1:3', 'Outcome'] == '+4R'
+
+
+def test_scaling_rrr_combined_is_base_plus_the_second_trade():
+    df = _with_scaling(get_sample_data())
+    stats = calculate_scaling_rrr_statistics(df)
+    base = calculate_strategy_statistics(df)
+    assert stats['Base'].tolist() == base['Outcome'].tolist()
+    for _, row in stats.iterrows():
+        total = int(row['Base'].rstrip('R')) + int(row['Outcome'].rstrip('R'))
+        assert int(row['Combined'].rstrip('R')) == total
+
+
+def test_scaling_rrr_statistics_on_empty_data():
+    stats = calculate_scaling_rrr_statistics(get_sample_data().iloc[0:0])
+    assert (stats['Scaled'] == 0).all()

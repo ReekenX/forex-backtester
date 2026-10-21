@@ -29,6 +29,8 @@ from utils.continuation_reversal import (
     RRR_RATIOS,
     RATE_COLUMNS,
     calculate_equity_curves,
+    calculate_scaling_rrr_statistics,
+    calculate_scaling_statistics,
     calculate_setup_statistics,
     calculate_strategy_statistics,
     calculate_streak_statistics,
@@ -105,6 +107,23 @@ def _streaks_section(df: pd.DataFrame) -> str:
     return create_sortable_table(
         calculate_streak_statistics(df), "streaks-table", sortable=False,
         first_col_width=FIRST_COL_WIDTH
+    )
+
+
+def _scaling_section(df: pd.DataFrame) -> str:
+    """The second trade's own record, then the same trades on fixed targets
+    next to the first trade's result."""
+    subheading = (f'<p style="color: {TEXT_MUTED}; font-size: 12px; '
+                  'margin: 18px 0 8px;">At each RRR: the second trade on a '
+                  'fixed target. <b>Base</b> is the first trade alone, as in '
+                  'the Strategies tables; <b>Combined</b> adds the second '
+                  'trade to it.</p>')
+    return (
+        create_html_table(calculate_scaling_statistics(df),
+                          first_col_width=FIRST_COL_WIDTH, rrr="1:1")
+        + subheading
+        + create_html_table(calculate_scaling_rrr_statistics(df),
+                            first_col_width=FIRST_COL_WIDTH)
     )
 
 
@@ -197,6 +216,18 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "type does not break the other's streak - the sequence trading that "
         "type alone would have produced.",
         _streaks_section,
+    ),
+    (
+        "scaling",
+        "Scaling",
+        "Scaling",
+        "A second trade, opened when the first reaches 1R. <b>Scaled</b> is "
+        "how many trades opened one. A win is a second trade that ran 1R or "
+        "more; -1R is a stopped-out one, so <b>Win Rate</b> is its 1:1 rate. "
+        "<b>Avg R</b> and <b>Avg Win</b> read every winner at the most it "
+        "reached - a ceiling no fixed target collects. <b>Best</b> is the "
+        "furthest one ran.",
+        _scaling_section,
     ),
 ]
 

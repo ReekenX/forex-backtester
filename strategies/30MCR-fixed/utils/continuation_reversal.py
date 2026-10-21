@@ -5,7 +5,7 @@ Backs the static HTML page rendered by utils.report: every table on that page
 is computed here, and nothing here needs a Jupyter kernel.
 
 CSV columns (strategies/30MCR-fixed/trades.csv):
-    Date, Weekday, Trade, Direction, 30M, SL, Pullback, Reward
+    Date, Weekday, Trade, Direction, 30M, SL, Pullback, Reward, Scaling
 
 This is the 30MCR strategy traded with one stop size for every trade, so the
 export differs from 30MCR's in two ways that reshape the page:
@@ -19,6 +19,10 @@ export differs from 30MCR's in two ways that reshape the page:
   the trade never reached 1R and loads as 0. Because costs are already taken
   out, a Reward cannot be turned back into pips to re-score the trade on
   another stop - another reason the stop scenarios are gone.
+- Scaling is a second trade, opened when the first reached 1R, exported in R
+  like Reward ("3R"). A positive value is how far that second trade ran; -1R
+  means it was stopped out. A blank means no second trade was opened, so it
+  loads as NaN, not 0.
 
 The win rule keeps its shape with Reward in place of TP / SL:
 
@@ -60,10 +64,13 @@ CONTINUATIONS = {('High', 'Buy'), ('Low', 'Sell')}
 
 TYPE_ORDER = ['Continuation', 'Reversal']
 
-# The last trade column. Everything right of it is the spreadsheet's scratch
-# work, whose headers change between exports and can repeat, so they are never
-# named.
-LAST_TRADE_COLUMN = 'Reward'
+# The last trade columns. Everything right of them is the spreadsheet's
+# scratch work, whose headers change between exports and can repeat, so they
+# are never named. Scaling is optional; older exports end on Reward.
+LAST_TRADE_COLUMNS = ('Reward', 'Scaling')
+
+# The second trade's column. See _parse_scaling.
+SCALING_COLUMN = 'Scaling'
 
 DEFAULT_CSV = "../strategies/30MCR-fixed/trades.csv"
 
@@ -84,23 +91,39 @@ def _normalise_header(name: object) -> str:
 
 def _drop_scratch_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Keep only the columns up to and including Reward.
+    Keep only the columns up to and including Reward, or Scaling when the
+    export carries it.
 
     The sheet precomputes win rates and R totals to the right of the trade
     data. This page computes those itself, so reading them would double up on
     the same question with a rule this module does not control.
     """
-    positions = [i for i, col in enumerate(df.columns)
-                 if col == LAST_TRADE_COLUMN]
+    columns = list(df.columns)
+    positions = [columns.index(name) for name in LAST_TRADE_COLUMNS
+                 if name in columns]
     if not positions:
         return df
-    return df.iloc[:, :positions[0] + 1]
+    return df.iloc[:, :max(positions) + 1]
+
+
+def _parse_r(values: pd.Series) -> pd.Series:
+    """'3R' -> 3.0, '-1R' -> -1.0. A blank cell, or anything unreadable, is
+    NaN."""
+    text = values.astype(str).str.strip().str.rstrip('Rr').str.strip()
+    return pd.to_numeric(text, errors="coerce")
 
 
 def _parse_reward(values: pd.Series) -> pd.Series:
     """'3R' -> 3.0. A blank cell, or anything unreadable, is 0."""
-    text = values.astype(str).str.strip().str.rstrip('Rr').str.strip()
-    return pd.to_numeric(text, errors="coerce").fillna(0.0)
+    return _parse_r(values).fillna(0.0)
+
+
+def _parse_scaling(values: pd.Series) -> pd.Series:
+    """
+    '3R' -> 3.0, '-1R' -> -1.0. A blank stays NaN: no second trade was
+    opened, which is not the same as a 0R second trade.
+    """
+    return _parse_r(values)
 
 
 def load_data(filepath: str = DEFAULT_CSV) -> pd.DataFrame:
@@ -127,6 +150,8 @@ def load_data(filepath: str = DEFAULT_CSV) -> pd.DataFrame:
     for col in ["SL", "Pullback"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
     df["Reward"] = _parse_reward(df["Reward"])
+    df[SCALING_COLUMN] = (_parse_scaling(df[SCALING_COLUMN])
+                          if SCALING_COLUMN in df.columns else float("nan"))
 
     # A 0R reward stays 0 rather than flipping to -0.
     stopped_out = (df["Pullback"] >= df["SL"]) & (df["Reward"] > 0)
@@ -717,6 +742,104 @@ def calculate_strategy_statistics(df: pd.DataFrame) -> pd.DataFrame:
                 'Notation': f'{won}W – {lost}L',
                 'Win Rate': _win_rate(won, len(trades)),
                 'Outcome': f'{won * rrr - lost:+d}R',
+            })
+    return pd.DataFrame(results)
+
+
+# ---------------------------------------------------------------------------
+# Scaling
+# ---------------------------------------------------------------------------
+
+def _scaled(trades: pd.DataFrame) -> pd.Series:
+    """The second-trade results of the trades that opened one."""
+    if SCALING_COLUMN not in trades.columns:
+        return pd.Series(dtype=float)
+    return trades[SCALING_COLUMN].dropna()
+
+
+def _signed_r(value: float) -> str:
+    """'+1.25R' - two decimals, signed, so an average reads as one."""
+    return f'{value:+.2f}R'
+
+
+def calculate_scaling_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    What the second trade did, for every trade and for each setup type.
+
+    A second trade is opened when the first reaches 1R. Its Scaling value is
+    how far it ran, in R, or -1R when it was stopped out. A win is any
+    positive value: the second trade reached at least 1R, so this is its 1:1
+    win rate.
+
+    Avg R and Avg Win read every winner at the most it reached - a ceiling no
+    fixed target collects - so they describe the move, not a payout. The
+    Scaling at each RRR table scores the same trades on fixed targets.
+
+    Args:
+        df: DataFrame with trading data, including Type and Scaling columns
+
+    Returns:
+        DataFrame with columns: Trend, Trades, Scaled, Notation, Win Rate,
+        Avg R, Avg Win, Best - trends in TREND_FILTERS order
+    """
+    results = []
+    for trend in TREND_FILTERS:
+        trades = _apply_trend(df, trend)
+        scaled = _scaled(trades)
+        won = scaled[scaled > 0]
+        share = len(scaled) / len(trades) * 100 if len(trades) else 0.0
+        results.append({
+            'Trend': trend,
+            'Trades': len(trades),
+            'Scaled': f'{len(scaled)} ({share:.1f}%)',
+            'Notation': f'{len(won)}W – {len(scaled) - len(won)}L',
+            'Win Rate': _win_rate(len(won), len(scaled)),
+            'Avg R': _signed_r(scaled.mean()) if len(scaled) else 'N/A',
+            'Avg Win': _signed_r(won.mean()) if len(won) else 'N/A',
+            'Best': f'{won.max():.0f}R' if len(won) else 'N/A',
+        })
+    return pd.DataFrame(results)
+
+
+def calculate_scaling_rrr_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    The second trade scored on a fixed target, next to the first trade's own
+    result at that RRR and the two together.
+
+    A second trade wins at 1:RRR when its Scaling reached RRR; anything else -
+    including a positive Scaling short of the target - is -1R, the rule the
+    Strategies tables apply to the first trade. Base is that first-trade
+    Outcome, straight from calculate_strategy_statistics, so the two cannot
+    disagree. Combined is Base plus the scaled Outcome: every trade taken
+    alone, plus a second trade on each one that reached 1R.
+
+    Args:
+        df: DataFrame with trading data, including Type and Scaling columns
+
+    Returns:
+        DataFrame with columns: Trend, RRR, Scaled, Notation, Win Rate,
+        Outcome, Base, Combined - trends in TREND_FILTERS order, RRRs
+        ascending within each
+    """
+    base = calculate_strategy_statistics(df).set_index(['Trend', 'RRR'])
+    results = []
+    for trend in TREND_FILTERS:
+        scaled = _scaled(_apply_trend(df, trend))
+        for rrr in RRR_RATIOS:
+            won = int((scaled >= rrr).sum())
+            lost = len(scaled) - won
+            outcome = won * rrr - lost
+            base_outcome = int(base.loc[(trend, f'1:{rrr}'), 'Outcome']
+                               .rstrip('R'))
+            results.append({
+                'Trend': trend,
+                'RRR': f'1:{rrr}',
+                'Scaled': len(scaled),
+                'Notation': f'{won}W – {lost}L',
+                'Win Rate': _win_rate(won, len(scaled)),
+                'Outcome': f'{outcome:+d}R',
+                'Base': f'{base_outcome:+d}R',
+                'Combined': f'{base_outcome + outcome:+d}R',
             })
     return pd.DataFrame(results)
 

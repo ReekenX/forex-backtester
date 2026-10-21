@@ -464,15 +464,26 @@ of the 30MCR page whose export differs in three ways:
   signed negative when `Pullback >= SL`. Everything right of `Reward` is
   sheet scratch and is dropped.
 - **There is no `BE Rule` column.**
+- **`Scaling` follows `Reward`**: a second trade opened when the first
+  reached 1R, exported as `3R` (how far it ran) or `-1R` (stopped out). A
+  blank means no second trade and loads as NaN, not 0. The scratch cut keeps
+  it and drops everything to its right.
 
 Because costs are already inside `Reward`, it cannot be turned back into pips
 to re-score a trade on another stop. So every stop-scenario table (`SL Range`,
 `Fixed SL`, `Cap SL`, `TP Range`, `Pullback`, `Adding Buffer`, `Half SL`, the
 `+ 1 pip` readings and the BE rule) is left off. The page is `Weekday`,
-`Setup`, `R Distribution`, `Streaks` and one Strategies table per RRR - rows
+`Setup`, `R Distribution`, `Streaks`, `Scaling` and one Strategies table per RRR - rows
 are the three trends, with an `Outcome` column and an equity chart. The
 sheet's `WR 43.9%` header is one trade above the page's 43.4%: it counts a
 trade with `Pullback == SL` as surviving.
+
+`Scaling` is two tables. `calculate_scaling_statistics` gives each trend's
+second-trade count, `W - L`, 1:1 win rate, average R, average win and best
+run. The averages read winners at the most they reached, so they are a
+ceiling. `calculate_scaling_rrr_statistics` scores the second trade on a
+fixed target (a run short of it is -1R) beside `Base`, the first trade's
+Strategies Outcome, and `Combined`, the two summed.
 
 ### Conventions for report sections
 

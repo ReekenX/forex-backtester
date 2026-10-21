@@ -364,7 +364,7 @@ def test_render_error_then_recover(tmp_path):
 def test_sections_in_page_order():
     anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
     assert anchors == ['weekday', 'setup', 'r-distribution', 'streaks',
-                       'strategies-1-1', 'strategies-1-2', 'strategies-1-3']
+                       'scaling', 'strategies-1-1', 'strategies-1-2', 'strategies-1-3']
 
 
 def test_stop_scenario_tables_are_gone():
@@ -457,3 +457,35 @@ def test_sort_by_win_rate_handles_empty_and_malformed():
     assert _sort_by_win_rate(pd.DataFrame()).empty
     stats = pd.DataFrame({'Win Rate': ['n/a', '40.0%', '60.0%']})
     assert _sort_by_win_rate(stats)['Win Rate'].tolist() == ['60.0%', '40.0%', 'n/a']
+
+
+# --- scaling --------------------------------------------------------------
+
+def test_scaling_section_carries_both_tables():
+    html = _section_html('scaling', _with_scaling(get_sample_data()))
+    assert html.count('<table') == 2
+    for column in ('Scaled', 'Avg R', 'Avg Win', 'Best', 'Base', 'Combined'):
+        assert f'>{column}<' in html, column
+
+
+def test_scaling_section_reads_the_second_trades():
+    html = _section_html('scaling', _with_scaling(get_sample_data()))
+    assert '2 (33.3%)' in html
+    assert '1W – 1L' in html
+
+
+def test_scaling_section_without_a_scaling_column():
+    html = _section_html('scaling')
+    assert '0 (0.0%)' in html
+    assert 'N/A' in html
+
+
+def test_scaling_section_on_empty_data():
+    _section_html('scaling', get_empty_data())
+
+
+def _with_scaling(df):
+    """One second trade won 3R, one was stopped out, the rest never opened."""
+    df = df.copy()
+    df['Scaling'] = [3.0, -1.0] + [float('nan')] * (len(df) - 2)
+    return df
