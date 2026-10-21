@@ -306,7 +306,8 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
                       first_col_width: Optional[str] = None,
                       colour_columns: Tuple[str, ...] = (),
                       rrr: Optional[str] = None,
-                      column_widths: Optional[Dict[str, str]] = None) -> str:
+                      column_widths: Optional[Dict[str, str]] = None,
+                      row_rrrs: Optional[List[str]] = None) -> str:
     """
     Create a dark-mode HTML table with styled formatting.
 
@@ -317,6 +318,8 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
         first_col_width: When set, pins the label column to this width (e.g.
             "40%") and switches the table to fixed layout so it is honoured
         colour_columns: Columns of 1:1 win rates to colour against 50%
+        row_rrrs: One RRR per row (e.g. ["1:1", "1:2"]) for a table that
+            mixes RRRs without showing an RRR column; overrides rrr
         rrr: The RRR (e.g. "1:2") to colour the Win Rate column against when
             the table carries no RRR column of its own
         column_widths: Widths (e.g. {"Buffer": "7%"}) for further columns,
@@ -359,7 +362,7 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
     html += "\n            </tr>\n        </thead>\n        <tbody>\n"
 
     rrr_col = "RRR" if "RRR" in df.columns else None
-    for _, row in df.iterrows():
+    for row_idx, (_, row) in enumerate(df.iterrows()):
         html += "            <tr>\n"
         for col_idx, col in enumerate(df.columns):
             value = row[col]
@@ -368,7 +371,8 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
                 css_class = "strategy-col"
             elif col == "Win Rate":
                 css_class = _win_rate_class(
-                    value, row[rrr_col] if rrr_col else rrr)
+                    value, row_rrrs[row_idx] if row_rrrs
+                    else row[rrr_col] if rrr_col else rrr)
             elif col in colour_columns:
                 css_class = _breakeven_class(value)
             cls_attr = f' class="{css_class}"' if css_class else ""
@@ -1031,6 +1035,82 @@ def calculate_scaling_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
+def _scaled_only_results(trades: pd.DataFrame, rrr: float) -> pd.Series:
+    """Each trade's second-trade R at 1:RRR alone: +RRR when Scaling reached
+    RRR, -1R when it did not, 0 where no second trade was opened."""
+    second = second_trades(trades)
+    results = pd.Series(0.0, index=trades.index)
+    opened = second.notna()
+    results[opened] = -1.0
+    results[opened & (second >= rrr)] = float(rrr)
+    return results
+
+
+def calculate_scaled_only_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Only the second trades, the first trades skipped, at every RRR.
+
+    A second trade is opened when the first reaches 1R (second_trades) and
+    wins at 1:RRR when its Scaling reached RRR; anything else is -1R. These
+    are the same numbers as the Scaling at each RRR table's Notation and
+    Outcome, labelled to stand as strategies of their own.
+
+    Args:
+        df: DataFrame with trading data, including Type and Scaling columns
+
+    Returns:
+        DataFrame with columns: Trend ('All (1:2)'), RRR, Trades, Notation,
+        Win Rate, Outcome - RRRs ascending, trends in TREND_FILTERS order
+        within each
+    """
+    results = []
+    for rrr in RRR_RATIOS:
+        for trend in TREND_FILTERS:
+            scaled = _scaled(_apply_trend(df, trend))
+            won = int((scaled >= rrr).sum())
+            lost = len(scaled) - won
+            results.append({
+                'Trend': f'{trend} (1:{rrr})',
+                'RRR': f'1:{rrr}',
+                'Trades': len(scaled),
+                'Notation': f'{won}W – {lost}L',
+                'Win Rate': _win_rate(won, len(scaled)),
+                'Outcome': f'{won * rrr - lost:+d}R',
+            })
+    return pd.DataFrame(results)
+
+
+def calculate_scaled_only_equity_curves(df: pd.DataFrame) -> List[Dict]:
+    """
+    Cumulative R of every Scaled Trades Only row, trade by trade.
+
+    Walks every trade in date order like calculate_equity_curves, so the
+    curves line up with the Strategies charts: a trade that opened no second
+    trade, or sits outside the row's trend, stays flat.
+
+    Returns:
+        One dict per row, best final outcome first: label, trades (second
+        trades taken), outcome and curve (len(df) + 1 long)
+    """
+    ordered = df.sort_values('Date', kind='stable') if len(df) else df
+    curves = []
+    for rrr in RRR_RATIOS:
+        per_rrr = _scaled_only_results(ordered, rrr)
+        for trend in TREND_FILTERS:
+            taken = (pd.Series(True, index=ordered.index) if trend == 'All'
+                     else ordered['Type'] == trend)
+            per_trade = per_rrr.where(taken, 0.0)
+            curve = [0.0] + per_trade.cumsum().round(6).tolist()
+            curves.append({
+                'label': f'{"All Trades" if trend == "All" else trend} '
+                         f'(1:{rrr})',
+                'trades': int((taken & second_trades(ordered).notna()).sum()),
+                'outcome': curve[-1],
+                'curve': curve,
+            })
+    return sorted(curves, key=lambda c: -c['outcome'])
+
+
 def calculate_scaling_rrr_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     The second trade scored on a fixed target, next to the first trade's own
@@ -1153,7 +1233,8 @@ _EQUITY_CHART_SCRIPT = """
                     var value = values[index];
                     tip.textContent = series.dataset.label + ' · trade ' + index
                         + ' of ' + (values.length - 1) + ' · '
-                        + (value > 0 ? '+' : '') + value.toFixed(1) + 'R at 1:' + rrr;
+                        + (value > 0 ? '+' : '') + value.toFixed(1) + 'R'
+                        + (rrr ? ' at 1:' + rrr : '');
                     tip.style.display = 'block';
                     var box = chart.getBoundingClientRect();
                     tip.style.left = (event.clientX - box.left + 14) + 'px';
@@ -1220,8 +1301,9 @@ def _nice_step(span: float, target_ticks: int = 6) -> float:
     return 1000
 
 
-def create_equity_chart(curves: List[Dict], rrr: float = 1,
-                        chart_id: str = 'equity-chart') -> str:
+def create_equity_chart(curves: List[Dict], rrr: Optional[float] = 1,
+                        chart_id: str = 'equity-chart',
+                        caption: Optional[str] = None) -> str:
     """
     Line chart of every Strategies row's cumulative R, one line per table row.
 
@@ -1233,7 +1315,10 @@ def create_equity_chart(curves: List[Dict], rrr: float = 1,
 
     Args:
         curves: Output of calculate_equity_curves
-        rrr: The RRR the curves were scored at, for the legend and tooltip
+        rrr: The RRR the curves were scored at, for the legend and tooltip;
+            None when the curves mix RRRs and name theirs in the label
+        caption: Replaces the caption's scoring sentence, for curves that are
+            not scored as plain wins and losses at one RRR
         chart_id: Unique DOM id for this chart
 
     Returns:
@@ -1270,7 +1355,8 @@ def create_equity_chart(curves: List[Dict], rrr: float = 1,
 
     out = _EQUITY_CHART_CSS
     out += (f'<div class="eq-chart" id="{chart_id}" role="img" '
-            f'aria-label="Cumulative R per strategy at 1:{rrr:g}">')
+            f'aria-label="Cumulative R per strategy'
+            f'{f" at 1:{rrr:g}" if rrr else ""}">')
     out += '<div class="eq-legend">'
     for colour, curve in zip(EQUITY_COLOURS, top):
         out += (f'<span><span class="eq-swatch" style="background-color: '
@@ -1286,7 +1372,7 @@ def create_equity_chart(curves: List[Dict], rrr: float = 1,
 
     out += (f'<svg viewBox="0 0 {EQUITY_WIDTH} {EQUITY_HEIGHT}" '
             f'data-left="{m["left"]}" data-step="{x_step:.4f}" '
-            f'data-rrr="{rrr:g}">')
+            f'data-rrr="{f"{rrr:g}" if rrr else ""}">')
 
     # Gridlines and y-axis labels.
     value = y_min
@@ -1348,9 +1434,11 @@ def create_equity_chart(curves: List[Dict], rrr: float = 1,
         out += (f'<text class="eq-label" x="{x_end + 16}" y="{slot + 4:.1f}">'
                 f'{escape(curve["label"])} {_format_r(curve["outcome"])}</text>')
     out += '</svg><div class="eq-tip"></div>'
+    scoring = caption or (
+        f'+{rrr:g}R per win, -1R per loss. Trades outside a row\'s trend '
+        'stay flat.')
     out += (f'<p class="eq-caption">Cumulative R over {n_trades} trades in '
-            f'date order: +{rrr:g}R per win, -1R per loss. Trades outside a '
-            'row\'s trend stay flat. '
+            f'date order: {scoring} '
             f'The best {len(top)} final outcomes are coloured.</p>')
     out += '</div>' + _EQUITY_CHART_SCRIPT
     return out

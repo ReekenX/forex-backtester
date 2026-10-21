@@ -520,6 +520,16 @@ trade not stopped out (`Pullback >= SL`). The `Scaling` tables read it too,
 so their `Combined` equals the `+ Scaling` row's Outcome. Notation and Win
 Rate count positions (Trades plus second trades).
 
+`Scaled Trades Only` closes the page, below `Strategies (1:3 RRR)`: the
+first trades skipped, only the second trades taken, at every RRR
+(`calculate_scaled_only_statistics`). Columns are `Trend, Trades, Notation,
+Win Rate, Outcome`; the RRR sits in the Trend label (`All (1:2)`), and
+`create_html_table(row_rrrs=...)` colours each Win Rate against its own
+RRR. Its figures equal the `Scaling` at-each-RRR table's. The equity chart
+under it (`calculate_scaled_only_equity_curves`) walks all trades, flat
+where no second trade opened; `create_equity_chart(rrr=None, caption=...)`
+handles a chart that mixes RRRs.
+
 ### Conventions for report sections
 
 Sections are declared in `report.py`'s `SECTIONS` list as

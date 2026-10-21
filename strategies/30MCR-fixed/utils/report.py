@@ -33,6 +33,8 @@ from utils.continuation_reversal import (
     RRR_RATIOS,
     RATE_COLUMNS,
     calculate_equity_curves,
+    calculate_scaled_only_equity_curves,
+    calculate_scaled_only_statistics,
     calculate_scaling_rrr_statistics,
     calculate_scaling_statistics,
     calculate_setup_statistics,
@@ -129,6 +131,22 @@ def _scaling_section(df: pd.DataFrame) -> str:
         + create_html_table(calculate_scaling_rrr_statistics(df),
                             first_col_width=FIRST_COL_WIDTH)
     )
+
+
+def _scaled_only_section(df: pd.DataFrame) -> str:
+    """The second trades alone at every RRR, with their equity curves."""
+    stats = calculate_scaled_only_statistics(df)
+    # Each row names its RRR in the Trend label, so the column is dropped;
+    # its Win Rate is still coloured against that row's breakeven.
+    return create_html_table(
+        stats.drop(columns="RRR"), first_col_width=FIRST_COL_WIDTH,
+        row_rrrs=stats["RRR"].tolist(),
+    ) + create_equity_chart(
+        calculate_scaled_only_equity_curves(df), rrr=None,
+        chart_id="scaled-only-equity",
+        caption=("+RRR per second trade that reached its target, -1R per "
+                 "one that did not. Trades without a second trade, or "
+                 "outside a row's trend, stay flat."))
 
 
 def _sort_by_win_rate(stats: pd.DataFrame) -> pd.DataFrame:
@@ -280,6 +298,19 @@ SECTIONS.extend(
     )
     for rrr in RRR_RATIOS
 )
+
+
+SECTIONS.append((
+    "scaled-only",
+    "Scaled Only",
+    "Scaled Trades Only",
+    "Skip every first trade and take only the second, opened when the first "
+    "reaches 1R. Win = Scaling &gt;= RRR; Outcome = W x RRR - L. A trade "
+    "stopped out on its own stop opens no second trade. Trades counts the "
+    "second trades. Each row's Win Rate is coloured against its own RRR's "
+    "breakeven.",
+    _scaled_only_section,
+))
 
 
 def compute_build_id(df: pd.DataFrame) -> str:

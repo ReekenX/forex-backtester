@@ -364,7 +364,8 @@ def test_render_error_then_recover(tmp_path):
 def test_sections_in_page_order():
     anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
     assert anchors == ['weekday', 'setup', 'r-distribution', 'streaks',
-                       'scaling', 'strategies-1-1', 'strategies-1-2', 'strategies-1-3']
+                       'scaling', 'strategies-1-1', 'strategies-1-2', 'strategies-1-3',
+                       'scaled-only']
 
 
 def test_stop_scenario_tables_are_gone():
@@ -490,3 +491,29 @@ def _with_scaling(df):
     nan = float('nan')
     df['Scaling'] = [3.0, nan, nan, -1.0, nan, nan]
     return df
+
+
+# --- scaled trades only ---------------------------------------------------
+
+def test_scaled_only_section_has_the_requested_columns_and_a_chart():
+    html = _section_html('scaled-only', _with_scaling(get_sample_data()))
+    header = html[html.index('<thead>'):html.index('</thead>')]
+    assert re.findall(r'<th[^>]*>([^<]+)</th>', header) == [
+        'Trend', 'Trades', 'Notation', 'Win Rate', 'Outcome']
+    assert 'id="scaled-only-equity"' in html
+    assert html.index('<table') < html.index('id="scaled-only-equity"')
+
+
+def test_scaled_only_win_rate_is_coloured_against_each_rows_rrr():
+    """The sample's two second trades: 3R and -1R. 50.0% beats the 1:2 and
+    1:3 breakevens and sits on 1:1's, which is not above it."""
+    html = _section_html('scaled-only', _with_scaling(get_sample_data()))
+    rows = re.findall(r'<td>(All \(1:\d\))</td>.*?<td class="([a-z-]+)">'
+                      r'([\d.]+%)</td>', html, re.S)
+    assert rows == [('All (1:1)', 'negative-edge', '50.0%'),
+                    ('All (1:2)', 'positive-edge', '50.0%'),
+                    ('All (1:3)', 'positive-edge', '50.0%')]
+
+
+def test_scaled_only_section_on_empty_data():
+    _section_html('scaled-only', get_empty_data())

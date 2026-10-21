@@ -33,6 +33,8 @@ from utils.continuation_reversal import (  # noqa: E402
     second_trades,
     calculate_equity_curves,
     calculate_r_counts,
+    calculate_scaled_only_equity_curves,
+    calculate_scaled_only_statistics,
     calculate_scaling_rrr_statistics,
     calculate_scaling_statistics,
     calculate_setup_statistics,
@@ -695,3 +697,43 @@ def test_equity_curves_carry_the_scaling_rows():
             label = ('All Trades' if trend == 'All' else trend)
             out = curves[label + ' + Scaling']['outcome']
             assert f'{out:+.0f}R' == rows.loc[trend + ' + Scaling', 'Outcome']
+
+
+# --- scaled trades only ---------------------------------------------------
+
+def test_scaled_only_matches_the_scaling_rrr_table():
+    df = _with_scaling(get_sample_data())
+    only = calculate_scaled_only_statistics(df).set_index('Trend')
+    per_rrr = calculate_scaling_rrr_statistics(df)
+    for _, row in per_rrr.iterrows():
+        match = only.loc[f"{row['Trend']} ({row['RRR']})"]
+        assert match['Trades'] == row['Scaled']
+        assert match['Notation'] == row['Notation']
+        assert match['Outcome'] == row['Outcome']
+    assert len(only) == len(per_rrr)
+
+
+def test_scaled_only_scores_second_trades():
+    stats = calculate_scaled_only_statistics(_with_scaling(get_sample_data()))
+    row = stats.set_index('Trend').loc['All (1:2)']
+    # 2R, -1R, 9R: two reach 2R.
+    assert row['Trades'] == 3
+    assert row['Notation'] == '2W – 1L'
+    assert row['Win Rate'] == '66.7%'
+    assert row['Outcome'] == '+3R'
+
+
+def test_scaled_only_equity_curves_end_on_the_table_outcome():
+    df = _with_scaling(get_sample_data())
+    stats = calculate_scaled_only_statistics(df).set_index('Trend')
+    for curve in calculate_scaled_only_equity_curves(df):
+        assert len(curve['curve']) == len(df) + 1
+        label = curve['label'].replace('All Trades', 'All')
+        assert f"{curve['outcome']:+.0f}R" == stats.loc[label, 'Outcome']
+
+
+def test_equity_chart_without_one_rrr_leaves_the_tooltip_unlabelled():
+    curves = calculate_scaled_only_equity_curves(_with_scaling(get_sample_data()))
+    html = create_equity_chart(curves, None, chart_id='eq', caption='Mixed.')
+    assert 'data-rrr=""' in html
+    assert 'Mixed.' in html
