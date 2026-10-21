@@ -15,7 +15,6 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from utils.continuation_reversal import (  # noqa: E402
-    EQUITY_HIGHLIGHT,
     RATE_COLUMNS,
     RRR_RATIOS,
     TREND_FILTERS,
@@ -26,9 +25,12 @@ from utils.continuation_reversal import (  # noqa: E402
     BE_AT_1R_RRRS,
     HALF_SL_AT_1R_RRRS,
     QUARTER_SL_AT_1R_RRRS,
+    SCALING_RRRS,
     be_at_1r_results,
     half_sl_at_1r_results,
     quarter_sl_at_1r_results,
+    scaling_results,
+    second_trades,
     calculate_equity_curves,
     calculate_r_counts,
     calculate_scaling_rrr_statistics,
@@ -293,7 +295,7 @@ def test_strategy_statistics_has_a_row_per_trend_and_rrr():
     stats = calculate_strategy_statistics(get_sample_data())
     assert len(stats) == len(TREND_FILTERS) * (
         len(RRR_RATIOS) + len(BE_AT_1R_RRRS) + len(HALF_SL_AT_1R_RRRS)
-        + len(QUARTER_SL_AT_1R_RRRS))
+        + len(QUARTER_SL_AT_1R_RRRS) + len(SCALING_RRRS))
     assert list(stats.columns) == ['Trend', 'RRR', 'Trades', 'Notation',
                                    'Win Rate', 'Outcome']
 
@@ -350,7 +352,6 @@ def test_equity_chart_draws_every_curve():
     curves = calculate_equity_curves(get_sample_data(), 1)
     html = create_equity_chart(curves, 1, chart_id='eq')
     assert html.count('class="eq-series') == len(curves)
-    assert len(curves) <= EQUITY_HIGHLIGHT
     assert 'id="eq"' in html
 
 
@@ -406,9 +407,10 @@ def test_r_histogram_is_cumulative():
 # --- scaling --------------------------------------------------------------
 
 def _with_scaling(df):
-    """Rows 0, 1, 4 and 6 reached 1R and opened a second trade (row 1 was
-    stopped out on the first, as the export allows). Row 3 also reached 1R
-    but has no second trade recorded."""
+    """Rows 0, 4 and 6 reached 1R and opened a second trade. Row 1 carries a
+    Scaling too, but it was stopped out on the first trade (Pullback 6.0),
+    so it never opened one. Row 3 also reached 1R but has no second trade
+    recorded."""
     df = df.copy()
     df['Scaling'] = [2.0, 3.0, None, None, -1.0, None, 9.0, None, None, None]
     return df
@@ -419,11 +421,11 @@ def test_scaling_statistics_count_the_second_trades():
     row = stats.iloc[0]
     assert row['Trend'] == 'All'
     assert row['Trades'] == 10
-    assert row['Scaled'] == '4 (40.0%)'
-    assert row['Notation'] == '3W – 1L'
-    assert row['Win Rate'] == '75.0%'
-    assert row['Avg R'] == '+3.25R'
-    assert row['Avg Win'] == '+4.67R'
+    assert row['Scaled'] == '3 (30.0%)'
+    assert row['Notation'] == '2W – 1L'
+    assert row['Win Rate'] == '66.7%'
+    assert row['Avg R'] == '+3.33R'
+    assert row['Avg Win'] == '+5.50R'
     assert row['Best'] == '9R'
 
 
@@ -447,11 +449,11 @@ def test_scaling_statistics_without_second_trades():
 def test_scaling_rrr_statistics_score_a_short_runner_as_a_loss():
     stats = calculate_scaling_rrr_statistics(_with_scaling(get_sample_data()))
     every = stats[stats['Trend'] == 'All'].set_index('RRR')
-    # 2R, 3R, -1R, 9R: at 1:3 the 2R runner falls short and loses.
-    assert every.loc['1:1', 'Notation'] == '3W – 1L'
-    assert every.loc['1:1', 'Outcome'] == '+2R'
-    assert every.loc['1:3', 'Notation'] == '2W – 2L'
-    assert every.loc['1:3', 'Outcome'] == '+4R'
+    # 2R, -1R, 9R: at 1:3 the 2R runner falls short and loses.
+    assert every.loc['1:1', 'Notation'] == '2W – 1L'
+    assert every.loc['1:1', 'Outcome'] == '+1R'
+    assert every.loc['1:3', 'Notation'] == '1W – 2L'
+    assert every.loc['1:3', 'Outcome'] == '+1R'
 
 
 def test_scaling_rrr_combined_is_base_plus_the_second_trade():
@@ -637,3 +639,59 @@ def test_equity_curves_carry_the_quarter_sl_rows():
             out = curves[label + ' + Quarter SL at 1R']['outcome']
             text = f'{out:+.2f}'.rstrip('0').rstrip('.') + 'R'
             assert text == rows.loc[trend + ' + Quarter SL at 1R', 'Outcome']
+
+
+# --- scaling taken alongside ----------------------------------------------
+
+def test_second_trades_skip_a_stopped_out_first_trade():
+    df = _with_scaling(get_sample_data())
+    second = second_trades(df)
+    assert pd.isna(second.iloc[1])
+    assert second.iloc[[0, 4, 6]].tolist() == [2.0, -1.0, 9.0]
+
+
+def test_scaling_results_add_the_second_trade():
+    df = _with_scaling(get_sample_data())
+    # Row 0: 3R and 2R. Row 4: 2R and -1R. Row 6: 10R and 9R. Row 1 was
+    # stopped out and its Scaling is ignored.
+    at_3 = scaling_results(df, 3)
+    assert at_3.iloc[[0, 1, 4, 6]].tolist() == [2.0, -1.0, -2.0, 6.0]
+    at_2 = scaling_results(df, 2)
+    assert at_2.iloc[[0, 1, 4, 6]].tolist() == [4.0, -1.0, 1.0, 4.0]
+
+
+def test_scaling_results_without_a_scaling_column_is_the_plain_rule():
+    df = get_sample_data()
+    plain = strategy_wins(df, 2).map({True: 2.0, False: -1.0})
+    assert scaling_results(df, 2).tolist() == plain.tolist()
+
+
+def test_strategy_statistics_score_scaling_rows_per_position():
+    df = _with_scaling(get_sample_data())
+    stats = calculate_strategy_statistics(df).set_index(['Trend', 'RRR'])
+    row = stats.loc[('All + Scaling', '1:3')]
+    # First trades at 1:3: 2W - 8L. Second trades: 1W (9R) - 2L.
+    assert row['Trades'] == 10
+    assert row['Notation'] == '3W – 10L'
+    assert row['Win Rate'] == '23.1%'
+    assert row['Outcome'] == '-1R'
+
+
+def test_scaling_rows_match_the_scaling_tables_combined():
+    df = _with_scaling(get_sample_data())
+    stats = calculate_strategy_statistics(df).set_index(['Trend', 'RRR'])
+    for _, row in calculate_scaling_rrr_statistics(df).iterrows():
+        label = row['Trend'] + ' + Scaling'
+        assert stats.loc[(label, row['RRR']), 'Outcome'] == row['Combined']
+
+
+def test_equity_curves_carry_the_scaling_rows():
+    df = _with_scaling(get_sample_data())
+    stats = calculate_strategy_statistics(df)
+    for rrr in SCALING_RRRS:
+        curves = {c['label']: c for c in calculate_equity_curves(df, rrr)}
+        rows = stats[stats['RRR'] == f'1:{rrr}'].set_index('Trend')
+        for trend in TREND_FILTERS:
+            label = ('All Trades' if trend == 'All' else trend)
+            out = curves[label + ' + Scaling']['outcome']
+            assert f'{out:+.0f}R' == rows.loc[trend + ' + Scaling', 'Outcome']

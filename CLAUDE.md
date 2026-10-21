@@ -511,6 +511,15 @@ half (`-24.5R`).
 quarter, to SL x 0.75: `Pullback < SL x 0.75` to win, -0.75R otherwise past
 1R, Notation `W – QL – L`. Both share `_tighter_sl_at_1r_results`.
 
+Every Strategies table, 1:1 included, also repeats each trend as `<trend> +
+Scaling` (`SCALING_RRRS`, `scaling_results`): the trade plus its second
+trade, each scored on the same RRR - the second wins when `Scaling >= RRR`,
+else -1R, so a trade with both legs lost costs 2R. `second_trades` is the one
+place that decides a second trade exists: `Scaling` not blank and the first
+trade not stopped out (`Pullback >= SL`). The `Scaling` tables read it too,
+so their `Combined` equals the `+ Scaling` row's Outcome. Notation and Win
+Rate count positions (Trades plus second trades).
+
 ### Conventions for report sections
 
 Sections are declared in `report.py`'s `SECTIONS` list as

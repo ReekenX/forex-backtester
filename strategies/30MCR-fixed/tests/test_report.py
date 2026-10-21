@@ -487,5 +487,6 @@ def test_scaling_section_on_empty_data():
 def _with_scaling(df):
     """One second trade won 3R, one was stopped out, the rest never opened."""
     df = df.copy()
-    df['Scaling'] = [3.0, -1.0] + [float('nan')] * (len(df) - 2)
+    nan = float('nan')
+    df['Scaling'] = [3.0, nan, nan, -1.0, nan, nan]
     return df

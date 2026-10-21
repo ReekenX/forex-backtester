@@ -70,6 +70,10 @@ QUARTER_SL_AT_1R_SUFFIX = ' + Quarter SL at 1R'
 # What a trade stopped out on the quarter-cut stop loses, in R.
 QUARTER_SL_LOSS = -0.75
 
+# Every RRR also runs each trend with its second trade taken alongside.
+SCALING_RRRS = RRR_RATIOS
+SCALING_SUFFIX = ' + Scaling'
+
 # Setup types the Strategies tables filter on. "All" keeps every trade; the
 # rest keep the setups that end that way, e.g. Reversal = High + Low Reversal.
 TREND_FILTERS = ['All', 'Continuation', 'Reversal']
@@ -824,12 +828,48 @@ def _tighter_sl_at_1r_results(trades: pd.DataFrame, rrr: float,
     return results
 
 
+def second_trades(trades: pd.DataFrame) -> pd.Series:
+    """
+    Each trade's second-trade result in R, NaN where none was opened.
+
+    A trade stopped out on its own stop (Pullback >= SL) never reached 1R
+    alive, so it opened no second trade, whatever its Scaling cell says.
+    """
+    if SCALING_COLUMN not in trades.columns:
+        return pd.Series(float('nan'), index=trades.index)
+    stopped = trades['Pullback'] >= trades['SL']
+    return trades[SCALING_COLUMN].where(~stopped)
+
+
+def scaling_results(trades: pd.DataFrame, rrr: float) -> pd.Series:
+    """
+    Each trade's R at 1:RRR with its second trade taken too.
+
+    The first trade scores under strategy_wins. The second, opened at 1R
+    with its own 1R stop, scores the same way on its own target: +RRR when
+    Scaling reached RRR, -1R otherwise. A trade without a second trade adds
+    nothing. So the range per trade runs from -1R (no second trade) or -2R
+    (both lost) up to +2 x RRR.
+
+    Returns:
+        Series of the two trades' R summed, on trades' index
+    """
+    first = strategy_wins(trades, rrr).map({True: float(rrr), False: -1.0})
+    second = second_trades(trades)
+    extra = pd.Series(0.0, index=trades.index)
+    opened = second.notna()
+    extra[opened] = -1.0
+    extra[opened & (second >= rrr)] = float(rrr)
+    return first + extra
+
+
 # How each row of a Strategies table is scored: None is the plain win rule.
 _RULES = {
     'be': (BE_AT_1R_SUFFIX, BE_AT_1R_RRRS, be_at_1r_results),
     'half': (HALF_SL_AT_1R_SUFFIX, HALF_SL_AT_1R_RRRS, half_sl_at_1r_results),
     'quarter': (QUARTER_SL_AT_1R_SUFFIX, QUARTER_SL_AT_1R_RRRS,
                 quarter_sl_at_1r_results),
+    'scaling': (SCALING_SUFFIX, SCALING_RRRS, scaling_results),
 }
 
 # The tighter-stop rules: the loss each takes and the Notation letters for it.
@@ -887,6 +927,11 @@ def calculate_strategy_statistics(df: pd.DataFrame) -> pd.DataFrame:
     quarter_sl_at_1r_results) read the same way with the stop at SL x 0.75:
     Notation W – QL – L, Outcome = W x RRR - 0.75 x QL - L.
 
+    Every RRR also repeats each trend as '<trend> + Scaling', scored by
+    scaling_results: the trade plus its second trade, each on the same RRR.
+    Notation and Win Rate count positions, so W + L is Trades plus the
+    second trades opened. Outcome = W x RRR - L.
+
     Args:
         df: DataFrame with trading data, including a Type column
 
@@ -904,6 +949,14 @@ def calculate_strategy_statistics(df: pd.DataFrame) -> pd.DataFrame:
             if rule == 'be':
                 even = int((outcome == 0).sum())
                 notation = f'{won}W – {even}BE – {lost}L'
+                rate = _win_rate(won, won + lost)
+            elif rule == 'scaling':
+                # Counted per position: each trade, then each second trade.
+                second = _scaled(trades)
+                won = int(strategy_wins(trades, rrr).sum()
+                          + (second >= rrr).sum())
+                lost = len(trades) + len(second) - won
+                notation = f'{won}W – {lost}L'
                 rate = _win_rate(won, won + lost)
             elif rule in _TIGHTER_LOSSES:
                 loss, letters = _TIGHTER_LOSSES[rule]
@@ -930,9 +983,7 @@ def calculate_strategy_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
 def _scaled(trades: pd.DataFrame) -> pd.Series:
     """The second-trade results of the trades that opened one."""
-    if SCALING_COLUMN not in trades.columns:
-        return pd.Series(dtype=float)
-    return trades[SCALING_COLUMN].dropna()
+    return second_trades(trades).dropna()
 
 
 def _signed_r(value: float) -> str:
@@ -945,7 +996,8 @@ def calculate_scaling_statistics(df: pd.DataFrame) -> pd.DataFrame:
     What the second trade did, for every trade and for each setup type.
 
     A second trade is opened when the first reaches 1R. Its Scaling value is
-    how far it ran, in R, or -1R when it was stopped out. A win is any
+    how far it ran, in R, or -1R when it was stopped out. A trade stopped out
+    on its own stop opened none (second_trades). A win is any
     positive value: the second trade reached at least 1R, so this is its 1:1
     win rate.
 

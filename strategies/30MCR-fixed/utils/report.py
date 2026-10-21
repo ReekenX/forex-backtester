@@ -29,6 +29,7 @@ from utils.continuation_reversal import (
     BE_AT_1R_RRRS,
     HALF_SL_AT_1R_RRRS,
     QUARTER_SL_AT_1R_RRRS,
+    SCALING_RRRS,
     RRR_RATIOS,
     RATE_COLUMNS,
     calculate_equity_curves,
@@ -253,6 +254,13 @@ QUARTER_SL_AT_1R_NOTE = (
     "quarter, to SL x 0.75: Pullback must stay under SL x 0.75, and a "
     "stop-out past 1R loses 0.75R. Notation is W – QL – L.")
 
+SCALING_NOTE = (
+    " <b>+ Scaling</b> rows also take the second trade, opened at 1R: it "
+    "wins RRR when Scaling reached RRR, otherwise loses 1R, so a trade whose "
+    "two positions both lose costs 2R. A trade stopped out on its own stop "
+    "opened no second trade. Notation and Win Rate count positions, so W + "
+    "L is Trades plus the second trades.")
+
 # One Strategies table per RRR, each ranked by win rate descending.
 SECTIONS.extend(
     (
@@ -266,7 +274,8 @@ SECTIONS.extend(
         "order and plots its cumulative R."
         + (BE_AT_1R_NOTE if rrr in BE_AT_1R_RRRS else "")
         + (HALF_SL_AT_1R_NOTE if rrr in HALF_SL_AT_1R_RRRS else "")
-        + (QUARTER_SL_AT_1R_NOTE if rrr in QUARTER_SL_AT_1R_RRRS else ""),
+        + (QUARTER_SL_AT_1R_NOTE if rrr in QUARTER_SL_AT_1R_RRRS else "")
+        + (SCALING_NOTE if rrr in SCALING_RRRS else ""),
         _strategies_section_for(rrr),
     )
     for rrr in RRR_RATIOS
