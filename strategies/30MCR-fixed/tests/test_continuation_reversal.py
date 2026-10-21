@@ -25,8 +25,10 @@ from utils.continuation_reversal import (  # noqa: E402
     _normalise_header,
     BE_AT_1R_RRRS,
     HALF_SL_AT_1R_RRRS,
+    QUARTER_SL_AT_1R_RRRS,
     be_at_1r_results,
     half_sl_at_1r_results,
+    quarter_sl_at_1r_results,
     calculate_equity_curves,
     calculate_r_counts,
     calculate_scaling_rrr_statistics,
@@ -290,7 +292,8 @@ def test_streak_statistics_empty_dataset():
 def test_strategy_statistics_has_a_row_per_trend_and_rrr():
     stats = calculate_strategy_statistics(get_sample_data())
     assert len(stats) == len(TREND_FILTERS) * (
-        len(RRR_RATIOS) + len(BE_AT_1R_RRRS) + len(HALF_SL_AT_1R_RRRS))
+        len(RRR_RATIOS) + len(BE_AT_1R_RRRS) + len(HALF_SL_AT_1R_RRRS)
+        + len(QUARTER_SL_AT_1R_RRRS))
     assert list(stats.columns) == ['Trend', 'RRR', 'Trades', 'Notation',
                                    'Win Rate', 'Outcome']
 
@@ -591,5 +594,46 @@ def test_equity_curves_carry_the_half_sl_rows():
         for trend in TREND_FILTERS:
             label = ('All Trades' if trend == 'All' else trend)
             out = curves[label + ' + Half SL at 1R']['outcome']
-            text = f'{out:+.1f}R' if out % 1 else f'{out:+.0f}R'
+            text = f'{out:+.2f}'.rstrip('0').rstrip('.') + 'R'
             assert text == rows.loc[trend + ' + Half SL at 1R', 'Outcome']
+
+
+# --- quarter SL at 1R -----------------------------------------------------
+
+def test_quarter_sl_at_1r_at_1_to_3():
+    """Stop at SL x 0.75 = 3.75 pips: the 3.0 pullback that lost on the half
+    stop survives here; 3.75 exactly reaches the stop."""
+    trades = _half_trades()
+    trades.loc[5, 'Pullback'] = 3.75
+    assert quarter_sl_at_1r_results(trades, 3).tolist() == [
+        -1.0, -1.0, 3.0, 3.0, -0.75, -0.75]
+
+
+def test_quarter_sl_at_1r_changes_nothing_at_1_to_1():
+    trades = _half_trades()
+    expected = strategy_wins(trades, 1).map({True: 1.0, False: -1.0})
+    assert quarter_sl_at_1r_results(trades, 1).tolist() == expected.tolist()
+
+
+def test_strategy_statistics_score_quarter_sl_rows():
+    stats = calculate_strategy_statistics(get_sample_data()).set_index(
+        ['Trend', 'RRR'])
+    row = stats.loc[('All + Quarter SL at 1R', '1:2')]
+    # Survived past 1R: rows 0 (3R, 1.0), 3 (1R), 4 (2R, 4.9), 6 (10R, 0.0)
+    # and 8 (1R). Rows 0 and 6 reach 2R inside 3.75 pips; row 4 reached 2R
+    # but pulled back 4.9, so it and the two 1R trades lose 0.75R.
+    assert row['Notation'] == '2W – 3QL – 5L'
+    assert row['Outcome'] == '-3.25R'
+
+
+def test_equity_curves_carry_the_quarter_sl_rows():
+    df = get_sample_data()
+    stats = calculate_strategy_statistics(df)
+    for rrr in QUARTER_SL_AT_1R_RRRS:
+        curves = {c['label']: c for c in calculate_equity_curves(df, rrr)}
+        rows = stats[stats['RRR'] == f'1:{rrr}'].set_index('Trend')
+        for trend in TREND_FILTERS:
+            label = ('All Trades' if trend == 'All' else trend)
+            out = curves[label + ' + Quarter SL at 1R']['outcome']
+            text = f'{out:+.2f}'.rstrip('0').rstrip('.') + 'R'
+            assert text == rows.loc[trend + ' + Quarter SL at 1R', 'Outcome']

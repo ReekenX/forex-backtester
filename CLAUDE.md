@@ -506,6 +506,11 @@ past SL / 2 before 1R counts against it - the rule reads conservatively.
 Notation is `W – HL – L`, Win Rate W / Trades, and `Outcome` can carry a
 half (`-24.5R`).
 
+`<trend> + Quarter SL at 1R` rows (`QUARTER_SL_AT_1R_RRRS`,
+`quarter_sl_at_1r_results`) follow the same rule with the stop cut by a
+quarter, to SL x 0.75: `Pullback < SL x 0.75` to win, -0.75R otherwise past
+1R, Notation `W – QL – L`. Both share `_tighter_sl_at_1r_results`.
+
 ### Conventions for report sections
 
 Sections are declared in `report.py`'s `SECTIONS` list as

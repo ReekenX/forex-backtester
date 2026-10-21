@@ -63,6 +63,13 @@ HALF_SL_AT_1R_SUFFIX = ' + Half SL at 1R'
 # What a trade stopped out on the half stop loses, in R.
 HALF_SL_LOSS = -0.5
 
+# The same RRRs again, with the stop cut by a quarter at 1R: SL x 0.75.
+QUARTER_SL_AT_1R_RRRS = BE_AT_1R_RRRS
+QUARTER_SL_AT_1R_SUFFIX = ' + Quarter SL at 1R'
+
+# What a trade stopped out on the quarter-cut stop loses, in R.
+QUARTER_SL_LOSS = -0.75
+
 # Setup types the Strategies tables filter on. "All" keeps every trade; the
 # rest keep the setups that end that way, e.g. Reversal = High + Low Reversal.
 TREND_FILTERS = ['All', 'Continuation', 'Reversal']
@@ -779,14 +786,41 @@ def half_sl_at_1r_results(trades: pd.DataFrame, rrr: float) -> pd.Series:
         Series of +RRR (win), -0.5 (half-stop loss) or -1.0 (loss), on
         trades' index
     """
+    return _tighter_sl_at_1r_results(trades, rrr, HALF_SL_LOSS)
+
+
+def quarter_sl_at_1r_results(trades: pd.DataFrame, rrr: float) -> pd.Series:
+    """
+    Each trade's R at 1:RRR with the stop cut by a quarter, to SL x 0.75,
+    once it reached 1R.
+
+    The half_sl_at_1r_results rule with the stop at SL x 0.75: past 1R the
+    trade wins if Reward reached the target and Pullback stayed under
+    SL x 0.75, otherwise it loses 0.75R. The same conservative reading of
+    Pullback applies.
+
+    Returns:
+        Series of +RRR (win), -0.75 (quarter-cut stop loss) or -1.0 (loss),
+        on trades' index
+    """
+    return _tighter_sl_at_1r_results(trades, rrr, QUARTER_SL_LOSS)
+
+
+def _tighter_sl_at_1r_results(trades: pd.DataFrame, rrr: float,
+                              loss: float) -> pd.Series:
+    """
+    The tighter-stop rules: once the trade reached 1R the stop moves to
+    SL x |loss|, so a stop-out there costs `loss` R.
+    """
     reached = (trades['Pullback'] < trades['SL']) & (trades['Reward'] >= 1)
     hit = trades['Reward'] >= rrr
     results = pd.Series(-1.0, index=trades.index)
     if rrr <= 1:
         results[reached & hit] = float(rrr)
         return results
-    results[reached] = HALF_SL_LOSS
-    results[reached & hit & (trades['Pullback'] < trades['SL'] / 2)] = float(rrr)
+    results[reached] = loss
+    survived = trades['Pullback'] < trades['SL'] * -loss
+    results[reached & hit & survived] = float(rrr)
     return results
 
 
@@ -794,7 +828,13 @@ def half_sl_at_1r_results(trades: pd.DataFrame, rrr: float) -> pd.Series:
 _RULES = {
     'be': (BE_AT_1R_SUFFIX, BE_AT_1R_RRRS, be_at_1r_results),
     'half': (HALF_SL_AT_1R_SUFFIX, HALF_SL_AT_1R_RRRS, half_sl_at_1r_results),
+    'quarter': (QUARTER_SL_AT_1R_SUFFIX, QUARTER_SL_AT_1R_RRRS,
+                quarter_sl_at_1r_results),
 }
+
+# The tighter-stop rules: the loss each takes and the Notation letters for it.
+_TIGHTER_LOSSES = {'half': (HALF_SL_LOSS, 'HL'),
+                   'quarter': (QUARTER_SL_LOSS, 'QL')}
 
 
 def _strategy_rows(rrr: int) -> List[Tuple[str, str, Optional[str]]]:
@@ -816,8 +856,10 @@ def _rule_results(trades: pd.DataFrame, rrr: int,
 
 
 def _format_r(value: float) -> str:
-    """'+3R', or '+3.5R' when a half-stop loss leaves a half."""
-    return f'{value:+.1f}R' if value % 1 else f'{value:+.0f}R'
+    """'+3R', or '+3.5R' / '-12.75R' when a tighter-stop loss leaves a
+    fraction."""
+    text = f'{value:+.2f}'.rstrip('0').rstrip('.')
+    return f'{text}R'
 
 
 def calculate_strategy_statistics(df: pd.DataFrame) -> pd.DataFrame:
@@ -841,6 +883,10 @@ def calculate_strategy_statistics(df: pd.DataFrame) -> pd.DataFrame:
     is W – HL – L, HL the half-stop losses, and its Win Rate W / Trades: a
     half-stop loss is still a loss. Outcome = W x RRR - 0.5 x HL - L.
 
+    '<trend> + Quarter SL at 1R' rows (QUARTER_SL_AT_1R_RRRS,
+    quarter_sl_at_1r_results) read the same way with the stop at SL x 0.75:
+    Notation W – QL – L, Outcome = W x RRR - 0.75 x QL - L.
+
     Args:
         df: DataFrame with trading data, including a Type column
 
@@ -859,9 +905,10 @@ def calculate_strategy_statistics(df: pd.DataFrame) -> pd.DataFrame:
                 even = int((outcome == 0).sum())
                 notation = f'{won}W – {even}BE – {lost}L'
                 rate = _win_rate(won, won + lost)
-            elif rule == 'half':
-                half = int((outcome == HALF_SL_LOSS).sum())
-                notation = f'{won}W – {half}HL – {lost}L'
+            elif rule in _TIGHTER_LOSSES:
+                loss, letters = _TIGHTER_LOSSES[rule]
+                cut = int((outcome == loss).sum())
+                notation = f'{won}W – {cut}{letters} – {lost}L'
                 rate = _win_rate(won, len(trades))
             else:
                 notation = f'{won}W – {lost}L'
@@ -1080,7 +1127,7 @@ def calculate_equity_curves(df: pd.DataFrame, rrr: float = 1) -> List[Dict]:
     Trades are walked in date order; the export's own order breaks ties within
     a day. A win adds the RRR in R and a loss takes 1R, under strategy_wins -
     or under the row's rule on a '+ BE at 1R' or '+ Half SL at 1R' row, where
-    a break-even adds 0 and a half-stop loss takes 0.5R.
+    a break-even adds 0 and a tighter-stop loss takes 0.5R or 0.75R.
     Every curve runs over every trade, so a Continuation-only row sits flat
     through the Reversal trades it would not have taken and the curves line
     up in time.
