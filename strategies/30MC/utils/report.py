@@ -174,9 +174,10 @@ def _strategies_section_for(rrr: int) -> Callable[[pd.DataFrame], str]:
 RATE_COLUMNS_NOTE = (
     "Three 1:1 win rates per row, on that row's stop. <b>Signal</b> = TP &gt; "
     "0: the idea was right, stop ignored, so it repeats wherever only the "
-    "stop changes. <b>Strategy</b> = Pullback &lt; SL AND TP &gt;= SL: what "
-    "trading it would have returned. <b>Strategy + 1 pip</b> pads the stop by "
-    "a pip. Green is above the 50% breakeven, red below."
+    "stop changes. <b>Strategy</b> = Pullback &lt; SL AND TP &gt;= the 1R "
+    "target: what trading it would have returned. <b>Strategy + 1 pip</b> "
+    "pads the stop by a pip. Targets include commissions - 1R on a 5-pip "
+    "stop is 5.8 pips. Green is above the 50% breakeven, red below."
 )
 
 # (anchor, nav label, heading, note, builder) - the 15C page's section order,
@@ -212,7 +213,8 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "r-distribution",
         "R Distribution",
         "R Distribution",
-        "R is derived as TP / SL - this export has no R column of its own. "
+        "R is the whole RRR levels TP reached on the commission-adjusted "
+        "targets - this export has no R column of its own. "
         "Cumulative: a "
         "trade reaching 3R also passed through 1R and 2R.",
         create_r_histogram_combined,
@@ -222,7 +224,8 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "Streaks",
         "Streaks",
         "Longest unbroken runs of winners and losers at 1:1, read in date "
-        "order (win = Pullback &lt; SL AND TP &gt;= SL, so a stopped-out "
+        "order (win = Pullback &lt; SL AND TP &gt;= the 1R target, so a "
+        "stopped-out "
         "trade breaks a winning run). Each cell gives the run's length and "
         "the dates of its first and last trade. <b>Continuation</b> runs "
         "through only its own trades.",
@@ -238,9 +241,10 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "where it was, so it is also SL / 2 from the fill; measured from "
         "there, the pullback is Pullback - SL / 2 and the run TP + SL / 2. "
         "Every row scores its own entry: win = Pullback &lt; SL AND TP &gt;= "
-        "RRR x SL. <b>W</b> = won, <b>M</b> = limit never filled (no trade), "
-        "<b>L</b> = lost. Win Rate is W / (W + L), the trades taken; Outcome "
-        "is W x RRR - L.",
+        "the RRR target. <b>W</b> = won, <b>M</b> = limit never filled (no "
+        "trade), <b>L</b> = lost. Win Rate is W / (W + L), the trades taken; "
+        "Outcome is W x RRR - L. A row whose stop has no RRR target mapping "
+        "yet is left out.",
         _half_sl_section,
     ),
 ]

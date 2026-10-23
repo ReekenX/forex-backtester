@@ -18,10 +18,10 @@ Three things about this export shape the loader:
   rates and R totals for stop scenarios this page recomputes itself - so it is
   dropped at load rather than read. The scratch headers are renamed and
   repeated from one export to the next, so the cut is anchored on TP.
-- There is no R column. R is derived as TP / SL - how many multiples of the
-  recorded safe stop the move was worth - and signed the way the 15LS1CC sheet
-  signs it: negative when Pullback reached SL, i.e. the reach was there but the
-  stop did not survive to collect it.
+- There is no R column. R is derived as the whole RRR levels TP reached on
+  the commission-adjusted targets of RRR_TARGET_TICKS (reached_r) - and
+  signed the way the 15LS1CC sheet signs it: negative when Pullback reached
+  SL, i.e. the reach was there but the stop did not survive to collect it.
 
 A blank TP and a TP of 0 both mean the trade was not profitable, so both load
 as 0 and `TP > 0` is the Signal rule here exactly as it is on the other pages.
@@ -77,6 +77,62 @@ TYPE_ORDER = ['Continuation', 'Reversal']
 LAST_TRADE_COLUMN = 'TP'
 
 DEFAULT_CSV = "../strategies/30MC/trades.csv"
+
+# Distance in ticks (10 ticks = 1 pip) price must run to pay 1R, 2R, ... 10R
+# on a given stop in pips. Commissions are inside the figures - the broker has
+# no spread - so 1R on a 5-pip stop is 5.8 pips, not 5. Only these stops are
+# mapped; a row that would score an unmapped stop is left off the page, and
+# a trade with one raises rather than falling back to RRR x SL.
+RRR_TARGET_TICKS = {
+    3.0: [38, 73, 107, 142, 176, 211, 245, 280, 314, 349],
+    4.0: [48, 93, 137, 182, 226, 271, 315, 360, 404, 448],
+    5.0: [58, 112, 166, 220, 274, 328, 382, 436, 490, 545],
+    6.0: [69, 133, 198, 262, 327, 391, 456, 520, 585, 649],
+    7.0: [78, 152, 226, 300, 374, 448, 523, 597, 671, 745],
+}
+
+# Stops with a mapping, in pips.
+MAPPED_SL_PIPS = sorted(int(sl) for sl in RRR_TARGET_TICKS)
+
+
+def is_mapped_sl(sl: float) -> bool:
+    """Whether RRR_TARGET_TICKS has targets for a stop of `sl` pips."""
+    return round(float(sl), 1) in RRR_TARGET_TICKS
+
+
+def target_pips(sl: float, rrr: int) -> float:
+    """
+    Pips price must run from entry to pay `rrr` R on a stop of `sl` pips,
+    commissions included - 5.8 for 1R on a 5-pip stop.
+
+    Raises:
+        ValueError: when the stop or the RRR has no mapping
+    """
+    ticks = RRR_TARGET_TICKS.get(round(float(sl), 1))
+    if ticks is None:
+        raise ValueError(f"No RRR target mapping for a {sl:g} pip stop "
+                         f"(mapped: {MAPPED_SL_PIPS})")
+    if not 1 <= rrr <= len(ticks):
+        raise ValueError(f"No RRR target mapping for 1:{rrr}")
+    return ticks[int(rrr) - 1] / 10
+
+
+def rrr_targets(stop, rrr: int, index: pd.Index):
+    """target_pips for one stop or a per-trade Series of stops, as a Series
+    on `index`."""
+    if isinstance(stop, pd.Series):
+        return stop.map(lambda sl: target_pips(sl, rrr)).astype(float)
+    return pd.Series(target_pips(stop, rrr), index=index, dtype=float)
+
+
+def reached_r(sl: float, tp: float) -> int:
+    """Whole R levels a run of `tp` pips paid on a stop of `sl` pips: the
+    highest RRR whose target it reached, 0 when short of 1R."""
+    ticks = RRR_TARGET_TICKS.get(round(float(sl), 1))
+    if ticks is None:
+        raise ValueError(f"No RRR target mapping for a {sl:g} pip stop "
+                         f"(mapped: {MAPPED_SL_PIPS})")
+    return sum(1 for t in ticks if tp >= t / 10)
 
 # Pips the "Strategy + 1 pip" column and the "<type> + 1 pip buffer" rows of
 # the Streaks table pad the stop with.
@@ -144,9 +200,10 @@ def load_data(filepath: str = DEFAULT_CSV) -> pd.DataFrame:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    # Guard the division: a 0-pip stop is not a trade, and would otherwise
-    # produce an infinite R.
-    reach = df["TP"].where(df["SL"] > 0, 0) / df["SL"].where(df["SL"] > 0, 1)
+    # Whole R levels reached on the commission-adjusted targets.
+    reach = pd.Series([float(reached_r(sl, tp))
+                       for sl, tp in zip(df["SL"], df["TP"])],
+                      index=df.index, dtype=float)
     stopped_out = df["Pullback"] >= df["SL"]
     df["R"] = reach.where(~stopped_out, -reach)
 
@@ -412,15 +469,17 @@ def create_sortable_table(df: pd.DataFrame, table_id: str,
 
 def _strategy_wins(trades: pd.DataFrame, effective_sl) -> pd.Series:
     """
-    The family's 1:1 win rule: the trade survived its stop and reached a
-    target as far away as that stop.
+    The family's 1:1 win rule: the trade survived its stop and reached the
+    1:1 target for that stop, commissions included (target_pips).
 
-        Pullback < effective SL   AND   TP >= effective SL
+        Pullback < effective SL   AND   TP >= 1R target of effective SL
     """
-    return (trades['Pullback'] < effective_sl) & (trades['TP'] >= effective_sl)
+    return ((trades['Pullback'] < effective_sl)
+            & (trades['TP'] >= rrr_targets(effective_sl, 1, trades.index)))
 
 
-def _rate_columns(trades: pd.DataFrame, effective_sl) -> Dict[str, str]:
+def _rate_columns(trades: pd.DataFrame, effective_sl,
+                  buffered: bool = True) -> Dict[str, str]:
     """
     The three readings every Signal/Strategy table carries, each a bare
     "52.7%" at 1:1.
@@ -439,20 +498,25 @@ def _rate_columns(trades: pd.DataFrame, effective_sl) -> Dict[str, str]:
     Args:
         trades: The trades of one table row
         effective_sl: The row's stop - a per-trade Series or one number
+        buffered: Include Strategy + 1 pip. Off, it is not computed at all,
+            so a padded stop without an RRR target mapping cannot raise
 
     Returns:
         Dict of column name to win rate
     """
+    names = RATE_COLUMNS if buffered else RATE_COLUMNS[:2]
     total = len(trades)
     if not total:
-        return {name: _win_rate(0, 0) for name in RATE_COLUMNS}
-    return {
+        return {name: _win_rate(0, 0) for name in names}
+    rates = {
         'Signal': _win_rate(int((trades['TP'] > 0).sum()), total),
         'Strategy': _win_rate(
             int(_strategy_wins(trades, effective_sl).sum()), total),
-        RATE_COLUMNS[2]: _win_rate(int(_strategy_wins(
-            trades, effective_sl + TYPE_BUFFER_PIPS).sum()), total),
     }
+    if buffered:
+        rates[RATE_COLUMNS[2]] = _win_rate(int(_strategy_wins(
+            trades, effective_sl + TYPE_BUFFER_PIPS).sum()), total)
+    return rates
 
 
 def _signal_strategy_rows(groups: List[Tuple[str, pd.DataFrame]],
@@ -650,8 +714,8 @@ def calculate_setup_statistics(df: pd.DataFrame) -> pd.DataFrame:
 # Stop tables
 # ---------------------------------------------------------------------------
 
-# Stop sizes to substitute for every trade's recorded SL.
-SL_FIXED_PIPS = [3, 4, 5, 6, 7, 8, 9, 10]
+# Stop sizes to substitute for every trade's recorded SL - every mapped stop.
+SL_FIXED_PIPS = MAPPED_SL_PIPS
 
 
 def _pip_label(pips: int) -> str:
@@ -661,47 +725,32 @@ def _pip_label(pips: int) -> str:
 
 def _sl_scenario_statistics(df: pd.DataFrame,
                             scenarios: List[Tuple[str, object]],
-                            column: str,
-                            with_signal: bool = False) -> pd.DataFrame:
+                            column: str) -> pd.DataFrame:
     """
-    Score every trade at 1:1 under each stop scenario.
+    Signal and Strategy at 1:1 under each stop scenario.
 
-    A trade wins when it survives the scenario's stop and reaches a 1:1 target
-    on it:
-        Pullback < effective SL   AND   TP >= effective SL
+    A trade wins when it survives the scenario's stop and reaches the 1:1
+    target for it (target_pips):
+        Pullback < effective SL   AND   TP >= 1R target of effective SL
 
-    Every stop table goes through here so they cannot drift apart on the rule.
+    Signal (TP > 0) does not depend on the stop, so it repeats down every
+    row - it is the ceiling no stop size beats, and each row's Strategy says
+    how much of it that stop captures.
 
     Args:
         df: DataFrame with trading data
         scenarios: (label, effective SL) pairs. The effective SL is either a
             per-trade Series or a single number applied to every trade
         column: Name for the leading column (e.g. 'Fixed SL')
-        with_signal: Emit `<column>, Trades` and the RATE_COLUMNS instead
-            of `<column>, Trades, Notation, Win Rate`, matching the grouping
-            tables. Signal (TP > 0) does not depend on the stop, so it repeats
-            down every row - it is the ceiling no stop size beats, and each
-            row's Strategy says how much of it that stop captures
 
     Returns:
-        DataFrame with columns: <column>, Trades, Notation, Win Rate - or
-        <column>, Trades, then RATE_COLUMNS when with_signal is set
+        DataFrame with columns: <column>, Trades, Signal, Strategy
     """
-    total = len(df)
-    results = []
-
-    for label, effective_sl in scenarios:
-        row = {column: label, 'Trades': total}
-        if with_signal:
-            row.update(_rate_columns(df, effective_sl))
-        else:
-            wins = int(_strategy_wins(df, effective_sl).sum()) if total else 0
-            win_rate = (wins / total * 100) if total > 0 else 0.0
-            row['Notation'] = f"{wins}W - {total - wins}L"
-            row['Win Rate'] = f"{win_rate:.1f}%"
-        results.append(row)
-
-    return pd.DataFrame(results)
+    return pd.DataFrame([
+        {column: label, 'Trades': len(df),
+         **_rate_columns(df, effective_sl, buffered=False)}
+        for label, effective_sl in scenarios
+    ])
 
 
 def calculate_sl_fixed_statistics(df: pd.DataFrame) -> pd.DataFrame:
@@ -723,9 +772,7 @@ def calculate_sl_fixed_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     scenarios: List[Tuple[str, object]] = [('Default', df['SL'])]
     scenarios.extend((_pip_label(pips), float(pips)) for pips in SL_FIXED_PIPS)
-    return _sl_scenario_statistics(df, scenarios, 'Fixed SL',
-                                   with_signal=True).drop(
-        columns=RATE_COLUMNS[2])
+    return _sl_scenario_statistics(df, scenarios, 'Fixed SL')
 
 
 # ---------------------------------------------------------------------------
@@ -880,8 +927,8 @@ def calculate_streak_statistics(df: pd.DataFrame) -> pd.DataFrame:
     Longest winning and losing runs at 1:1, for every trade and for
     Continuation trades.
 
-    A trade is a win under the family's rule - Pullback < SL AND TP >= SL -
-    and anything else breaks a winning run, so the stopped-out
+    A trade is a win under the family's rule - Pullback < SL AND TP >= the 1R
+    target for SL (target_pips) - and anything else breaks a winning run, so the stopped-out
     winner-that-wasn't counts as a loss here. Trades are read in date order;
     the export's own order breaks ties within a day. The Continuation row runs
     through only its own trades. Every 30MC trade is a Continuation, so there
@@ -899,7 +946,7 @@ def calculate_streak_statistics(df: pd.DataFrame) -> pd.DataFrame:
         ('Continuation', ordered['Type'] == 'Continuation'),
     ]
 
-    won = (ordered['Pullback'] < ordered['SL']) & (ordered['TP'] >= ordered['SL'])
+    won = _strategy_wins(ordered, ordered['SL'])
     results = []
     for label, mask in groups:
         results.append({
@@ -932,8 +979,9 @@ def calculate_half_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
       reached a target (TP = 0) is given no run from the fill either.
 
     All three rows score the trade at its own entry with the family's rule,
-    Pullback < SL AND TP >= RRR x SL. Half SL and the limit share a stop
-    size, so their R is directly comparable.
+    Pullback < SL AND TP >= the RRR target for SL (target_pips). Half SL and
+    the limit share a stop size, so their R is directly comparable. An entry
+    whose stop has no mapping is left out.
 
     Notation splits every trade three ways, like the Pullback table:
     W = won, M = limit never filled (no trade), L = lost. Win Rate is
@@ -957,11 +1005,15 @@ def calculate_half_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
                                 df['Pullback'] - half, run, half),
     }
 
+    labels = [label for label in HALF_SL_ENTRIES
+              if entries[label][3].map(is_mapped_sl).all()]
+
     results = []
     for rrr in RRR_RATIOS:
-        for label in HALF_SL_ENTRIES:
+        for label in labels:
             filled, pullback, tp, sl = entries[label]
-            won = filled & (pullback < sl) & (tp >= rrr * sl)
+            won = (filled & (pullback < sl)
+                   & (tp >= rrr_targets(sl, rrr, df.index)))
             wins = int(won.sum())
             missed = int((~filled).sum())
             losses = len(df) - wins - missed
@@ -982,7 +1034,8 @@ def calculate_half_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
 # Strategies tables
 # ---------------------------------------------------------------------------
 
-FIXED_SL_STRATEGY_VALUES = list(range(2, 11))
+# Every mapped stop - see RRR_TARGET_TICKS.
+FIXED_SL_STRATEGY_VALUES = MAPPED_SL_PIPS
 
 # Stop caps for the Strategies tables' Cap SL column. 0 means no cap.
 MAX_SL_CAPS = [0, 5, 6]
@@ -1039,14 +1092,15 @@ def _strategy_row_wins(trades: pd.DataFrame, buffer: float, rrr: float,
 
     Effective SL = SL + buffer, then capped at max_sl when max_sl > 0. The cap
     wins over the buffer: SL 3 + 1 under a 5 pip cap is 4, SL 5 + 1 is 5. A
-    trade wins when it survives that stop and reaches the RRR target on it:
-        Pullback < effective SL   AND   TP >= rrr * effective SL
+    trade wins when it survives that stop and reaches the RRR target for it,
+    commissions included (target_pips):
+        Pullback < effective SL   AND   TP >= RRR target of effective SL
     """
     effective_sl = trades["SL"] + buffer
     if max_sl:
         effective_sl = effective_sl.clip(upper=float(max_sl))
     return ((trades["Pullback"] < effective_sl)
-            & (trades["TP"] >= rrr * effective_sl))
+            & (trades["TP"] >= rrr_targets(effective_sl, rrr, trades.index)))
 
 
 def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
@@ -1447,9 +1501,9 @@ def calculate_r_counts(df: pd.DataFrame) -> pd.Series:
     """
     Count trades per whole R level (1R-10R), each trade counted once.
 
-    R is truncated towards zero, so a trade at 3.8R lands in the 3R bucket.
-    The sign is dropped: a negative R records the distance that was available
-    before the stop was hit, which is the same reach as a positive one.
+    R is the whole RRR levels the trade reached (see reached_r). The sign is
+    dropped: a negative R records the distance that was available before the
+    stop was hit, which is the same reach as a positive one.
 
     Args:
         df: DataFrame with an R column (see load_data)

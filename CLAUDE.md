@@ -157,6 +157,42 @@ when `Pullback >= SL` - the convention the 15LS1CC sheet exports.
 
 **Example 2**: SL 2.1 pips, Pullback 3.4 pips and TP 10 pips. This trade would be a loss, but only if the safe stop had been higher - it would have been a winner.
 
+## Commission-Adjusted RRR Targets
+
+The broker charges commission and has no spread. So a target of RRR x SL
+pips does not pay RRR: the commission eats part of it. The trader supplies,
+per stop size, how far price must run to pay each RRR with commission
+included, in ticks (10 ticks = 1 pip):
+
+| SL (pips) | 1R | 2R | 3R | 4R | 5R | 6R | 7R | 8R | 9R | 10R |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 3 | 38 | 73 | 107 | 142 | 176 | 211 | 245 | 280 | 314 | 349 |
+| 4 | 48 | 93 | 137 | 182 | 226 | 271 | 315 | 360 | 404 | 448 |
+| 5 | 58 | 112 | 166 | 220 | 274 | 328 | 382 | 436 | 490 | 545 |
+| 6 | 69 | 133 | 198 | 262 | 327 | 391 | 456 | 520 | 585 | 649 |
+| 7 | 78 | 152 | 226 | 300 | 374 | 448 | 523 | 597 | 671 | 745 |
+
+A 5-pip stop needs 5.8 pips for 1:1, 16.6 for 1:3 and 54.5 for 1:10.
+
+**Every calculation uses these targets.** The win rule becomes
+`Pullback < SL AND TP >= target(SL, RRR)`, with an adjusted stop on both
+halves as before. R is the whole number of RRR levels TP reached
+(`reached_r`), signed negative when `Pullback >= SL`. Breakevens stay
+`1 / (1 + RRR)`: R is already net of commission.
+
+**An unmapped stop is never scored.** There is no fallback to RRR x SL.
+Rows that would score a stop without a mapping (a fixed size, a half stop,
+a buffer) are left off the page until the trader sends its targets; a trade
+whose own stop is unmapped raises a `ValueError` naming the stop. More stop
+sizes will be added to the table as they arrive.
+
+**Scope.** This applies to 30MC and every strategy built from now on. It
+lives in `strategies/30MC/utils/continuation_reversal.py` as
+`RRR_TARGET_TICKS`, `target_pips`, `rrr_targets` and `reached_r`; copy them
+into a new strategy's module. The older pages - 15LS1CC, 5OB1CC, 30MCR and
+30MCR Fixed - keep the plain `TP >= RRR x SL` rule and are not to be
+changed.
+
 ## Signal vs Strategy
 
 Two different questions can be asked of the same trade, and they give different
@@ -559,6 +595,10 @@ export. It differs from 30MCR in the data only:
   the `+ 1 pip` columns and the Strategies `Buffer` column still pad the stop.
 - **`Streaks` lists `Default` and `Continuation` only** - no `Reversal`
   row and no `+ 1 pip buffer` rows.
+- **Every RRR target is commission-adjusted** - see "Commission-Adjusted
+  RRR Targets". `Fixed SL` and the Strategies `Fixed SL X` rows cover the
+  mapped stops only (3-7 pips), and `Half SL` shows only `Default` until
+  2.5 pips is mapped.
 - **`TP Range Analysis` uses six bands** - `0-10`, `10-15`, `15-20`,
   `20-25`, `25-30` and `30+ pips` - and its chart draws one column per band
   (`calculate_tp_range_counts`), not one per pip.

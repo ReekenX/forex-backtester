@@ -10,6 +10,17 @@ Two strategies are being tested:
 - **5OB1CC** - 5-minute Order Block, 1-minute Confirmation Candle
 - **15LS1CC** - 15-minute Leg Structure, 1-minute Confirmation Candle
 
+## RRR Targets Include Commissions
+
+The broker charges commission and has no spread, so reaching RRR x SL pips
+does not pay RRR. From 30MC on, every strategy scores a win against a
+per-stop table of how far price must run to pay each RRR, commission
+included - for a 5-pip stop that is 5.8 pips for 1:1, 16.6 for 1:3 and
+54.5 for 1:10. Stops without a mapping are not scored. The table and the
+rules are in `CLAUDE.md` under "Commission-Adjusted RRR Targets". The older
+strategies (15LS1CC, 5OB1CC, 30MCR, 30MCR Fixed) keep the plain RRR x SL
+rule.
+
 ## Project Structure
 
 ```

@@ -57,10 +57,10 @@ def get_sample_data():
         'Trade': ['#1', '#2', '#1', '#2', '#1', '#2'],
         'Direction': ['Buy', 'Sell', 'Buy', 'Sell', 'Buy', 'Sell'],
         '30M': [s.split()[0] for s in setups],
-        'SL': [4.4, 7.1, 2.6, 3.0, 4.3, 5.8],
-        'Pullback': [0.7, 7.1, 2.7, 0.0, 0.9, 2.4],
+        'SL': [4.0, 6.0, 3.0, 3.0, 4.0, 5.0],
+        'Pullback': [0.7, 6.0, 3.1, 0.0, 0.9, 2.4],
         'TP': [34.0, 0.0, 31.0, 9.0, 17.0, 7.0],
-        'R': [7.727, 0.0, -11.923, 3.0, 3.953, 1.207],
+        'R': [7.0, 0.0, -8.0, 2.0, 3.0, 1.0],
         'Setup': setups,
         'Type': [s.split()[-1] for s in setups],
     })
@@ -554,10 +554,12 @@ def test_half_sl_table_sits_right_above_the_strategies_tables():
     assert anchors.index('half-sl') == anchors.index('strategies-1-1') - 1
 
 
-def test_half_sl_table_compares_the_three_entries_without_sorting():
+def test_half_sl_table_shows_only_entries_with_a_mapped_stop():
+    """The sample's halved stops (2, 3, 1.5 ... pips) are not all mapped, so
+    only Default is shown."""
     html = _section_html('half-sl')
-    for entry in ('>Default<', '>Half SL<', '>Limit order on half<'):
-        assert entry in html
+    assert '>Default<' in html
+    assert '>Half SL<' not in html and '>Limit order on half<' not in html
     assert 'class="sortable"' not in html
 
 
