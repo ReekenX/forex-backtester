@@ -551,6 +551,8 @@ export. It differs from 30MCR in the data only:
   table only repeated Default. Weekday leads straight into `SL Range`.
 - **It has no `Cap SL Analysis`.** With every stop at 5 pips a cap only
   repeats `Fixed SL`. The Strategies tables keep their `Cap SL` column.
+- **It has no `Pullback Analysis`.** `calculate_pullback_statistics` and
+  `create_pullback_chart` are gone; `Half SL` keeps its own limit scoring.
 - **`Scaling` follows `TP`** and is empty so far. The scratch cut drops it
   with the sheet's `Signal` / `WR` columns, which the Default row matches
   (68.5% / 49.3%).

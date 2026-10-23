@@ -31,7 +31,6 @@ from utils.continuation_reversal import (
     _calculate_stats_with_buffer,
     calculate_buffer_statistics,
     calculate_equity_curves,
-    calculate_pullback_statistics,
     calculate_sl_buffer_statistics,
     calculate_sl_fixed_statistics,
     calculate_sl_statistics,
@@ -41,7 +40,6 @@ from utils.continuation_reversal import (
     calculate_weekday_statistics,
     create_html_table,
     create_equity_chart,
-    create_pullback_chart,
     create_r_histogram_combined,
     create_signal_strategy_chart,
     create_sortable_table,
@@ -118,11 +116,6 @@ def _tp_section(df: pd.DataFrame) -> str:
     return create_html_table(
         calculate_tp_statistics(df), first_col_width=FIRST_COL_WIDTH
     ) + create_tp_chart(df)
-
-
-def _pullback_section(df: pd.DataFrame) -> str:
-    return create_pullback_chart(calculate_pullback_statistics(df),
-                                 int((df["TP"] > 0).sum()))
 
 
 def _sl_buffer_section(df: pd.DataFrame) -> str:
@@ -239,18 +232,6 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "TP Range Analysis",
         "How far the profitable trades ran.",
         _tp_section,
-    ),
-    (
-        "pullback",
-        "Pullback",
-        "Pullback Analysis",
-        "Filling a limit order N pips into the pullback instead of taking the "
-        "signal. Half fills at half the stop. <b>Missed trades</b> are "
-        "winners that never pulled back far enough to fill the limit; each "
-        "bar spans every winning trade (TP &gt; 0, whatever the pullback). "
-        "<b>+ 1 pip buffer</b> rows pad the stop by a pip (win = Pullback "
-        "&lt; SL + 1 AND TP &gt;= SL + 1); the limit stays put.",
-        _pullback_section,
     ),
     (
         "sl-buffer",

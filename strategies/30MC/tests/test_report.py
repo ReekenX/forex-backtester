@@ -392,15 +392,13 @@ def test_adding_buffer_keeps_its_table_and_adds_a_chart_below():
     assert html.index('<table') < html.index('class="wr-chart"')
 
 
-def test_pullback_is_a_chart_without_a_table():
-    html = _section_html('pullback')
-    assert '<table' not in html
-    assert html.count('class="pb-chart"') == 1
+def test_pullback_section_is_gone():
+    anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
+    assert 'pullback' not in anchors
 
 
-def test_tp_range_and_pullback_carry_no_win_rate_chart():
-    for anchor in ('tp-range', 'pullback'):
-        assert 'class="wr-chart"' not in _section_html(anchor), anchor
+def test_tp_range_carries_no_win_rate_chart():
+    assert 'class="wr-chart"' not in _section_html('tp-range')
 
 
 def test_tp_range_keeps_its_table_and_adds_a_pip_chart_below():
@@ -437,7 +435,7 @@ def test_tp_range_keeps_neither_win_rate_column():
 
 
 def test_stop_tables_are_not_sortable_but_others_are():
-    """Row order carries meaning in SL Range, Adding Buffer and Pullback.
+    """Row order carries meaning in SL Range and Adding Buffer.
     Fixed SL is the exception - its rows are stop sizes to compare."""
     for anchor in ('sl-range', 'sl-buffer'):
         assert 'class="sortable"' not in _section_html(anchor), anchor
