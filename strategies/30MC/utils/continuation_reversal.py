@@ -43,10 +43,6 @@ import pandas as pd
 # RRR ratios to test (1:3 is the ceiling - see CLAUDE.md)
 RRR_RATIOS = [1, 2, 3]
 
-# Setup types the Strategies tables filter on. "All" keeps every trade; the
-# rest keep the setups that end that way, e.g. Reversal = High + Low Reversal.
-TREND_FILTERS = ['All', 'Continuation', 'Reversal']
-
 WEEKDAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 
 # Column naming the 30-minute level (High or Low) the signal formed at.
@@ -335,7 +331,7 @@ def create_html_table(df: pd.DataFrame, sort_id: Optional[str] = None,
         colour_columns: Columns of 1:1 win rates to colour against 50%
         rrr: The RRR (e.g. "1:2") to colour the Win Rate column against when
             the table carries no RRR column of its own
-        column_widths: Widths (e.g. {"Trend": "11%"}) for further columns,
+        column_widths: Widths (e.g. {"Trades": "6%"}) for further columns,
             so short ones give their room to wide ones in a fixed layout
 
     Returns:
@@ -936,8 +932,6 @@ def calculate_streak_statistics(df: pd.DataFrame) -> pd.DataFrame:
 # Every mapped stop - see RRR_TARGET_TICKS.
 FIXED_SL_STRATEGY_VALUES = MAPPED_SL_PIPS
 
-# Stop caps for the Strategies tables' Cap SL column. 0 means no cap.
-MAX_SL_CAPS = [0, 5, 6]
 
 def _fixed_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
     """Return a filter that replaces the SL column with a fixed x pips."""
@@ -952,9 +946,8 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
     """
     Strategies the ranked tables test.
 
-    "Fixed SL X" replaces SL with X. It runs uncapped only - a cap would just
-    turn it into another fixed size. Capping is the Cap SL column's job, on
-    All Trades.
+    "All Trades" keeps every trade's recorded stop; "Fixed SL X" replaces it
+    with X.
     """
     strategies: List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]] = [
         ("All Trades", lambda df: df),
@@ -965,49 +958,30 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
     return strategies
 
 
-def _caps_for(strategy_name: str) -> List[int]:
-    """Fixed-SL strategies only run uncapped."""
-    if strategy_name.startswith("Fixed SL "):
-        return [0]
-    return MAX_SL_CAPS
-
-
-def _apply_trend(df: pd.DataFrame, trend: str) -> pd.DataFrame:
-    """Keep only trades of one setup type ('All' keeps every trade)."""
-    return df if trend == 'All' else df[df['Type'] == trend]
-
-
-def _strategy_row_wins(trades: pd.DataFrame, rrr: float,
-                       max_sl: int) -> pd.Series:
+def _strategy_row_wins(trades: pd.DataFrame, rrr: float) -> pd.Series:
     """
     The winning trades of one Strategies row; every other trade is a loss.
 
-    Effective SL = SL, capped at max_sl when max_sl > 0. A trade wins when it survives that stop and reaches the RRR target for it,
+    A trade wins when it survives its stop and reaches the RRR target for it,
     commissions included (target_pips):
-        Pullback < effective SL   AND   TP >= RRR target of effective SL
+        Pullback < SL   AND   TP >= RRR target of SL
     """
-    effective_sl = trades["SL"]
-    if max_sl:
-        effective_sl = effective_sl.clip(upper=float(max_sl))
-    return ((trades["Pullback"] < effective_sl)
-            & (trades["TP"] >= rrr_targets(effective_sl, rrr, trades.index)))
+    return ((trades["Pullback"] < trades["SL"])
+            & (trades["TP"] >= rrr_targets(trades["SL"], rrr, trades.index)))
 
 
 def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
-                                 rrr_ratio: float = 1, trend: str = 'All',
-                                 max_sl: int = 0) -> Dict:
+                                 rrr_ratio: float = 1) -> Dict:
     """
     Score a filtered set of trades under one Strategies row's stop rule - see
     _strategy_row_wins. Notation is "W – L" and Win Rate W over every trade.
     """
     row = {
         "Strategy": strategy_name,
-        "Trend": trend,
-        "Cap SL": max_sl,
         "RRR": f"1:{rrr_ratio:g}",
         "Trades": len(trades),
     }
-    won = int(_strategy_row_wins(trades, rrr_ratio, max_sl).sum())
+    won = int(_strategy_row_wins(trades, rrr_ratio).sum())
     lost = len(trades) - won
     row["Notation"] = f"{won}W – {lost}L"
     row["Win Rate"] = _win_rate(won, won + lost)
@@ -1015,8 +989,7 @@ def _calculate_stats_with_buffer(trades: pd.DataFrame, strategy_name: str,
 
 
 def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
-    """Sort by Strategy (natural order, numbers numerically), Trend, Cap SL,
-    then RRR."""
+    """Sort by Strategy (natural order, numbers numerically), then RRR."""
     if result_df.empty:
         return result_df
 
@@ -1034,8 +1007,6 @@ def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
         result_df.index,
         key=lambda i: (
             strategy_key(result_df.at[i, 'Strategy']),
-            TREND_FILTERS.index(result_df.at[i, 'Trend']),
-            int(result_df.at[i, 'Cap SL']),
             rrr_key(result_df.at[i, 'RRR']),
         ),
     )
@@ -1045,17 +1016,14 @@ def _sort_strategy_rows(result_df: pd.DataFrame) -> pd.DataFrame:
 def calculate_buffer_statistics(df: pd.DataFrame,
                                 strategy_names: Optional[List[str]] = None) -> pd.DataFrame:
     """
-    Score every strategy across setup trends, stop caps and every RRR.
-
-    Trend filters on the setup type, which is known at entry, so it is a
-    tradeable filter. The strategy's stop rule runs on the trend's trades.
+    Score every strategy at every RRR, on every trade.
 
     Args:
         df: DataFrame with trading data
         strategy_names: Restrict to these strategy names (default: all)
 
     Returns:
-        DataFrame with one row per strategy / trend / cap / RRR combination
+        DataFrame with one row per strategy / RRR combination
     """
     strategies = get_buffer_strategies()
     if strategy_names is not None:
@@ -1063,12 +1031,10 @@ def calculate_buffer_statistics(df: pd.DataFrame,
 
     results = []
     for strategy_name, filter_func in strategies:
-        for trend in TREND_FILTERS:
-            filtered_df = filter_func(_apply_trend(df, trend))
-            for max_sl in _caps_for(strategy_name):
-                for rrr in RRR_RATIOS:
-                    results.append(_calculate_stats_with_buffer(
-                        filtered_df, strategy_name, rrr, trend, max_sl))
+        filtered_df = filter_func(df)
+        for rrr in RRR_RATIOS:
+            results.append(_calculate_stats_with_buffer(
+                filtered_df, strategy_name, rrr))
 
     return _sort_strategy_rows(pd.DataFrame(results))
 
@@ -1171,31 +1137,18 @@ _EQUITY_CHART_SCRIPT = """
 """
 
 
-def _strategy_curve_label(strategy_name: str, trend: str,
-                          max_sl: int) -> str:
-    """One line of text naming a Strategies table row, e.g.
-    'All Trades / Reversal / cap 5' or 'Fixed SL 6 / Continuation'."""
-    parts = [strategy_name]
-    if trend != 'All':
-        parts.append(trend)
-    if max_sl:
-        parts.append(f"cap {max_sl}")
-    return " / ".join(parts)
-
-
 def calculate_equity_curves(df: pd.DataFrame, rrr: float = 1) -> List[Dict]:
     """
     Cumulative R of every Strategies table row, trade by trade, at one RRR.
 
     Trades are walked in date order; the export's own order breaks ties within
     a day. A win adds the RRR in R and a loss takes 1R, under the same rule as
-    calculate_buffer_statistics (_strategy_row_wins). Every curve
-    runs over every trade, so a Continuation-only strategy sits flat through
-    the Reversal trades it would not have taken and the curves line up in
-    time. Commissions are already inside the targets (target_pips).
+    calculate_buffer_statistics (_strategy_row_wins). Every curve runs over
+    every trade, so the curves line up in time. Commissions are already
+    inside the targets (target_pips).
 
     Args:
-        df: DataFrame with trading data, including a Type column
+        df: DataFrame with trading data
         rrr: Risk-reward ratio to score at
 
     Returns:
@@ -1206,23 +1159,16 @@ def calculate_equity_curves(df: pd.DataFrame, rrr: float = 1) -> List[Dict]:
     ordered = df.sort_values('Date', kind='stable') if len(df) else df
     curves = []
     for strategy_name, filter_func in get_buffer_strategies():
-        filtered = filter_func(ordered)
-        for trend in TREND_FILTERS:
-            taken = (pd.Series(True, index=ordered.index) if trend == 'All'
-                     else ordered['Type'] == trend)
-            for max_sl in _caps_for(strategy_name):
-                won = _strategy_row_wins(filtered, rrr, max_sl)
-                per_trade = pd.Series(-1.0, index=ordered.index)
-                per_trade[won] = float(rrr)
-                per_trade[~taken] = 0.0
-                curve = [0.0] + per_trade.cumsum().round(6).tolist()
-                curves.append({
-                    'label': _strategy_curve_label(
-                        strategy_name, trend, max_sl),
-                    'trades': int(taken.sum()),
-                    'outcome': curve[-1],
-                    'curve': curve,
-                })
+        won = _strategy_row_wins(filter_func(ordered), rrr)
+        per_trade = pd.Series(-1.0, index=ordered.index)
+        per_trade[won] = float(rrr)
+        curve = [0.0] + per_trade.cumsum().round(6).tolist()
+        curves.append({
+            'label': strategy_name,
+            'trades': len(ordered),
+            'outcome': curve[-1],
+            'curve': curve,
+        })
     return sorted(curves, key=lambda c: -c['outcome'])
 
 
@@ -1365,8 +1311,8 @@ def create_equity_chart(curves: List[Dict], rrr: float = 1,
                 f'{escape(curve["label"])} {curve["outcome"]:+.0f}R</text>')
     out += '</svg><div class="eq-tip"></div>'
     out += (f'<p class="eq-caption">Cumulative R over {n_trades} trades in '
-            f'date order: +{rrr:g}R per win, -1R per loss, commissions included. '
-            'Trades outside a strategy\'s trend stay flat. '
+            f'date order: +{rrr:g}R per win, -1R per loss, commissions '
+            'included. '
             f'The best {len(top)} final outcomes are coloured.</p>')
     out += '</div>' + _EQUITY_CHART_SCRIPT
     return out

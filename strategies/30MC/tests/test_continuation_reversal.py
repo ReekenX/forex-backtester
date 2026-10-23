@@ -16,8 +16,6 @@ from utils.continuation_reversal import (  # noqa: E402
     MAPPED_SL_PIPS,
     RATE_COLUMNS,
     RRR_TARGET_TICKS,
-    MAX_SL_CAPS,
-    TREND_FILTERS,
     RRR_RATIOS,
     SETUP_ORDER,
     SL_FIXED_PIPS,
@@ -474,11 +472,9 @@ def test_tp_bands_hold_each_trade_once():
 # --- Strategies tables ----------------------------------------------------
 
 def test_get_buffer_strategies_covers_all_trades_and_fixed_sl():
-    """Capping moved to the Cap SL column, so there are no Max SL strategies."""
+    """Only All Trades and one Fixed SL N row per mapped stop."""
     names = [name for name, _ in get_buffer_strategies()]
-    assert names[0] == 'All Trades'
-    assert any(n.startswith('Fixed SL ') for n in names)
-    assert not any(n.startswith('Max SL ') for n in names)
+    assert names == ['All Trades'] + [f'Fixed SL {n}' for n in MAPPED_SL_PIPS]
 
 
 def test_buffer_statistics_scores_every_rrr():
@@ -487,20 +483,16 @@ def test_buffer_statistics_scores_every_rrr():
     assert 'Buffer' not in result.columns
 
 
-def test_buffer_statistics_carry_trend_and_max_sl():
-    """Each strategy, trend, cap and RRR appears once, and All covers the
-    whole sample - a cap changes the stop, never the trades taken."""
+def test_buffer_statistics_carry_no_trend_or_cap():
+    """Each strategy and RRR appears once, over every trade - there is no
+    Trend and no Cap SL column, and no Reversal rows."""
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
-    assert list(result.columns) == ['Strategy', 'Trend', 'Cap SL',
-                                    'RRR', 'Trades', 'Notation', 'Win Rate']
-    keys = ['Strategy', 'Trend', 'Cap SL', 'RRR']
-    assert not result.duplicated(keys).any()
-    all_trades = result[result['Strategy'] == 'All Trades']
-    assert set(all_trades['Cap SL']) == set(MAX_SL_CAPS)
-    assert MAX_SL_CAPS == [0, 5, 6]
-    assert set(result['Trend']) == set(TREND_FILTERS)
-    assert (result[result['Trend'] == 'All']['Trades'] == len(sample)).all()
+    assert list(result.columns) == ['Strategy', 'RRR', 'Trades', 'Notation',
+                                    'Win Rate']
+    assert not result.duplicated(['Strategy', 'RRR']).any()
+    assert len(result) == (1 + len(MAPPED_SL_PIPS)) * len(RRR_RATIOS)
+    assert (result['Trades'] == len(sample)).all()
 
 
 def test_buffer_statistics_carry_no_be_rule():
@@ -510,42 +502,13 @@ def test_buffer_statistics_carry_no_be_rule():
     assert not result['Notation'].str.contains('BE').any()
 
 
-def test_buffer_statistics_trend_keeps_only_its_setups():
-    """Reversal is High Reversal + Low Reversal: rows 2, 4, 6, 7, 10. Of
-    those, 4, 7 and 10 survive their stop and reach their 1R target."""
+def test_buffer_statistics_score_every_trade_on_its_stop():
+    """All Trades at 1:1: rows 1, 4, 5, 7, 9, 10 survive their stop and reach
+    their 1R target."""
     result = calculate_buffer_statistics(get_sample_data(), ['All Trades'])
-    row = result[(result['Trend'] == 'Reversal')
-                 & (result['RRR'] == '1:1')].iloc[0]
-    assert row['Trades'] == 5
-    assert row['Notation'] == '3W – 2L'
-    cont = result[(result['Trend'] == 'Continuation')
-                  & (result['RRR'] == '1:1')]
-    assert cont.iloc[0]['Trades'] == 5
-    assert cont.iloc[0]['Notation'] == '3W – 2L'
-
-
-def test_fixed_sl_strategies_run_without_a_cap():
-    """A cap would only turn a fixed stop into another size."""
-    names = [n for n, _ in get_buffer_strategies() if n != 'All Trades']
-    result = calculate_buffer_statistics(get_sample_data(), names)
-    assert set(result['Cap SL']) == {0}
-
-
-def test_max_sl_caps_only_wider_stops():
-    """SL 6, Pullback 4.5, TP 6: uncapped it needs the 6.9 pip 1R of a 6-pip
-    stop and loses; capped at 5 it survives 4.5 and needs only 5.8. A cap
-    wider than the stop changes nothing. SL 3 sits inside the cap."""
-    wide = get_sample_data().iloc[0:1].assign(SL=6.0, Pullback=4.5, TP=6.0)
-    tight = get_sample_data().iloc[0:1].assign(SL=3.0, Pullback=1.0, TP=4.0)
-
-    def notation(one, max_sl=0):
-        return _calculate_stats_with_buffer(one, 'x', 1,
-                                            max_sl=max_sl)['Notation']
-
-    assert notation(wide) == '0W – 1L'
-    assert notation(wide, max_sl=5) == '1W – 0L'
-    assert notation(wide, max_sl=7) == '0W – 1L'
-    assert notation(tight) == notation(tight, max_sl=5) == '1W – 0L'
+    row = result[result['RRR'] == '1:1'].iloc[0]
+    assert row['Trades'] == 10
+    assert row['Notation'] == '6W – 4L'
 
 
 def test_calculate_stats_with_buffer_applies_the_rrr_target():
@@ -723,11 +686,10 @@ def test_equity_curve_outcome_matches_the_table_notation():
     for rrr in RRR_RATIOS:
         curves = {c['label']: c for c in calculate_equity_curves(df, rrr)}
         table = calculate_buffer_statistics(df)
-        row = table[(table['Strategy'] == 'All Trades')
-                    & (table['Trend'] == 'Reversal') & (table['Cap SL'] == 5)
+        row = table[(table['Strategy'] == 'Fixed SL 5')
                     & (table['RRR'] == f'1:{rrr}')].iloc[0]
         wins, losses = (int(v[:-1]) for v in row['Notation'].split(' \u2013 '))
-        curve = curves['All Trades / Reversal / cap 5']
+        curve = curves['Fixed SL 5']
         assert curve['outcome'] == wins * rrr - losses
         assert curve['trades'] == wins + losses == row['Trades']
 
@@ -738,15 +700,6 @@ def test_equity_curves_carry_no_be_rule_rows():
     table = calculate_buffer_statistics(df)
     assert len(curves) == len(table[table['RRR'] == '1:2'])
     assert not any(label.endswith('/ BE') for label in curves)
-
-
-def test_equity_curve_stays_flat_outside_its_trend():
-    df = get_sample_data()
-    curves = {c['label']: c for c in calculate_equity_curves(df, 1)}
-    ordered = df.sort_values('Date', kind='stable')
-    steps = pd.Series(curves['Fixed SL 5 / Reversal']['curve']).diff().dropna()
-    assert (steps[(ordered['Type'] != 'Reversal').values] == 0).all()
-    assert (steps[(ordered['Type'] == 'Reversal').values] != 0).all()
 
 
 def test_equity_curves_walk_trades_in_date_order():

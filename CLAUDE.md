@@ -594,9 +594,11 @@ export. It differs from 30MCR in the data only:
   `Streaks` leads straight into the Strategies tables.
 - **It has no `Adding Buffer` and no 1 pip buffer anywhere.** A buffer does
   not apply to this strategy: there is no `Strategy + 1 pip` column on any
-  table or chart (`RATE_COLUMNS` is `Signal, Strategy`), and the Strategies
-  tables have no `Buffer` column - `Cap SL` caps the recorded stop,
-  `min(SL, cap)`.
+  table or chart (`RATE_COLUMNS` is `Signal, Strategy`).
+- **The Strategies tables list `All Trades` and `Fixed SL N` only** - one
+  row per mapped stop, every trade scored, columns `Strategy, Trades,
+  Notation, Win Rate`. There is no `Buffer`, `Trend` or `Cap SL` column and
+  no `Reversal` row; the equity chart draws one curve per row.
 - **`Streaks` lists `Default` and `Continuation` only** - no `Reversal`
   row and no `+ 1 pip buffer` rows.
 - **Every RRR target is commission-adjusted** - see "Commission-Adjusted

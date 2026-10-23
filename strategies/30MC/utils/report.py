@@ -138,13 +138,6 @@ def _sort_by_win_rate(stats: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-# The Strategies tables' short columns, kept narrow so the label gets room.
-STRATEGIES_COLUMN_WIDTHS = {
-    "Trend": "11%", "Cap SL": "6%",
-    "Trades": "6%", "Notation": "16%", "Win Rate": "10%",
-}
-
-
 def _strategies_section_for(rrr: int) -> Callable[[pd.DataFrame], str]:
     """Build the Strategies table for a single RRR, ranked by win rate."""
     def build(df: pd.DataFrame) -> str:
@@ -158,7 +151,6 @@ def _strategies_section_for(rrr: int) -> Callable[[pd.DataFrame], str]:
         return create_html_table(
             _sort_by_win_rate(stats), sort_id=f"strategies-1-{rrr}-table",
             first_col_width=FIRST_COL_WIDTH, rrr=f"1:{rrr}",
-            column_widths=STRATEGIES_COLUMN_WIDTHS,
         ) + create_equity_chart(
             calculate_equity_curves(df, rrr), rrr,
             chart_id=f"strategies-1-{rrr}-equity")
@@ -233,9 +225,8 @@ SECTIONS.extend(
         f"strategies-1-{rrr}",
         f"Strategies 1:{rrr}",
         f"Strategies (1:{rrr} RRR)",
-        "All Trades / Fixed SL across setup trends (<b>Continuation</b> or "
-        "<b>Reversal</b> keeps only those setups). <b>Cap SL</b> caps the "
-        "stop: min(SL, cap), 0 = no cap. "
+        "<b>All Trades</b> on their recorded stops, and <b>Fixed SL N</b> "
+        "with every stop replaced by N pips. "
         f"Ranked by win rate. Breakeven at 1:{rrr} is {100 / (1 + rrr):.1f}%. "
         "The chart under the table walks every row trade by trade in date "
         "order and plots its cumulative R.",

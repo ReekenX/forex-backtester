@@ -127,9 +127,8 @@ def test_build_report_names_the_strategy_and_its_source():
 def test_build_report_renders_data_values():
     html = build_report(get_sample_data(), '2025-02-06 10:00:00', 'abc123')
     assert 'Monday' in html
-    assert 'Continuation' in html and 'Reversal' in html
+    assert 'Continuation' in html
     assert 'High Continuation' not in html
-    assert '>Reversal<' in html  # the pooled type row
     assert '2025-02-03' in html
 
 
@@ -459,13 +458,15 @@ def test_strategies_tables_carry_no_rrr_column():
         assert '>1:' not in table
 
 
-def test_strategies_tables_name_the_cap_column_cap_sl():
-    """Cap SL, not Max SL: the column caps the stop at min(SL, cap)."""
+def test_strategies_tables_list_all_trades_and_fixed_sl_only():
+    """No Trend, no Cap SL and no Reversal rows."""
     for rrr in RRR_RATIOS:
         html = _section_html(f'strategies-1-{rrr}')
         table = html[html.index('<table'):html.index('</table>')]
-        assert '>Cap SL<' in table
-        assert 'Max SL' not in html
+        for gone in ('>Trend<', '>Cap SL<', 'Reversal', 'Continuation',
+                     'Max SL'):
+            assert gone not in table, gone
+        assert '>All Trades<' in table and '>Fixed SL 5<' in table
 
 
 def test_strategies_tables_carry_no_be_rule():
@@ -477,13 +478,6 @@ def test_strategies_tables_carry_no_be_rule():
         assert 'BE Rule' not in html
         assert 'type="checkbox"' not in html
         assert 'BE Rule' not in notes[f'strategies-1-{rrr}']
-
-
-def test_strategies_tables_narrow_their_short_columns():
-    html = _section_html('strategies-1-3')
-    assert '>Buffer<' not in html
-    assert 'style="width: 11%;">Trend<' in html
-    assert 'style="width: 16%;">Notation<' in html
 
 
 def test_strategies_win_rate_is_coloured_against_its_own_rrr():
@@ -536,7 +530,7 @@ def test_streaks_table_sits_above_the_strategies_tables():
     assert html.index('id="streaks"') > html.index('id="r-distribution"')
     assert 'R Distribution (Exact)' not in html
     assert html.index('id="streaks"') < html.index('id="strategies-1-1"')
-    for label in ('Default', 'Continuation', 'Reversal'):
+    for label in ('Default', 'Continuation'):
         assert label in html
     assert 'Longest Wins' in html and 'Longest Losses' in html
 
