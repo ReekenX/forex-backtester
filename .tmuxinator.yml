@@ -1,11 +1,8 @@
 name: forex
 
-startup_window: shell
+on_project_start: git stash && git pull && git stash pop
 
-on_project_start:
-  - git stash
-  - git pull
-  - git stash pop
+startup_window: shell
 
 windows:
   - editor:
@@ -13,10 +10,11 @@ windows:
       - nvim .
   - shell:
       - tmux set-option set-titles-string 'forex'
+      - clear
   - claude:
-      - alias run="claude --dangerously-skip-permissions"
-      - claude --dangerously-skip-permissions
+      - alias run="claude --dangerously-skip-permissions --chrome"
+      - run
   - git: tig
   - webserver:
       - alias run="make watch"
-      - make watch
+      - run
