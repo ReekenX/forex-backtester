@@ -30,6 +30,7 @@ Current strategies:
 - **15LS1CC** - 15-minute Leg Structure, 1-minute Confirmation Candle (`strategies/15LS1CC/`)
 - **30MCR** - 30-minute Continuation/Reversal (`strategies/30MCR/`)
 - **30MCR Fixed** - 30MCR traded on a fixed 5-pip stop, scored on a `Reward` column (`strategies/30MCR-fixed/`). Report-only, see "30MCR Fixed" below
+- **30MC** - a copy of 30MCR on a new export with real `Pullback` and `TP` (`strategies/30MC/`). Report-only, see "30MC" below
 
 ## Background About Trades
 
@@ -278,6 +279,7 @@ Three pages, one template, one output directory:
 | 15LS1CC | `labs/render.py` | `labs/build/15C.html` | `v5_data.csv` |
 | 5OB1CC | `labs/render_5OB.py` | `labs/build/5OB.html` | `data.csv` |
 | 30MCR Fixed | `labs/render_30MCR_fixed.py` | `labs/build/30MCR-fixed.html` | `trades.csv` |
+| 30MC | `labs/render_30MC.py` | `labs/build/30MC.html` | `trades.csv` |
 
 Pair any of them with a file watcher for the normal working loop:
 
@@ -296,9 +298,10 @@ watchexec -w strategies/5OB1CC -e py,csv -- poetry run python labs/render_5OB.py
 ```
 
 The bare `make report` / `open` / `watch` targets follow the strategy under
-active work - 30MCR - and every page keeps an explicit target of its own:
-`report-15c` / `open-15c` / `watch-15c` and `report-5ob` / `open-5ob` /
-`watch-5ob`. `make serve` serves all three pages out of `labs/build`.
+active work - 30MC - and every page keeps an explicit target of its own:
+`report-30mcr` / `open-30mcr` / `watch-30mcr`, `report-30mcr-fixed` /
+`open-30mcr-fixed` / `watch-30mcr-fixed`, `report-15c` / `open-15c` /
+`watch-15c` and `report-5ob` / `open-5ob` / `watch-5ob`. `make serve` serves all three pages out of `labs/build`.
 
 `watchexec` is event-driven (OS filesystem notifications), not a polling timer.
 
@@ -529,6 +532,26 @@ RRR. Its figures equal the `Scaling` at-each-RRR table's. The equity chart
 under it (`calculate_scaled_only_equity_curves`) walks all trades, flat
 where no second trade opened; `create_equity_chart(rrr=None, caption=...)`
 handles a chart that mixes RRRs.
+
+### 30MC
+
+A copy of the 30MCR page and module (`strategies/30MC/`), fed from a new
+export. It differs from 30MCR in the data only:
+
+- **`SL` is 5 pips on every trade.** It is a placeholder for the real safe
+  stop; until that lands, 5 pips is read as the correct stop.
+- **`Pullback` and `TP` are real.** A loser exports both blank, so
+  `load_data` reads that `Pullback` as the stop (`Pullback = SL`), not as a
+  clean 0-pip run - otherwise `Half SL`'s limit would score losers as never
+  filled. A blank `Pullback` beside a real `TP` still loads as 0.
+- **There is no `BE Rule (10 pips)` column**, so the break-even rule reads
+  every trade as unchecked.
+- **`Scaling` follows `TP`** and is empty so far. The scratch cut drops it
+  with the sheet's `Signal` / `WR` columns, which the Default row matches
+  (68.5% / 49.3%).
+
+Sidecars are `build-id-30mc.txt` / `build-id-30mc.js`, storage keys
+`30mc-scroll` / `30mc-sorts`.
 
 ### Conventions for report sections
 
