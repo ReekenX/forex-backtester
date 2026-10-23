@@ -559,6 +559,9 @@ export. It differs from 30MCR in the data only:
   the `+ 1 pip` columns and the Strategies `Buffer` column still pad the stop.
 - **`Streaks` lists `Default` and `Continuation` only** - no `Reversal`
   row and no `+ 1 pip buffer` rows.
+- **`TP Range Analysis` uses six bands** - `0-10`, `10-15`, `15-20`,
+  `20-25`, `25-30` and `30+ pips` - and its chart draws one column per band
+  (`calculate_tp_range_counts`), not one per pip.
 - **`Scaling` follows `TP`** and is empty so far. The scratch cut drops it
   with the sheet's `Signal` / `WR` columns, which the Default row matches
   (68.5% / 49.3%).

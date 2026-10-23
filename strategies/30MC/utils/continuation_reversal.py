@@ -735,11 +735,27 @@ def calculate_sl_fixed_statistics(df: pd.DataFrame) -> pd.DataFrame:
 # Ten-pip bands, each holding TP >= low and TP < high, so a trade lands in
 # exactly one of them.
 TP_RANGES = [
-    ("0-10", 0, 10),
-    ("10-20", 10, 20),
-    ("20-30", 20, 30),
-    ("30+", 30, float("inf")),
+    ("0-10 pips", 0, 10),
+    ("10-15 pips", 10, 15),
+    ("15-20 pips", 15, 20),
+    ("20-25 pips", 20, 25),
+    ("25-30 pips", 25, 30),
+    ("30+ pips", 30, float("inf")),
 ]
+
+
+def calculate_tp_range_counts(df: pd.DataFrame) -> pd.Series:
+    """
+    Profitable trades (TP > 0) per TP_RANGES band, indexed by band label.
+
+    Each band holds TP >= low and TP < high, so a trade lands in exactly one.
+    """
+    tp = df['TP'] if 'TP' in df.columns else pd.Series(dtype=float)
+    profitable = tp[tp > 0]
+    return pd.Series({
+        label: int(((profitable >= low) & (profitable < high)).sum())
+        for label, low, high in TP_RANGES
+    })
 
 
 def calculate_tp_statistics(df: pd.DataFrame) -> pd.DataFrame:
@@ -756,30 +772,20 @@ def calculate_tp_statistics(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with columns: TP Range, Trades
     """
-    total_profitable = int((df['TP'] > 0).sum())
-    results = []
+    counts = calculate_tp_range_counts(df)
+    total_profitable = int(counts.sum())
+    return pd.DataFrame([
+        {'TP Range': label, 'Trades': f"{count} of {total_profitable}"}
+        for label, count in counts.items()
+    ])
 
-    for label, low, high in TP_RANGES:
-        in_band = df[(df['TP'] > 0) & (df['TP'] >= low) & (df['TP'] < high)]
-        results.append({
-            'TP Range': label,
-            'Trades': f"{len(in_band)} of {total_profitable}",
-        })
-
-    return pd.DataFrame(results)
-
-
-# The TP chart gives every whole pip from TP_CHART_FIRST to TP_CHART_LAST its
-# own column and pools everything from TP_CHART_LAST + 1 up into one "30+".
-TP_CHART_FIRST = 8
-TP_CHART_LAST = 29
 
 _TP_CHART_CSS = """
     <style>
         .tp-chart { font-family: 'Courier New', monospace; font-size: 11px;
                     color: #e0e0e0; margin-top: 16px; padding: 14px 16px;
                     background-color: #1e1e1e; border: 1px solid #404040; }
-        .tp-plot { display: flex; align-items: flex-end; gap: 2px;
+        .tp-plot { display: flex; align-items: flex-end; gap: 12px;
                    height: 180px; border-bottom: 1px solid #404040; }
         .tp-col { flex: 1; display: flex; flex-direction: column;
                   justify-content: flex-end; align-items: stretch;
@@ -787,43 +793,20 @@ _TP_CHART_CSS = """
         .tp-col:hover { background-color: #2a2a2a; }
         .tp-count { text-align: center; margin-bottom: 3px; }
         .tp-bar { background-color: #3987e5; border-radius: 4px 4px 0 0; }
-        .tp-axis { display: flex; gap: 2px; margin-top: 4px; color: #808080; }
+        .tp-axis { display: flex; gap: 12px; margin-top: 4px; color: #808080; }
         .tp-axis span { flex: 1; text-align: center; }
-        .tp-pool { margin-left: 10px; }
         .tp-caption { margin-top: 8px; color: #a0a0a0; }
     </style>
 """
 
 
-def calculate_tp_pip_counts(df: pd.DataFrame) -> pd.Series:
-    """
-    Profitable trades per whole TP pip, for the TP Range chart.
-
-    A trade lands in the column of its TP rounded down, so 12.6 counts under
-    12. Every TP above TP_CHART_LAST pools into the last, "30+", column.
-    Trades below TP_CHART_FIRST are not columns; create_tp_chart reports how
-    many there are instead of dropping them silently.
-
-    Args:
-        df: DataFrame with trading data
-
-    Returns:
-        Series of counts indexed '8', '9', ..., '29', '30+'
-    """
-    pips = df.loc[df['TP'] > 0, 'TP'].astype(float).apply(math.floor)
-    counts = {str(pip): int((pips == pip).sum())
-              for pip in range(TP_CHART_FIRST, TP_CHART_LAST + 1)}
-    counts[f'{TP_CHART_LAST + 1}+'] = int((pips > TP_CHART_LAST).sum())
-    return pd.Series(counts)
-
-
 def create_tp_chart(df: pd.DataFrame) -> str:
     """
-    Column chart of how far the profitable trades ran, one column per pip.
+    Column chart of how far the profitable trades ran, one column per
+    TP_RANGES band - the same bands as the table above it.
 
     Every column carries its count on the cap, so there is no y-axis, and a
-    hover tooltip names the pip and the count. The pooled "30+" column is set
-    a little apart, since it spans many pips rather than one.
+    hover tooltip names the band and the count.
 
     Args:
         df: DataFrame with trading data
@@ -832,37 +815,29 @@ def create_tp_chart(df: pd.DataFrame) -> str:
         HTML string with the chart, or a "No data" note when no trade has
         TP > 0
     """
-    profitable = int((df['TP'] > 0).sum()) if not df.empty else 0
+    counts = calculate_tp_range_counts(df)
+    profitable = int(counts.sum())
     if profitable == 0:
         return ("<p style='color: #e0e0e0; background-color: #1e1e1e; "
                 "padding: 10px;'>No data</p>")
 
-    counts = calculate_tp_pip_counts(df)
     tallest = max(int(counts.max()), 1)
-
     html = _TP_CHART_CSS + ('<div class="tp-chart" role="img" '
-                            'aria-label="Profitable trades per TP pip">'
+                            'aria-label="Profitable trades per TP range">'
                             '<div class="tp-plot">')
-    pooled = counts.index[-1]
     for label, count in counts.items():
         height = count / tallest * 85
-        css = 'tp-col tp-pool' if label == pooled else 'tp-col'
-        html += (f'<div class="{css}" title="TP {label} pips: {count} '
+        html += (f'<div class="tp-col" title="TP {label}: {count} '
                  f'trade{"" if count == 1 else "s"}">'
                  f'<span class="tp-count">{count if count else ""}</span>'
                  f'<div class="tp-bar" style="height: {height:.1f}%;"></div>'
                  '</div>')
     html += '</div><div class="tp-axis">'
     for label in counts.index:
-        css = ' class="tp-pool"' if label == pooled else ''
-        html += f'<span{css}>{label}</span>'
+        html += f'<span>{label}</span>'
     html += '</div>'
-
-    below = profitable - int(counts.sum())
-    caption = f'TP in pips, {profitable} profitable trades'
-    if below:
-        caption += f'; {below} below {TP_CHART_FIRST} pips not shown'
-    html += f'<div class="tp-caption">{caption}.</div></div>'
+    html += (f'<div class="tp-caption">TP range, {profitable} profitable '
+             'trades.</div></div>')
     return html
 
 

@@ -401,7 +401,7 @@ def test_tp_range_carries_no_win_rate_chart():
 
 def test_tp_range_keeps_its_table_and_adds_a_pip_chart_below():
     html = _section_html('tp-range')
-    assert '>0-10<' in html and '>30+<' in html
+    assert '>0-10 pips<' in html and '>30+ pips<' in html
     assert html.index('<table') < html.index('class="tp-chart"')
 
 
