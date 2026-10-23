@@ -31,7 +31,6 @@ from utils.continuation_reversal import (
     _calculate_stats_with_buffer,
     calculate_buffer_statistics,
     calculate_equity_curves,
-    calculate_sl_buffer_statistics,
     calculate_sl_fixed_statistics,
     calculate_sl_statistics,
     calculate_half_sl_statistics,
@@ -116,16 +115,6 @@ def _tp_section(df: pd.DataFrame) -> str:
     return create_html_table(
         calculate_tp_statistics(df), first_col_width=FIRST_COL_WIDTH
     ) + create_tp_chart(df)
-
-
-def _sl_buffer_section(df: pd.DataFrame) -> str:
-    # The table keeps its Notation/Win Rate shape; the chart reads the same
-    # scenarios in the Signal/Strategy shape the other charts use.
-    return create_sortable_table(
-        calculate_sl_buffer_statistics(df), "sl-buffer-table", sortable=False,
-        first_col_width=FIRST_COL_WIDTH
-    ) + create_signal_strategy_chart(
-        calculate_sl_buffer_statistics(df, with_signal=True))
 
 
 def _streaks_section(df: pd.DataFrame) -> str:
@@ -232,14 +221,6 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "TP Range Analysis",
         "How far the profitable trades ran.",
         _tp_section,
-    ),
-    (
-        "sl-buffer",
-        "Adding Buffer",
-        "Adding Buffer To SL Signals",
-        "Every stop padded by N pips: "
-        "win = Pullback &lt; SL + N AND TP &gt;= SL + N.",
-        _sl_buffer_section,
     ),
     (
         "r-distribution",

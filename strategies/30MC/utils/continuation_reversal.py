@@ -434,7 +434,7 @@ def _rate_columns(trades: pd.DataFrame, effective_sl) -> Dict[str, str]:
     gap between the two is the cost of entry timing.
 
     Strategy + 1 pip: the same rule with the row's stop padded by
-    TYPE_BUFFER_PIPS, as in Adding Buffer.
+    TYPE_BUFFER_PIPS.
 
     Args:
         trades: The trades of one table row
@@ -687,9 +687,6 @@ def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
     return _signal_strategy_rows(groups, 'SL Range')
 
 
-# Pips to pad the safe stop with. 0 means the stop is left as recorded.
-SL_BUFFER_PIPS = [0, 1, 2, 3, 4, 5]
-
 # Stop sizes to substitute for every trade's recorded SL.
 SL_FIXED_PIPS = [3, 4, 5, 6, 7, 8, 9, 10]
 
@@ -742,33 +739,6 @@ def _sl_scenario_statistics(df: pd.DataFrame,
         results.append(row)
 
     return pd.DataFrame(results)
-
-
-def calculate_sl_buffer_statistics(df: pd.DataFrame,
-                                   with_signal: bool = False) -> pd.DataFrame:
-    """
-    1:1 win/loss statistics for progressively wider stops.
-
-    Each row pads every trade's safe stop by N pips. A wider stop survives
-    deeper pullbacks, but the 1:1 target moves out by the same amount, so a
-    trade whose TP was only just enough can drop out.
-
-    Args:
-        df: DataFrame with trading data
-        with_signal: Emit the Signal/Strategy shape the charts read, instead
-            of the Notation/Win Rate shape the table shows - same scenarios,
-            same win rule
-
-    Returns:
-        DataFrame with columns: SL Buffer, Trades, Notation, Win Rate - or
-        SL Buffer, Trades, then RATE_COLUMNS when with_signal is set
-    """
-    scenarios: List[Tuple[str, object]] = [
-        ("Default" if pips == 0 else _pip_label(pips), df['SL'] + pips)
-        for pips in SL_BUFFER_PIPS
-    ]
-    return _sl_scenario_statistics(df, scenarios, 'SL Buffer',
-                                   with_signal=with_signal)
 
 
 def calculate_sl_fixed_statistics(df: pd.DataFrame) -> pd.DataFrame:
@@ -978,7 +948,7 @@ def calculate_streak_statistics(df: pd.DataFrame) -> pd.DataFrame:
     Reversal rows run through only their own trades, so a loss in one type
     does not break the other type's streak - that is what trading one type
     alone would have felt like. Each type then repeats as "<type> + 1 pip
-    buffer", its runs scored on SL + TYPE_BUFFER_PIPS as in Adding Buffer.
+    buffer", its runs scored on SL + TYPE_BUFFER_PIPS.
 
     Args:
         df: DataFrame with trading data, including a Type column

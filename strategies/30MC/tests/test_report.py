@@ -385,11 +385,9 @@ def test_every_section_up_to_max_sl_puts_a_chart_below_its_table():
         assert html.index('<table') < html.index('class="wr-chart"'), anchor
 
 
-def test_adding_buffer_keeps_its_table_and_adds_a_chart_below():
-    html = _section_html('sl-buffer')
-    assert '>Notation<' in html and '>Win Rate<' in html
-    assert html.count('class="wr-chart"') == 1
-    assert html.index('<table') < html.index('class="wr-chart"')
+def test_adding_buffer_section_is_gone():
+    anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
+    assert 'sl-buffer' not in anchors
 
 
 def test_pullback_section_is_gone():
@@ -435,9 +433,9 @@ def test_tp_range_keeps_neither_win_rate_column():
 
 
 def test_stop_tables_are_not_sortable_but_others_are():
-    """Row order carries meaning in SL Range and Adding Buffer.
+    """Row order carries meaning in SL Range.
     Fixed SL is the exception - its rows are stop sizes to compare."""
-    for anchor in ('sl-range', 'sl-buffer'):
+    for anchor in ('sl-range',):
         assert 'class="sortable"' not in _section_html(anchor), anchor
     for anchor in ('sl-fixed',):
         assert 'class="sortable"' in _section_html(anchor), anchor

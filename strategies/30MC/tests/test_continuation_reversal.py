@@ -19,7 +19,6 @@ from utils.continuation_reversal import (  # noqa: E402
     TREND_FILTERS,
     RRR_RATIOS,
     SETUP_ORDER,
-    SL_BUFFER_PIPS,
     SL_FIXED_PIPS,
     SL_RANGES,
     TP_RANGES,
@@ -36,7 +35,6 @@ from utils.continuation_reversal import (  # noqa: E402
     calculate_equity_curves,
     calculate_r_counts,
     calculate_setup_statistics,
-    calculate_sl_buffer_statistics,
     calculate_sl_fixed_statistics,
     calculate_sl_statistics,
     calculate_streak_statistics,
@@ -272,19 +270,6 @@ def test_chart_draws_every_row_of_any_signal_strategy_table():
         assert f'by {stats.columns[0]}"' in html
 
 
-def test_buffer_signal_shape_scores_the_same_trades_as_the_table():
-    """The chart's Strategy column must say what the table's Notation and Win
-    Rate say, row for row; Signal repeats as the ceiling."""
-    sample = get_sample_data()
-    table = calculate_sl_buffer_statistics(sample)
-    chart = calculate_sl_buffer_statistics(sample, with_signal=True)
-    assert list(chart.columns) == ['SL Buffer', 'Trades'] + RATE_COLUMNS
-    assert list(chart['SL Buffer']) == list(table['SL Buffer'])
-    for (_, t), (_, c) in zip(table.iterrows(), chart.iterrows()):
-        assert c['Strategy'] == t['Win Rate']
-    assert chart['Signal'].nunique() == 1
-
-
 def test_chart_handles_an_empty_table():
     empty = calculate_weekday_statistics(get_sample_data()).iloc[0:0]
     assert 'No data' in create_signal_strategy_chart(empty)
@@ -415,24 +400,6 @@ def test_sl_bands_overlap_on_purpose():
             == result.loc['0-10 SL', 'Trades'])
 
 
-def test_sl_buffer_statistics_lists_every_buffer():
-    result = calculate_sl_buffer_statistics(get_sample_data())
-    assert len(result) == len(SL_BUFFER_PIPS)
-    assert result.iloc[0]['SL Buffer'] == 'Default'
-    assert list(result['SL Buffer'])[1:3] == ['1 pip', '2 pips']
-    assert list(result.columns) == ['SL Buffer', 'Trades', 'Notation', 'Win Rate']
-
-
-def test_sl_buffer_widens_the_target_with_the_stop():
-    """Row 9 survives its 8 pip stop and just clears a 9 pip target. Pad the
-    stop by 2 and the target moves to 10, which its 9 pip TP never reaches -
-    a wider stop is not free."""
-    one = get_sample_data().iloc[8:9]
-    result = calculate_sl_buffer_statistics(one).set_index('SL Buffer')
-    assert result.loc['Default', 'Notation'] == '1W - 0L'
-    assert result.loc['2 pips', 'Win Rate'] == '0.0%'
-
-
 def test_sl_fixed_statistics_reports_signal_and_strategy():
     result = calculate_sl_fixed_statistics(get_sample_data())
     assert list(result.columns) == ['Fixed SL', 'Trades', 'Signal', 'Strategy']
@@ -447,12 +414,11 @@ def test_fixed_sl_signal_repeats_down_the_table():
 
 
 def test_every_stop_table_opens_with_the_same_default_row():
-    """SL Range, Adding Buffer and Fixed SL all start from the
-    recorded stops, so their Default rows must agree - one shared win rule."""
+    """SL Range and Fixed SL both start from the recorded stops, so their
+    Default rows must agree - one shared win rule."""
     sample = get_sample_data()
     tables = {
         'SL Range': (calculate_sl_statistics(sample), 'SL Range'),
-        'Adding Buffer': (calculate_sl_buffer_statistics(sample), 'SL Buffer'),
         'Fixed SL': (calculate_sl_fixed_statistics(sample), 'Fixed SL'),
     }
 
@@ -460,13 +426,7 @@ def test_every_stop_table_opens_with_the_same_default_row():
     for name, (result, column) in tables.items():
         first = result.iloc[0]
         assert first[column] == 'Default', f'{name} does not open with Default'
-        # SL Range and Fixed SL carry a bare Strategy rate; Adding Buffer
-        # keeps it as Win Rate. Compare on trades and win rate so the shared
-        # rule stays pinned across both shapes.
-        if 'Strategy' in result.columns:
-            seen[name] = (first['Trades'], first['Strategy'])
-        else:
-            seen[name] = (first['Trades'], first['Win Rate'])
+        seen[name] = (first['Trades'], first['Strategy'])
 
     assert len(set(seen.values())) == 1, f'Default rows disagree: {seen}'
     assert seen['SL Range'][0] == len(sample)
@@ -866,11 +826,11 @@ def test_half_sl_lists_every_entry_at_every_rrr():
 
 def test_half_sl_default_row_matches_the_other_stop_tables():
     default = _half_sl(1).loc['Default']
-    buffer_default = calculate_sl_buffer_statistics(get_sample_data()).iloc[0]
+    sl_default = calculate_sl_statistics(get_sample_data()).iloc[0]
     wins, missed, losses = default['Notation'].split(' - ')
     assert missed == '0M'
-    assert f'{wins} - {losses}' == buffer_default['Notation']
-    assert default['Win Rate'] == buffer_default['Win Rate']
+    assert int(wins[:-1]) + int(losses[:-1]) == sl_default['Trades']
+    assert default['Win Rate'] == sl_default['Strategy']
 
 
 def test_half_sl_counts_match_the_sample_at_1_to_1():
