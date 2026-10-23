@@ -13,11 +13,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from utils.continuation_reversal import (  # noqa: E402
-    BE_RULE_COLUMN,
-    BE_RULE_PIPS,
-    BE_RULE_RRRS,
     RATE_COLUMNS,
-    break_even_outcomes,
     BUFFER_PIPS,
     MAX_SL_CAPS,
     PULLBACK_BUFFER_PIPS,
@@ -208,14 +204,12 @@ def test_load_data_maps_each_level_and_direction(tmp_path, level, direction,
 
 def test_load_data_drops_rows_without_a_date(tmp_path):
     csv = tmp_path / 'trades.csv'
-    csv.write_text('Date,Weekday,Trade,Direction,30M,BE Rule (10 pips),'
-                   'SL,Pullback,TP\n'
-                   '2025-02-03,Monday,#1,Buy,High,TRUE,4,1,12\n'
-                   ',,,,,FALSE,,,\n'
-                   ',,,,,FALSE,,,\n')
+    csv.write_text('Date,Weekday,Trade,Direction,30M,SL,Pullback,TP\n'
+                   '2025-02-03,Monday,#1,Buy,High,4,1,12\n'
+                   ',,,,,,,\n'
+                   ',,,,,,,\n')
     df = load_data(str(csv))
     assert len(df) == 1
-    assert bool(df.iloc[0]['BE Rule (10 pips)']) is True
 
 
 def test_load_data_matches_the_sheets_own_headline_rates():
@@ -341,72 +335,6 @@ def test_weekday_buffer_column_matches_the_setup_tables_buffer_rule():
     result = calculate_weekday_statistics(get_sample_data())
     monday = result[result['Day'] == 'Monday'].iloc[0]
     assert monday['Strategy + 1 pip'] == '50.0%'
-
-
-def _be_trades(rows):
-    return pd.DataFrame(rows, columns=['SL', 'Pullback', 'TP',
-                                       BE_RULE_COLUMN])
-
-
-def test_break_even_checks_the_stop_first():
-    """2026-09-23 #1: checked, but Pullback 4.9 took out the 3.0 stop
-    before the rule could act. A 2 pip buffer lets it survive into it."""
-    trades = _be_trades([(3.0, 4.9, 50.0, True)])
-    wins, bes, losses = break_even_outcomes(trades, rrr=4)
-    assert losses.iloc[0] and not bes.iloc[0]
-    wins, bes, losses = break_even_outcomes(trades, rrr=4, buffer=2)
-    assert bes.iloc[0]
-
-
-def test_break_even_scores_a_checked_trade_as_break_even():
-    trades = _be_trades([(14.0, 10.8, 24.0, True)])
-    wins, bes, losses = break_even_outcomes(trades)
-    assert bes.iloc[0] and not wins.iloc[0]
-
-
-def test_break_even_leaves_a_target_inside_the_trigger_alone():
-    """A 1.9 pip target is hit long before price runs 10 pips, so the
-    checkbox cannot turn it into a break-even trade."""
-    trades = _be_trades([(1.9, 0.5, 12.0, True)])
-    wins, bes, losses = break_even_outcomes(trades)
-    assert wins.iloc[0]
-    wins, bes, losses = break_even_outcomes(trades, rrr=6)
-    assert bes.iloc[0]
-
-
-def test_break_even_saves_an_unchecked_trade_past_the_trigger():
-    """Unchecked, TP 15 > 10: 1:3 on a 6 pip stop (18) is missed, so the
-    stop at entry makes it break-even rather than a loss. At 1:2 (12) it
-    wins."""
-    trades = _be_trades([(6.0, 2.0, 15.0, False)])
-    assert break_even_outcomes(trades, rrr=3)[1].iloc[0]
-    assert break_even_outcomes(trades, rrr=2)[0].iloc[0]
-
-
-def test_break_even_does_not_trigger_at_or_below_ten_pips():
-    trades = _be_trades([(6.0, 2.0, 10.0, False)])
-    wins, bes, losses = break_even_outcomes(trades, rrr=2)
-    assert losses.iloc[0]
-
-
-def test_break_even_puts_every_trade_in_exactly_one_outcome():
-    df = load_data(CSV_PATH)
-    for rrr in RRR_RATIOS:
-        wins, bes, losses = break_even_outcomes(df, rrr=rrr)
-        assert (wins.astype(int) + bes.astype(int)
-                + losses.astype(int) == 1).all()
-
-
-def test_break_even_reads_the_checkbox_as_text_too():
-    trades = _be_trades([(14.0, 1.0, 24.0, 'TRUE'), (14.0, 1.0, 24.0, 'FALSE')])
-    wins, bes, _ = break_even_outcomes(trades)
-    assert list(bes) == [True, False]
-    assert list(wins) == [False, True]
-
-
-def test_break_even_without_the_column_reads_every_trade_unchecked():
-    wins, bes, _ = break_even_outcomes(get_sample_data(), rrr=3)
-    assert not bes[get_sample_data()['TP'] <= BE_RULE_PIPS].any()
 
 
 BUFFERED_TYPES = [f'{t} + 1 pip buffer' for t in TYPE_ORDER]
@@ -749,9 +677,8 @@ def test_buffer_statistics_carry_trend_and_max_sl_after_buffer():
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
     assert list(result.columns) == ['Strategy', 'Buffer', 'Trend', 'Cap SL',
-                                    'BE Rule Applied', 'RRR', 'Trades',
-                                    'Notation', 'Win Rate']
-    keys = ['Strategy', 'Buffer', 'Trend', 'Cap SL', 'RRR', 'BE Rule Applied']
+                                    'RRR', 'Trades', 'Notation', 'Win Rate']
+    keys = ['Strategy', 'Buffer', 'Trend', 'Cap SL', 'RRR']
     assert not result.duplicated(keys).any()
     all_trades = result[result['Strategy'] == 'All Trades']
     assert set(all_trades['Cap SL']) == set(MAX_SL_CAPS)
@@ -760,47 +687,11 @@ def test_buffer_statistics_carry_trend_and_max_sl_after_buffer():
     assert (result[result['Trend'] == 'All']['Trades'] == len(sample)).all()
 
 
-def test_buffer_statistics_run_every_row_with_and_without_the_be_rule():
-    """1:2 and 1:3 test every row both ways; 1:1 runs without the rule."""
-    assert BE_RULE_RRRS == [2, 3]
+def test_buffer_statistics_carry_no_be_rule():
+    """The 30MC export has no BE Rule column, so no row runs under it."""
     result = calculate_buffer_statistics(get_sample_data())
-    keys = ['Strategy', 'Buffer', 'Trend', 'Cap SL']
-    one = result[result['RRR'] == '1:1']
-    assert set(one['BE Rule Applied']) == {False}
-    for rrr in BE_RULE_RRRS:
-        rows = result[result['RRR'] == f'1:{rrr}']
-        off = rows[~rows['BE Rule Applied']]
-        on = rows[rows['BE Rule Applied']]
-        assert len(off) == len(on) == len(one)
-        assert (off[keys].reset_index(drop=True)
-                .equals(on[keys].reset_index(drop=True)))
-        assert on['Notation'].str.contains('BE').all()
-        assert not off['Notation'].str.contains('BE').any()
-
-
-def test_be_rule_row_leaves_break_evens_out_of_the_win_rate():
-    """At 1:3: SL 4 / TP 16 wins (target 12). SL 5 / TP 14 misses its 15
-    target but ran past 10 pips, so the stop at entry makes it break-even.
-    SL 6 is stopped out before anything. 1 win over 1 win + 1 loss."""
-    trades = pd.DataFrame({'SL': [4.0, 5.0, 6.0], 'Pullback': [1.0, 1.0, 6.0],
-                           'TP': [16.0, 14.0, 20.0],
-                           BE_RULE_COLUMN: [False, False, False]})
-    off = _calculate_stats_with_buffer(trades, 'x', 0, 3)
-    on = _calculate_stats_with_buffer(trades, 'x', 0, 3, be_rule=True)
-    assert off['Notation'] == '1W – 2L' and off['Win Rate'] == '33.3%'
-    assert on['Notation'] == '1W – 1BE – 1L' and on['Win Rate'] == '50.0%'
-    assert on['BE Rule Applied'] is True
-
-
-def test_be_rule_row_scores_the_buffered_capped_stop():
-    """2026-09-23 #1: checked, SL 3, Pullback 4.9 - stopped out on its own
-    stop, break-even once a 2 pip buffer lets it survive."""
-    trade = pd.DataFrame({'SL': [3.0], 'Pullback': [4.9], 'TP': [50.0],
-                          BE_RULE_COLUMN: [True]})
-    assert (_calculate_stats_with_buffer(trade, 'x', 0, 3, be_rule=True)
-            ['Notation'] == '0W – 0BE – 1L')
-    assert (_calculate_stats_with_buffer(trade, 'x', 2, 3, be_rule=True)
-            ['Notation'] == '0W – 1BE – 0L')
+    assert 'BE Rule Applied' not in result.columns
+    assert not result['Notation'].str.contains('BE').any()
 
 
 def test_buffer_statistics_trend_keeps_only_its_setups():
@@ -1051,20 +942,12 @@ def test_equity_curve_outcome_matches_the_table_notation():
         assert curve['trades'] == wins + losses == row['Trades']
 
 
-def test_equity_curves_cover_the_be_rule_rows():
-    """Every 1:2 row, BE rule on and off, gets a curve; a BE curve scores a
-    break-even as 0R, so its outcome is W x RRR - L."""
+def test_equity_curves_carry_no_be_rule_rows():
     df = load_data(CSV_PATH)
     curves = {c['label']: c for c in calculate_equity_curves(df, 2)}
     table = calculate_buffer_statistics(df)
     assert len(curves) == len(table[table['RRR'] == '1:2'])
-    row = table[(table['Strategy'] == 'All Trades') & (table['Buffer'] == '+0')
-                & (table['Trend'] == 'All') & (table['Cap SL'] == 0)
-                & (table['RRR'] == '1:2') & table['BE Rule Applied']].iloc[0]
-    wins, evens, losses = (int(v[:-2] if v.endswith('BE') else v[:-1])
-                           for v in row['Notation'].split(' \u2013 '))
-    assert curves['All Trades +0 / BE']['outcome'] == wins * 2 - losses
-    assert 'All Trades +0' in curves
+    assert not any(label.endswith('/ BE') for label in curves)
 
 
 def test_equity_curve_stays_flat_outside_its_trend():

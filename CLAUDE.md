@@ -544,8 +544,9 @@ export. It differs from 30MCR in the data only:
   `load_data` reads that `Pullback` as the stop (`Pullback = SL`), not as a
   clean 0-pip run - otherwise `Half SL`'s limit would score losers as never
   filled. A blank `Pullback` beside a real `TP` still loads as 0.
-- **There is no `BE Rule (10 pips)` column**, so the break-even rule reads
-  every trade as unchecked.
+- **There is no `BE Rule (10 pips)` column**, so the break-even rule is
+  gone: no `break_even_outcomes`, no `BE Rule Applied` column or `/ BE`
+  equity curves. The 1:2 and 1:3 Strategies tables run each row once.
 - **It has no `Setup Analysis`.** Every trade is a Continuation, so the
   table only repeated Default. Weekday leads straight into `SL Range`.
 - **`Scaling` follows `TP`** and is empty so far. The scratch cut drops it
