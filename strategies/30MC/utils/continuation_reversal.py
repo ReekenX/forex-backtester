@@ -650,38 +650,6 @@ def calculate_setup_statistics(df: pd.DataFrame) -> pd.DataFrame:
 # Stop tables
 # ---------------------------------------------------------------------------
 
-# Bands overlap on purpose: 0-10 is the union of 0-5 and 5-10, and each is read
-# on its own. Upper bounds are exclusive, so 10+ picks up whatever 0-10 leaves.
-SL_RANGES = [
-    ("0-5 SL", 0, 5),
-    ("0-10 SL", 0, 10),
-    ("5-10 SL", 5, 10),
-    ("10+ pips", 10, float('inf')),
-]
-
-
-def calculate_sl_statistics(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Per-SL-band Signal and Strategy win rates.
-
-    Reading a band on both tells you whether a stop size is losing trades that
-    were directionally right: a wide Signal-to-Strategy gap in one band is an
-    entry problem inside that band, not a bad band.
-
-    Args:
-        df: DataFrame with trading data
-
-    Returns:
-        DataFrame with columns: SL Range, Trades, then RATE_COLUMNS
-    """
-    groups: List[Tuple[str, pd.DataFrame]] = [('Default', df)]
-    groups.extend(
-        (label, df[(df['SL'] >= low) & (df['SL'] < high)])
-        for label, low, high in SL_RANGES
-    )
-    return _signal_strategy_rows(groups, 'SL Range')
-
-
 # Stop sizes to substitute for every trade's recorded SL.
 SL_FIXED_PIPS = [3, 4, 5, 6, 7, 8, 9, 10]
 

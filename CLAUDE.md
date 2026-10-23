@@ -548,7 +548,9 @@ export. It differs from 30MCR in the data only:
   gone: no `break_even_outcomes`, no `BE Rule Applied` column or `/ BE`
   equity curves. The 1:2 and 1:3 Strategies tables run each row once.
 - **It has no `Setup Analysis`.** Every trade is a Continuation, so the
-  table only repeated Default. Weekday leads straight into `SL Range`.
+  table only repeated Default.
+- **It has no `SL Range Analysis`.** Every stop is 5 pips, so every trade sat
+  in one band. Weekday leads straight into `Fixed SL`.
 - **It has no `Cap SL Analysis`.** With every stop at 5 pips a cap only
   repeats `Fixed SL`. The Strategies tables keep their `Cap SL` column.
 - **It has no `Pullback Analysis`.** `calculate_pullback_statistics` and

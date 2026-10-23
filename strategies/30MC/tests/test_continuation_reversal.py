@@ -20,7 +20,6 @@ from utils.continuation_reversal import (  # noqa: E402
     RRR_RATIOS,
     SETUP_ORDER,
     SL_FIXED_PIPS,
-    SL_RANGES,
     TP_RANGES,
     TYPE_BUFFER_PIPS,
     TYPE_ORDER,
@@ -36,7 +35,6 @@ from utils.continuation_reversal import (  # noqa: E402
     calculate_r_counts,
     calculate_setup_statistics,
     calculate_sl_fixed_statistics,
-    calculate_sl_statistics,
     calculate_streak_statistics,
     calculate_tp_pip_counts,
     calculate_tp_statistics,
@@ -263,7 +261,6 @@ def test_chart_has_a_legend_breakeven_and_tooltips():
 
 def test_chart_draws_every_row_of_any_signal_strategy_table():
     for stats in (calculate_setup_statistics(get_sample_data()),
-                  calculate_sl_statistics(get_sample_data()),
                   calculate_sl_fixed_statistics(get_sample_data())):
         html = create_signal_strategy_chart(stats)
         assert html.count('class="wr-row"') == len(stats)
@@ -356,8 +353,7 @@ def test_setup_buffer_column_pads_the_stop_for_strategy_only():
 
 def test_every_rate_table_carries_the_three_readings():
     sample = get_sample_data()
-    for fn in (calculate_weekday_statistics, calculate_setup_statistics,
-               calculate_sl_statistics):
+    for fn in (calculate_weekday_statistics, calculate_setup_statistics):
         result = fn(sample)
         assert list(result.columns)[2:] == RATE_COLUMNS, fn.__name__
         for col in RATE_COLUMNS:
@@ -384,19 +380,6 @@ def test_grouping_tables_handle_an_empty_dataset():
 
 # --- stop tables -----------------------------------------------------------
 
-def test_sl_statistics_lists_every_band():
-    result = calculate_sl_statistics(get_sample_data())
-    assert list(result['SL Range']) == ['Default'] + [n for n, _, _ in SL_RANGES]
-    assert list(result.columns) == ['SL Range', 'Trades'] + RATE_COLUMNS
-
-
-def test_sl_bands_overlap_on_purpose():
-    """0-10 is the union of 0-5 and 5-10, and each is read on its own."""
-    result = calculate_sl_statistics(get_sample_data()).set_index('SL Range')
-    assert (result.loc['0-5 SL', 'Trades'] + result.loc['5-10 SL', 'Trades']
-            == result.loc['0-10 SL', 'Trades'])
-
-
 def test_sl_fixed_statistics_reports_signal_and_strategy():
     result = calculate_sl_fixed_statistics(get_sample_data())
     assert list(result.columns) == ['Fixed SL', 'Trades', 'Signal', 'Strategy']
@@ -410,23 +393,15 @@ def test_fixed_sl_signal_repeats_down_the_table():
     assert result['Signal'].nunique() == 1
 
 
-def test_every_stop_table_opens_with_the_same_default_row():
-    """SL Range and Fixed SL both start from the recorded stops, so their
-    Default rows must agree - one shared win rule."""
+def test_fixed_sl_default_row_keeps_the_recorded_stops():
+    """Fixed SL's Default row scores the recorded stops - the same as the
+    Default row of every other table."""
     sample = get_sample_data()
-    tables = {
-        'SL Range': (calculate_sl_statistics(sample), 'SL Range'),
-        'Fixed SL': (calculate_sl_fixed_statistics(sample), 'Fixed SL'),
-    }
-
-    seen = {}
-    for name, (result, column) in tables.items():
-        first = result.iloc[0]
-        assert first[column] == 'Default', f'{name} does not open with Default'
-        seen[name] = (first['Trades'], first['Strategy'])
-
-    assert len(set(seen.values())) == 1, f'Default rows disagree: {seen}'
-    assert seen['SL Range'][0] == len(sample)
+    fixed = calculate_sl_fixed_statistics(sample).iloc[0]
+    setup = calculate_setup_statistics(sample).iloc[0]
+    assert fixed['Fixed SL'] == 'Default'
+    assert (fixed['Trades'], fixed['Strategy']) == (len(sample),
+                                                    setup['Strategy'])
 
 
 # --- TP distribution -----------------------------------------------------
@@ -622,10 +597,10 @@ def test_create_html_table_pins_the_first_column_width():
 
 def test_create_sortable_table_can_refuse_to_sort():
     """Row order carries meaning in the stop tables, so they opt out."""
-    stats = calculate_sl_statistics(get_sample_data())
+    stats = calculate_weekday_statistics(get_sample_data())
     assert 'class="sortable"' not in create_sortable_table(
-        stats, 'sl-range-table', sortable=False)
-    assert 'class="sortable"' in create_sortable_table(stats, 'sl-range-table')
+        stats, 'weekday-table', sortable=False)
+    assert 'class="sortable"' in create_sortable_table(stats, 'weekday-table')
 
 
 def test_tables_render_no_data_when_empty():
@@ -801,7 +776,7 @@ def test_half_sl_lists_every_entry_at_every_rrr():
 
 def test_half_sl_default_row_matches_the_other_stop_tables():
     default = _half_sl(1).loc['Default']
-    sl_default = calculate_sl_statistics(get_sample_data()).iloc[0]
+    sl_default = calculate_setup_statistics(get_sample_data()).iloc[0]
     wins, missed, losses = default['Notation'].split(' - ')
     assert missed == '0M'
     assert int(wins[:-1]) + int(losses[:-1]) == sl_default['Trades']

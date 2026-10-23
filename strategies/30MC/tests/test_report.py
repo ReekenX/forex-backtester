@@ -357,11 +357,11 @@ def test_render_error_then_recover(tmp_path):
 # --- section order and table conventions ----------------------------------
 
 def test_weekday_leads_the_page_straight_into_the_stop_tables():
-    """Every 30MC trade is a Continuation, so there is no Setup table to
-    split them - Weekday is followed by the stop tables."""
+    """Every 30MC trade is a Continuation and every stop is 5 pips, so there
+    is no Setup or SL Range table - Weekday is followed by Fixed SL."""
     anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
-    assert anchors[:2] == ['weekday', 'sl-range']
-    assert 'setup' not in anchors
+    assert anchors[:2] == ['weekday', 'sl-fixed']
+    assert 'setup' not in anchors and 'sl-range' not in anchors
 
 
 def test_nav_order_matches_the_sections():
@@ -379,7 +379,7 @@ def _section_html(anchor, df=None):
 
 
 def test_every_section_up_to_max_sl_puts_a_chart_below_its_table():
-    for anchor in ('weekday', 'sl-range', 'sl-fixed'):
+    for anchor in ('weekday', 'sl-fixed'):
         html = _section_html(anchor)
         assert html.count('class="wr-chart"') == 1, anchor
         assert html.index('<table') < html.index('class="wr-chart"'), anchor
@@ -418,7 +418,7 @@ def test_every_table_pins_its_first_column_to_30_percent():
 
 
 def test_grouping_tables_carry_both_readings():
-    for anchor in ('weekday', 'sl-range', 'sl-fixed'):
+    for anchor in ('weekday', 'sl-fixed'):
         html = _section_html(anchor)
         assert '>Signal<' in html or 'Signal ↓' in html, anchor
         assert '>Strategy<' in html or 'Strategy ↓' in html, anchor
@@ -432,13 +432,9 @@ def test_tp_range_keeps_neither_win_rate_column():
     assert '>Strategy<' not in html
 
 
-def test_stop_tables_are_not_sortable_but_others_are():
-    """Row order carries meaning in SL Range.
-    Fixed SL is the exception - its rows are stop sizes to compare."""
-    for anchor in ('sl-range',):
-        assert 'class="sortable"' not in _section_html(anchor), anchor
-    for anchor in ('sl-fixed',):
-        assert 'class="sortable"' in _section_html(anchor), anchor
+def test_fixed_sl_is_sortable():
+    """Its rows are stop sizes to compare."""
+    assert 'class="sortable"' in _section_html('sl-fixed')
 
 
 def test_strategies_split_one_table_per_rrr():

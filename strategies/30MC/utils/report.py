@@ -32,7 +32,6 @@ from utils.continuation_reversal import (
     calculate_buffer_statistics,
     calculate_equity_curves,
     calculate_sl_fixed_statistics,
-    calculate_sl_statistics,
     calculate_half_sl_statistics,
     calculate_streak_statistics,
     calculate_tp_statistics,
@@ -99,11 +98,6 @@ def _rate_table(stats: pd.DataFrame, table_id: str,
 
 def _weekday_section(df: pd.DataFrame) -> str:
     return _rate_table(calculate_weekday_statistics(df), "weekday-table",
-                       sortable=False)
-
-
-def _sl_section(df: pd.DataFrame) -> str:
-    return _rate_table(calculate_sl_statistics(df), "sl-range-table",
                        sortable=False)
 
 
@@ -194,14 +188,6 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "Weekday Analysis",
         RATE_COLUMNS_NOTE,
         _weekday_section,
-    ),
-    (
-        "sl-range",
-        "SL Range",
-        "SL Range Analysis",
-        "Win rates per safe-stop band, under the same three readings as the "
-        "weekday table.",
-        _sl_section,
     ),
     (
         "sl-fixed",
