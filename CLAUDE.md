@@ -555,6 +555,8 @@ export. It differs from 30MCR in the data only:
   `create_pullback_chart` are gone; `Half SL` keeps its own limit scoring.
 - **It has no `Adding Buffer`.** `calculate_sl_buffer_statistics` is gone;
   the `+ 1 pip` columns and the Strategies `Buffer` column still pad the stop.
+- **`Streaks` lists `Default` and `Continuation` only** - no `Reversal`
+  row and no `+ 1 pip buffer` rows.
 - **`Scaling` follows `TP`** and is empty so far. The scratch cut drops it
   with the sheet's `Signal` / `WR` columns, which the Default row matches
   (68.5% / 49.3%).

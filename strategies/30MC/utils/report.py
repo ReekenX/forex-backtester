@@ -238,12 +238,8 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "Longest unbroken runs of winners and losers at 1:1, read in date "
         "order (win = Pullback &lt; SL AND TP &gt;= SL, so a stopped-out "
         "trade breaks a winning run). Each cell gives the run's length and "
-        "the dates of its first and last trade. <b>Continuation</b> and "
-        "<b>Reversal</b> run through only their own trades, so a loss in one "
-        "type does not break the other's streak - the sequence trading that "
-        "type alone would have produced. <b>+ 1 pip buffer</b> rows repeat "
-        "each type with the stop padded by a pip (win = Pullback &lt; SL + 1 "
-        "AND TP &gt;= SL + 1).",
+        "the dates of its first and last trade. <b>Continuation</b> runs "
+        "through only its own trades.",
         _streaks_section,
     ),
     (

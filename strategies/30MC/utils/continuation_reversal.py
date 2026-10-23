@@ -624,11 +624,6 @@ def _ordered_labels(values: pd.Series, preferred: List[str]) -> List[str]:
     return [label for label in preferred if label in present] + extras
 
 
-def _type_buffer_label(label: str) -> str:
-    """'Continuation' -> 'Continuation + 1 pip buffer'."""
-    return f"{label} + {_pip_label(TYPE_BUFFER_PIPS)} buffer"
-
-
 def calculate_setup_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Signal and Strategy win rates for Continuation against Reversal.
@@ -939,16 +934,15 @@ def _longest_run(won: pd.Series, dates: pd.Series, value: bool) -> str:
 
 def calculate_streak_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Longest winning and losing runs at 1:1, for every trade and for each type.
+    Longest winning and losing runs at 1:1, for every trade and for
+    Continuation trades.
 
     A trade is a win under the family's rule - Pullback < SL AND TP >= SL -
     and anything else breaks a winning run, so the stopped-out
     winner-that-wasn't counts as a loss here. Trades are read in date order;
-    the export's own order breaks ties within a day. The Continuation and
-    Reversal rows run through only their own trades, so a loss in one type
-    does not break the other type's streak - that is what trading one type
-    alone would have felt like. Each type then repeats as "<type> + 1 pip
-    buffer", its runs scored on SL + TYPE_BUFFER_PIPS.
+    the export's own order breaks ties within a day. The Continuation row runs
+    through only its own trades. Every 30MC trade is a Continuation, so there
+    is no Reversal row.
 
     Args:
         df: DataFrame with trading data, including a Type column
@@ -957,18 +951,14 @@ def calculate_streak_statistics(df: pd.DataFrame) -> pd.DataFrame:
         DataFrame with columns: Trend, Trades, Longest Wins, Longest Losses
     """
     ordered = df.sort_values('Date', kind='stable') if len(df) else df
-    groups: List[Tuple[str, pd.Series, float]] = [
-        ('Default', pd.Series(True, index=ordered.index), 0)]
-    groups.extend((label, ordered['Type'] == label, 0) for label in TYPE_ORDER)
-    groups.extend(
-        (_type_buffer_label(label), ordered['Type'] == label, TYPE_BUFFER_PIPS)
-        for label in TYPE_ORDER
-    )
+    groups: List[Tuple[str, pd.Series]] = [
+        ('Default', pd.Series(True, index=ordered.index)),
+        ('Continuation', ordered['Type'] == 'Continuation'),
+    ]
 
+    won = (ordered['Pullback'] < ordered['SL']) & (ordered['TP'] >= ordered['SL'])
     results = []
-    for label, mask, buffer in groups:
-        effective_sl = ordered['SL'] + buffer
-        won = (ordered['Pullback'] < effective_sl) & (ordered['TP'] >= effective_sl)
+    for label, mask in groups:
         results.append({
             'Trend': label,
             'Trades': int(mask.sum()),

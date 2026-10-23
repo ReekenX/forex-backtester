@@ -316,9 +316,6 @@ def test_weekday_buffer_column_matches_the_setup_tables_buffer_rule():
     assert monday['Strategy + 1 pip'] == '50.0%'
 
 
-BUFFERED_TYPES = [f'{t} + 1 pip buffer' for t in TYPE_ORDER]
-
-
 def test_setup_statistics_lists_default_then_types_only():
     """Every trade, then Continuation and Reversal - no per-level setup rows,
     as the level alone says nothing, and no buffered rows, as the Strategy +
@@ -640,32 +637,14 @@ def test_tables_render_no_data_when_empty():
 # Streaks
 # ---------------------------------------------------------------------------
 
-def test_streak_statistics_lists_default_then_types():
+def test_streak_statistics_lists_default_then_continuation():
+    """No Reversal row and no + 1 pip buffer rows."""
     result = calculate_streak_statistics(get_sample_data())
-    assert list(result['Trend']) == ['Default'] + TYPE_ORDER + BUFFERED_TYPES
+    assert list(result['Trend']) == ['Default', 'Continuation']
     assert list(result.columns) == [
         'Trend', 'Trades', 'Longest Wins', 'Longest Losses']
     assert result.iloc[0]['Trades'] == 10
-    assert result.set_index('Trend').loc[TYPE_ORDER, 'Trades'].sum() == 10
-    assert result.set_index('Trend').loc[BUFFERED_TYPES, 'Trades'].sum() == 10
-
-
-def test_streak_buffer_rows_score_runs_on_the_padded_stop():
-    """Two Continuation trades with SL 5: the first pulls back exactly 5 and
-    is stopped at SL but survives SL + 1; the second wins either way. The
-    buffer turns a 1-win run into a 2-win run."""
-    df = pd.DataFrame({
-        'Date': ['2025-02-03', '2025-02-04'],
-        'Type': ['Continuation'] * 2,
-        'SL': [5.0] * 2,
-        'Pullback': [5.0, 1.0],
-        'TP': [10.0, 10.0],
-    })
-    result = calculate_streak_statistics(df).set_index('Trend')
-    assert result.loc['Continuation', 'Longest Wins'] == '1 (2025-02-04 - 2025-02-04)'
-    assert (result.loc['Continuation + 1 pip buffer', 'Longest Wins']
-            == '2 (2025-02-03 - 2025-02-04)')
-    assert result.loc['Continuation + 1 pip buffer', 'Longest Losses'] == '0'
+    assert result.iloc[1]['Trades'] == 5
 
 
 def test_streak_statistics_uses_the_strategy_win_rule():
@@ -690,9 +669,6 @@ def test_streak_statistics_counts_longest_runs_with_their_dates():
     assert result.loc['Default', 'Longest Wins'] == '3 (2025-02-03 - 2025-02-04)'
     assert result.loc['Default', 'Longest Losses'] == '2 (2025-02-05 - 2025-02-05)'
     assert result.loc['Continuation', 'Longest Wins'] == '3 (2025-02-03 - 2025-02-04)'
-    assert result.loc['Reversal', 'Trades'] == 0
-    assert result.loc['Reversal', 'Longest Wins'] == '0'
-    assert result.loc['Reversal', 'Longest Losses'] == '0'
 
 
 def test_streak_statistics_reads_trades_in_date_order():
@@ -722,13 +698,12 @@ def test_streak_statistics_type_rows_skip_the_other_type():
     assert result.loc['Default', 'Longest Wins'].startswith('1 (')
     assert result.loc['Continuation', 'Longest Wins'] == '2 (2025-02-03 - 2025-02-05)'
     assert result.loc['Continuation', 'Longest Losses'] == '0'
-    assert result.loc['Reversal', 'Longest Losses'] == '1 (2025-02-04 - 2025-02-04)'
 
 
 def test_streak_statistics_empty_dataset():
     result = calculate_streak_statistics(get_empty_data())
-    assert list(result['Trend']) == ['Default'] + TYPE_ORDER + BUFFERED_TYPES
-    assert list(result['Trades']) == [0] * 5
+    assert list(result['Trend']) == ['Default', 'Continuation']
+    assert list(result['Trades']) == [0] * 2
     assert set(result['Longest Wins']) == {'0'}
     assert set(result['Longest Losses']) == {'0'}
 
