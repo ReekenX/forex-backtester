@@ -146,7 +146,7 @@ def _sort_by_win_rate(stats: pd.DataFrame) -> pd.DataFrame:
 
 # The Strategies tables' short columns, kept narrow so the label gets room.
 STRATEGIES_COLUMN_WIDTHS = {
-    "Buffer": "6%", "Trend": "11%", "Cap SL": "6%",
+    "Trend": "11%", "Cap SL": "6%",
     "Trades": "6%", "Notation": "16%", "Win Rate": "10%",
 }
 
@@ -172,12 +172,12 @@ def _strategies_section_for(rrr: int) -> Callable[[pd.DataFrame], str]:
 
 
 RATE_COLUMNS_NOTE = (
-    "Three 1:1 win rates per row, on that row's stop. <b>Signal</b> = TP &gt; "
+    "Two 1:1 win rates per row, on that row's stop. <b>Signal</b> = TP &gt; "
     "0: the idea was right, stop ignored, so it repeats wherever only the "
     "stop changes. <b>Strategy</b> = Pullback &lt; SL AND TP &gt;= the 1R "
-    "target: what trading it would have returned. <b>Strategy + 1 pip</b> "
-    "pads the stop by a pip. Targets include commissions - 1R on a 5-pip "
-    "stop is 5.8 pips. Green is above the 50% breakeven, red below."
+    "target: what trading it would have returned. Targets include "
+    "commissions - 1R on a 5-pip stop is 5.8 pips. Green is above the 50% "
+    "breakeven, red below."
 )
 
 # (anchor, nav label, heading, note, builder) - the 15C page's section order,
@@ -255,10 +255,9 @@ SECTIONS.extend(
         f"strategies-1-{rrr}",
         f"Strategies 1:{rrr}",
         f"Strategies (1:{rrr} RRR)",
-        "All Trades / Fixed SL across SL buffers and setup trends "
-        "(<b>Continuation</b> or <b>Reversal</b> keeps only those setups). "
-        "<b>Cap SL</b> caps the stop after the buffer: min(SL + buffer, cap), "
-        "0 = no cap. "
+        "All Trades / Fixed SL across setup trends (<b>Continuation</b> or "
+        "<b>Reversal</b> keeps only those setups). <b>Cap SL</b> caps the "
+        "stop: min(SL, cap), 0 = no cap. "
         f"Ranked by win rate. Breakeven at 1:{rrr} is {100 / (1 + rrr):.1f}%. "
         "The chart under the table walks every row trade by trade in date "
         "order and plots its cumulative R.",
@@ -288,7 +287,7 @@ def _summary_cards(df: pd.DataFrame) -> List[Tuple[str, str, str]]:
     if df.empty:
         return [("Trades", "0", "neutral")]
 
-    baseline = _calculate_stats_with_buffer(df, "All Trades", 0, 1)
+    baseline = _calculate_stats_with_buffer(df, "All Trades", 1)
     win_rate = float(baseline["Win Rate"].rstrip("%"))
     dates = df["Date"].astype(str)
     # Signal: the idea was right and price reached a target, whatever the
@@ -307,7 +306,7 @@ def _summary_cards(df: pd.DataFrame) -> List[Tuple[str, str, str]]:
             "positive" if signal_rate >= 50 else "negative",
         ),
         (
-            "Win rate (1:1, no buffer)",
+            "Win rate (1:1)",
             baseline["Win Rate"],
             "positive" if win_rate >= 50 else "negative",
         ),

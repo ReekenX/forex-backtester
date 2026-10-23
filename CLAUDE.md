@@ -591,8 +591,11 @@ export. It differs from 30MCR in the data only:
   repeats `Fixed SL`. The Strategies tables keep their `Cap SL` column.
 - **It has no `Pullback Analysis`.** `calculate_pullback_statistics` and
   `create_pullback_chart` are gone; `Half SL` keeps its own limit scoring.
-- **It has no `Adding Buffer`.** `calculate_sl_buffer_statistics` is gone;
-  the `+ 1 pip` columns and the Strategies `Buffer` column still pad the stop.
+- **It has no `Adding Buffer` and no 1 pip buffer anywhere.** A buffer does
+  not apply to this strategy: there is no `Strategy + 1 pip` column on any
+  table or chart (`RATE_COLUMNS` is `Signal, Strategy`), and the Strategies
+  tables have no `Buffer` column - `Cap SL` caps the recorded stop,
+  `min(SL, cap)`.
 - **`Streaks` lists `Default` and `Continuation` only** - no `Reversal`
   row and no `+ 1 pip buffer` rows.
 - **Every RRR target is commission-adjusted** - see "Commission-Adjusted

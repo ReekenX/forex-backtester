@@ -153,7 +153,7 @@ def test_summary_win_rate_excludes_stopped_out_trade():
     so four of the six are 1:1 winners."""
     cards = dict((label, value) for label, value, _ in _summary_cards(get_sample_data()))
     assert cards['Notation'] == '4W – 2L'
-    assert cards['Win rate (1:1, no buffer)'] == '66.7%'
+    assert cards['Win rate (1:1)'] == '66.7%'
 
 
 def test_summary_signal_ignores_the_stop():
@@ -176,14 +176,14 @@ def test_summary_win_rate_tone_flips_at_50_percent():
     losing = get_sample_data().copy()
     losing['TP'] = 0.0
     tones = {label: tone for label, _, tone in _summary_cards(losing)}
-    assert tones['Win rate (1:1, no buffer)'] == 'negative'
+    assert tones['Win rate (1:1)'] == 'negative'
     tones = {label: tone for label, _, tone in _summary_cards(get_sample_data())}
-    assert tones['Win rate (1:1, no buffer)'] == 'positive'
+    assert tones['Win rate (1:1)'] == 'positive'
 
 
 def test_summary_cards_put_signal_between_notation_and_win_rate():
     labels = [label for label, _, _ in _summary_cards(get_sample_data())]
-    assert labels[-3:] == ['Notation', 'Signal (TP > 0)', 'Win rate (1:1, no buffer)']
+    assert labels[-3:] == ['Notation', 'Signal (TP > 0)', 'Win rate (1:1)']
 
 
 def test_summary_cards_empty_dataset():
@@ -460,8 +460,7 @@ def test_strategies_tables_carry_no_rrr_column():
 
 
 def test_strategies_tables_name_the_cap_column_cap_sl():
-    """Cap SL, not Max SL: the column caps the stop at min(SL + buffer,
-    cap)."""
+    """Cap SL, not Max SL: the column caps the stop at min(SL, cap)."""
     for rrr in RRR_RATIOS:
         html = _section_html(f'strategies-1-{rrr}')
         table = html[html.index('<table'):html.index('</table>')]
@@ -482,7 +481,8 @@ def test_strategies_tables_carry_no_be_rule():
 
 def test_strategies_tables_narrow_their_short_columns():
     html = _section_html('strategies-1-3')
-    assert 'style="width: 6%;">Buffer<' in html
+    assert '>Buffer<' not in html
+    assert 'style="width: 11%;">Trend<' in html
     assert 'style="width: 16%;">Notation<' in html
 
 

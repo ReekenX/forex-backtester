@@ -16,14 +16,12 @@ from utils.continuation_reversal import (  # noqa: E402
     MAPPED_SL_PIPS,
     RATE_COLUMNS,
     RRR_TARGET_TICKS,
-    BUFFER_PIPS,
     MAX_SL_CAPS,
     TREND_FILTERS,
     RRR_RATIOS,
     SETUP_ORDER,
     SL_FIXED_PIPS,
     TP_RANGES,
-    TYPE_BUFFER_PIPS,
     TYPE_ORDER,
     WEEKDAY_ORDER,
     _calculate_stats_with_buffer,
@@ -274,7 +272,7 @@ def test_chart_bars_follow_the_table_cells():
         calculate_weekday_statistics(get_sample_data()))
     for day in WEEKDAY_ORDER:
         assert f'{day}<span class="wr-count">' in html
-    assert html.count('class="wr-bar"') == 3 * len(WEEKDAY_ORDER)
+    assert html.count('class="wr-bar"') == 2 * len(WEEKDAY_ORDER)
     assert 'width: 75.0%' in html and 'width: 50.0%' in html
 
 
@@ -290,9 +288,8 @@ def test_chart_has_a_legend_breakeven_and_tooltips():
     html = create_signal_strategy_chart(
         calculate_weekday_statistics(get_sample_data()))
     assert '>Signal</span>' in html and '>Strategy</span>' in html
-    assert '>Strategy + 1 pip</span>' in html
+    assert 'Strategy + 1 pip' not in html
     assert 'class="wr-breakeven" style="left: 50%;"' in html
-    assert 'title="Monday - Strategy + 1 pip: 50.0%"' in html
     assert 'title="Monday - Strategy: 50.0%"' in html
 
 
@@ -313,8 +310,7 @@ def test_chart_handles_an_empty_table():
 def test_weekday_statistics_has_a_row_per_weekday():
     result = calculate_weekday_statistics(get_sample_data())
     assert list(result['Day']) == WEEKDAY_ORDER
-    assert list(result.columns) == ['Day', 'Trades', 'Signal', 'Strategy',
-                                    'Strategy + 1 pip']
+    assert list(result.columns) == ['Day', 'Trades', 'Signal', 'Strategy']
 
 
 def test_weekday_statistics_counts_trades_per_day():
@@ -342,18 +338,9 @@ def test_weekday_statistics_carries_only_win_rates():
         assert result[col].str.fullmatch(r'\d+\.\d%').all(), col
 
 
-def test_weekday_buffer_column_matches_the_setup_tables_buffer_rule():
-    """Monday at SL + 1: rows 1 and 4 survive and reach (TP 16 >= 5,
-    25 >= 8), row 2 still fails (6 >= 6), row 3 never reached a target."""
-    result = calculate_weekday_statistics(get_sample_data())
-    monday = result[result['Day'] == 'Monday'].iloc[0]
-    assert monday['Strategy + 1 pip'] == '50.0%'
-
-
 def test_setup_statistics_lists_default_then_types_only():
     """Every trade, then Continuation and Reversal - no per-level setup rows,
-    as the level alone says nothing, and no buffered rows, as the Strategy +
-    1 pip column carries them."""
+    as the level alone says nothing."""
     result = calculate_setup_statistics(get_sample_data())
     assert list(result['Setup']) == ['Default'] + TYPE_ORDER
     assert result.iloc[0]['Trades'] == 10
@@ -376,20 +363,24 @@ def test_setup_statistics_keeps_an_unlisted_type():
     assert labels == ['Default'] + TYPE_ORDER + ['Sweep']
 
 
-def test_setup_buffer_column_pads_the_stop_for_strategy_only():
-    """Continuation is sample rows 1, 3, 5, 8, 9 - Strategy wins 1, 5, 9.
-    At SL + 1 row 5 drops out: TP 4 clears the 3.8 pip 1R of a 3-pip stop,
-    not the 4.8 of a 4-pip one. Reversal is rows 2, 4, 6,
-    7, 10 - wins 4, 7, 10 - and SL + 1 rescues none and drops none."""
-    assert TYPE_BUFFER_PIPS == 1
+def test_setup_type_rows_score_their_own_trades():
+    """Continuation is sample rows 1, 3, 5, 8, 9 - Strategy wins 1, 5 and 9
+    (row 5's TP 4 clears the 3.8 pip 1R of its 3-pip stop). Reversal is rows
+    2, 4, 6, 7, 10 - wins 4, 7, 10."""
     result = calculate_setup_statistics(get_sample_data()).set_index('Setup')
     assert result.loc['Continuation', 'Strategy'] == '60.0%'
-    assert result.loc['Continuation', 'Strategy + 1 pip'] == '40.0%'
-    assert (result.loc['Reversal', 'Strategy + 1 pip']
-            == result.loc['Reversal', 'Strategy'])
+    assert result.loc['Reversal', 'Strategy'] == '60.0%'
 
 
-def test_every_rate_table_carries_the_three_readings():
+def test_rate_tables_carry_no_one_pip_column():
+    """A 1 pip buffer does not apply to this strategy."""
+    assert RATE_COLUMNS == ['Signal', 'Strategy']
+    for fn in (calculate_weekday_statistics, calculate_setup_statistics,
+               calculate_sl_fixed_statistics):
+        assert 'Strategy + 1 pip' not in fn(get_sample_data()).columns
+
+
+def test_every_rate_table_carries_both_readings():
     sample = get_sample_data()
     for fn in (calculate_weekday_statistics, calculate_setup_statistics):
         result = fn(sample)
@@ -398,14 +389,10 @@ def test_every_rate_table_carries_the_three_readings():
             assert result[col].str.fullmatch(r'\d+\.\d%').all(), fn.__name__
 
 
-def test_fixed_sl_has_no_buffer_column():
-    """A fixed stop padded by a pip is the next fixed size - the row below -
-    so the column would only repeat it. Its chart draws two bars a row."""
+def test_fixed_sl_chart_draws_two_bars_a_row():
     result = calculate_sl_fixed_statistics(get_sample_data())
-    assert 'Strategy + 1 pip' not in result.columns
     html = create_signal_strategy_chart(result)
     assert html.count('class="wr-bar"') == 2 * len(result)
-    assert '>Strategy + 1 pip</span>' not in html
 
 
 def test_grouping_tables_handle_an_empty_dataset():
@@ -499,18 +486,17 @@ def test_get_buffer_strategies_covers_all_trades_and_fixed_sl():
 def test_buffer_statistics_scores_every_rrr():
     result = calculate_buffer_statistics(get_sample_data(), ['All Trades'])
     assert set(result['RRR']) == {f'1:{r}' for r in RRR_RATIOS}
-    assert set(result['Buffer']) == {f'+{b}' for b in BUFFER_PIPS}
-    assert BUFFER_PIPS == [0, 1]
+    assert 'Buffer' not in result.columns
 
 
-def test_buffer_statistics_carry_trend_and_max_sl_after_buffer():
-    """Each strategy, buffer, trend, cap and RRR appears once, and All covers
-    the whole sample - a cap changes the stop, never the trades taken."""
+def test_buffer_statistics_carry_trend_and_max_sl():
+    """Each strategy, trend, cap and RRR appears once, and All covers the
+    whole sample - a cap changes the stop, never the trades taken."""
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
-    assert list(result.columns) == ['Strategy', 'Buffer', 'Trend', 'Cap SL',
+    assert list(result.columns) == ['Strategy', 'Trend', 'Cap SL',
                                     'RRR', 'Trades', 'Notation', 'Win Rate']
-    keys = ['Strategy', 'Buffer', 'Trend', 'Cap SL', 'RRR']
+    keys = ['Strategy', 'Trend', 'Cap SL', 'RRR']
     assert not result.duplicated(keys).any()
     all_trades = result[result['Strategy'] == 'All Trades']
     assert set(all_trades['Cap SL']) == set(MAX_SL_CAPS)
@@ -530,58 +516,52 @@ def test_buffer_statistics_trend_keeps_only_its_setups():
     """Reversal is High Reversal + Low Reversal: rows 2, 4, 6, 7, 10. Of
     those, 4, 7 and 10 survive their stop and reach their 1R target."""
     result = calculate_buffer_statistics(get_sample_data(), ['All Trades'])
-    row = result[(result['Trend'] == 'Reversal') & (result['Buffer'] == '+0')
+    row = result[(result['Trend'] == 'Reversal')
                  & (result['RRR'] == '1:1')].iloc[0]
     assert row['Trades'] == 5
     assert row['Notation'] == '3W – 2L'
     cont = result[(result['Trend'] == 'Continuation')
-                  & (result['Buffer'] == '+0') & (result['RRR'] == '1:1')]
+                  & (result['RRR'] == '1:1')]
     assert cont.iloc[0]['Trades'] == 5
     assert cont.iloc[0]['Notation'] == '3W – 2L'
 
 
-def test_fixed_sl_strategies_run_without_a_buffer_or_cap():
-    """A buffer or a cap would only turn a fixed stop into another size."""
+def test_fixed_sl_strategies_run_without_a_cap():
+    """A cap would only turn a fixed stop into another size."""
     names = [n for n, _ in get_buffer_strategies() if n != 'All Trades']
     result = calculate_buffer_statistics(get_sample_data(), names)
-    assert set(result['Buffer']) == {'+0'}
     assert set(result['Cap SL']) == {0}
 
 
-def test_max_sl_caps_the_buffered_stop():
-    """SL 3 + 1 under a 5 pip cap is 4; SL 5 + 1 is capped back to 5."""
-    trades = get_sample_data().iloc[0:2].copy()
-    trades['SL'] = [3.0, 5.0]
-    trades['Pullback'] = [3.5, 4.5]
-    trades['TP'] = [5.0, 6.0]
-    first, second = trades.iloc[0:1], trades.iloc[1:2]
+def test_max_sl_caps_only_wider_stops():
+    """SL 6, Pullback 4.5, TP 6: uncapped it needs the 6.9 pip 1R of a 6-pip
+    stop and loses; capped at 5 it survives 4.5 and needs only 5.8. A cap
+    wider than the stop changes nothing. SL 3 sits inside the cap."""
+    wide = get_sample_data().iloc[0:1].assign(SL=6.0, Pullback=4.5, TP=6.0)
+    tight = get_sample_data().iloc[0:1].assign(SL=3.0, Pullback=1.0, TP=4.0)
 
     def notation(one, max_sl=0):
-        return _calculate_stats_with_buffer(one, 'x', 1, 1,
+        return _calculate_stats_with_buffer(one, 'x', 1,
                                             max_sl=max_sl)['Notation']
 
-    # SL 3 + 1 = 4 is inside the cap: Pullback 3.5 survives, TP 5 reaches the
-    # 4.8 pip 1R. Had the cap been applied as 5, it would need 5.8.
-    assert notation(first, max_sl=5) == '1W – 0L'
-    # SL 5 + 1 = 6 survives 4.5 but needs TP 6.9; capped to 5 it needs 5.8.
-    assert notation(second) == '0W – 1L'
-    assert notation(second, max_sl=5) == '1W – 0L'
-    # A cap wider than the buffered stop changes nothing.
-    assert notation(second, max_sl=9) == '0W – 1L'
+    assert notation(wide) == '0W – 1L'
+    assert notation(wide, max_sl=5) == '1W – 0L'
+    assert notation(wide, max_sl=7) == '0W – 1L'
+    assert notation(tight) == notation(tight, max_sl=5) == '1W – 0L'
 
 
 def test_calculate_stats_with_buffer_applies_the_rrr_target():
     """Row 1: SL 4, TP 16 - past the 13.7 pip 1:3 target, short of the 18.2
     of 1:4. A TP landing exactly on the target wins, so the rule is >=."""
     one = get_sample_data().iloc[0:1]
-    assert _calculate_stats_with_buffer(one, 'x', 0, 3)['Notation'] == '1W – 0L'
-    assert _calculate_stats_with_buffer(one, 'x', 0, 4)['Notation'] == '0W – 1L'
+    assert _calculate_stats_with_buffer(one, 'x', 3)['Notation'] == '1W – 0L'
+    assert _calculate_stats_with_buffer(one, 'x', 4)['Notation'] == '0W – 1L'
     exact = one.assign(TP=13.7)
-    assert _calculate_stats_with_buffer(exact, 'x', 0, 3)['Notation'] == '1W – 0L'
+    assert _calculate_stats_with_buffer(exact, 'x', 3)['Notation'] == '1W – 0L'
 
 
 def test_calculate_stats_with_buffer_handles_no_trades():
-    stats = _calculate_stats_with_buffer(get_empty_data(), 'x', 0, 1)
+    stats = _calculate_stats_with_buffer(get_empty_data(), 'x', 1)
     assert stats['Trades'] == 0
     assert stats['Win Rate'] == '0.0%'
 
@@ -745,11 +725,11 @@ def test_equity_curve_outcome_matches_the_table_notation():
     for rrr in RRR_RATIOS:
         curves = {c['label']: c for c in calculate_equity_curves(df, rrr)}
         table = calculate_buffer_statistics(df)
-        row = table[(table['Strategy'] == 'All Trades') & (table['Buffer'] == '+1')
+        row = table[(table['Strategy'] == 'All Trades')
                     & (table['Trend'] == 'Reversal') & (table['Cap SL'] == 5)
                     & (table['RRR'] == f'1:{rrr}')].iloc[0]
         wins, losses = (int(v[:-1]) for v in row['Notation'].split(' \u2013 '))
-        curve = curves['All Trades +1 / Reversal / cap 5']
+        curve = curves['All Trades / Reversal / cap 5']
         assert curve['outcome'] == wins * rrr - losses
         assert curve['trades'] == wins + losses == row['Trades']
 
@@ -778,7 +758,7 @@ def test_equity_curves_walk_trades_in_date_order():
         'SL': [5.0, 5.0], 'Pullback': [1.0, 5.0], 'TP': [10.0, 0.0],
     })
     curves = {c['label']: c for c in calculate_equity_curves(df, 1)}
-    assert curves['All Trades +0']['curve'] == [0.0, -1.0, 0.0]
+    assert curves['All Trades']['curve'] == [0.0, -1.0, 0.0]
 
 
 def test_equity_curves_empty_dataset():
