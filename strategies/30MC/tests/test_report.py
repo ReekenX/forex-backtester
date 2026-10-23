@@ -549,18 +549,10 @@ def test_each_strategies_table_carries_an_equity_chart():
         assert html.index(f'id="strategies-1-{rrr}-table"') < html.index(chart)
 
 
-def test_half_sl_table_sits_right_above_the_strategies_tables():
+def test_half_sl_section_is_gone():
     anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
-    assert anchors.index('half-sl') == anchors.index('strategies-1-1') - 1
-
-
-def test_half_sl_table_shows_only_entries_with_a_mapped_stop():
-    """The sample's halved stops (2, 3, 1.5 ... pips) are not all mapped, so
-    only Default is shown."""
-    html = _section_html('half-sl')
-    assert '>Default<' in html
-    assert '>Half SL<' not in html and '>Limit order on half<' not in html
-    assert 'class="sortable"' not in html
+    assert 'half-sl' not in anchors
+    assert anchors.index('streaks') == anchors.index('strategies-1-1') - 1
 
 
 def test_weekday_table_colours_every_rate_against_breakeven():

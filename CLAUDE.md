@@ -578,8 +578,7 @@ export. It differs from 30MCR in the data only:
   stop; until that lands, 5 pips is read as the correct stop.
 - **`Pullback` and `TP` are real.** A loser exports both blank, so
   `load_data` reads that `Pullback` as the stop (`Pullback = SL`), not as a
-  clean 0-pip run - otherwise `Half SL`'s limit would score losers as never
-  filled. A blank `Pullback` beside a real `TP` still loads as 0.
+  clean 0-pip run off the entry. A blank `Pullback` beside a real `TP` still loads as 0.
 - **There is no `BE Rule (10 pips)` column**, so the break-even rule is
   gone: no `break_even_outcomes`, no `BE Rule Applied` column or `/ BE`
   equity curves. The 1:2 and 1:3 Strategies tables run each row once.
@@ -590,7 +589,9 @@ export. It differs from 30MCR in the data only:
 - **It has no `Cap SL Analysis`.** With every stop at 5 pips a cap only
   repeats `Fixed SL`. The Strategies tables keep their `Cap SL` column.
 - **It has no `Pullback Analysis`.** `calculate_pullback_statistics` and
-  `create_pullback_chart` are gone; `Half SL` keeps its own limit scoring.
+  `create_pullback_chart` are gone.
+- **It has no `Half SL Analysis`.** `calculate_half_sl_statistics` is gone;
+  `Streaks` leads straight into the Strategies tables.
 - **It has no `Adding Buffer` and no 1 pip buffer anywhere.** A buffer does
   not apply to this strategy: there is no `Strategy + 1 pip` column on any
   table or chart (`RATE_COLUMNS` is `Signal, Strategy`), and the Strategies
@@ -600,8 +601,7 @@ export. It differs from 30MCR in the data only:
   row and no `+ 1 pip buffer` rows.
 - **Every RRR target is commission-adjusted** - see "Commission-Adjusted
   RRR Targets". `Fixed SL` and the Strategies `Fixed SL X` rows cover the
-  mapped stops only (3-7 pips), and `Half SL` shows only `Default` until
-  2.5 pips is mapped.
+  mapped stops only (3-7 pips).
 - **`TP Range Analysis` uses six bands** - `0-10`, `10-15`, `15-20`,
   `20-25`, `25-30` and `30+ pips` - and its chart draws one column per band
   (`calculate_tp_range_counts`), not one per pip.

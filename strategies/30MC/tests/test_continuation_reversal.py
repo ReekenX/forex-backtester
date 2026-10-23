@@ -28,9 +28,7 @@ from utils.continuation_reversal import (  # noqa: E402
     _drop_scratch_columns,
     _normalise_header,
     EQUITY_HIGHLIGHT,
-    HALF_SL_ENTRIES,
     calculate_buffer_statistics,
-    calculate_half_sl_statistics,
     calculate_equity_curves,
     calculate_r_counts,
     calculate_setup_statistics,
@@ -252,7 +250,7 @@ def test_load_data_matches_the_sheets_own_headline_rates():
 
 def test_load_data_reads_a_blank_pullback_loser_as_stopped_out(tmp_path):
     """A loser exports Pullback and TP both blank. Its Pullback is the stop,
-    so it loses on every stop scenario and never reads as an unfilled limit.
+    so it loses on every stop scenario, never as a clean run off the entry.
     A blank Pullback beside a real TP still loads as 0."""
     csv = tmp_path / 'trades.csv'
     csv.write_text('Date,Weekday,Trade,Direction,30M,SL,Pullback,TP\n'
@@ -780,84 +778,3 @@ def test_equity_chart_draws_every_curve_and_colours_the_best():
     assert 'data-rrr="2"' in html
     assert 'class="eq-zero"' in html
     assert '+2R per win' in html
-
-
-# --- Half SL entries ------------------------------------------------------
-
-def _six_pip_trades():
-    """Four 6-pip trades, so Half SL and the limit sit on a mapped 3-pip stop.
-
-    A: Pullback 1, TP 20 - never pulls back half the stop.
-    B: Pullback 3, TP 10 - exactly half: stops Half SL out, fills the limit.
-    C: Pullback 6, TP 15 - stopped out on every entry.
-    D: Pullback 2, TP 0 - never reaches a target.
-    """
-    return get_sample_data().iloc[0:4].assign(
-        SL=6.0, Pullback=[1.0, 3.0, 6.0, 2.0], TP=[20.0, 10.0, 15.0, 0.0])
-
-
-def _half_sl(rrr, df=None):
-    result = calculate_half_sl_statistics(
-        _six_pip_trades() if df is None else df)
-    return result[result['RRR'] == f'1:{rrr}'].set_index('Entry')
-
-
-def test_half_sl_lists_every_entry_at_every_rrr():
-    result = calculate_half_sl_statistics(_six_pip_trades())
-    assert list(result['Entry']) == HALF_SL_ENTRIES * len(RRR_RATIOS)
-    assert list(result['RRR'].unique()) == [f'1:{r}' for r in RRR_RATIOS]
-
-
-def test_half_sl_leaves_out_entries_without_a_mapped_stop():
-    """The sample's 4 and 5-pip stops halve to 2 and 2.5 pips, which have no
-    RRR target mapping, so only Default is scored."""
-    result = calculate_half_sl_statistics(get_sample_data())
-    assert list(result['Entry']) == ['Default'] * len(RRR_RATIOS)
-
-
-def test_half_sl_default_row_matches_the_other_stop_tables():
-    default = _half_sl(1, get_sample_data()).loc['Default']
-    sl_default = calculate_setup_statistics(get_sample_data()).iloc[0]
-    wins, missed, losses = default['Notation'].split(' - ')
-    assert missed == '0M'
-    assert int(wins[:-1]) + int(losses[:-1]) == sl_default['Trades']
-    assert default['Win Rate'] == sl_default['Strategy']
-
-
-def test_half_sl_counts_at_1_to_1():
-    """1R is 6.9 pips on the 6-pip stop and 3.8 on the 3-pip one. Default
-    wins A and B. Half SL wins A only - B's pullback reaches the 3-pip stop.
-    The limit misses A and D, fills B (run 13 from the fill, a win) and C
-    (pullback 3 from the fill, stopped)."""
-    result = _half_sl(1)
-    assert result.loc['Default', 'Notation'] == '2W - 0M - 2L'
-    assert result.loc['Half SL', 'Notation'] == '1W - 0M - 3L'
-    assert result.loc['Limit order on half', 'Notation'] == '1W - 2M - 1L'
-    assert result.loc['Limit order on half', 'Trades'] == 2
-    assert result.loc['Limit order on half', 'Win Rate'] == '50.0%'
-    assert result.loc['Default', 'Outcome'] == '+0R'
-    assert result.loc['Half SL', 'Outcome'] == '-2R'
-
-
-def test_half_sl_limit_measures_the_run_from_the_fill_at_1_to_3():
-    """1:3 is 19.8 pips on 6 and 10.7 on 3. B's TP 10 misses both from the
-    signal, but from the limit its run is 10 + 3 = 13 - a win."""
-    result = _half_sl(3)
-    assert result.loc['Default', 'Notation'] == '1W - 0M - 3L'
-    assert result.loc['Limit order on half', 'Notation'] == '1W - 2M - 1L'
-    assert result.loc['Limit order on half', 'Outcome'] == '+2R'
-
-
-def test_half_sl_limit_needs_a_target_after_the_fill():
-    """A trade that never reached a target (TP 0) is not a win from the
-    limit either, even when its pullback stays inside the stop."""
-    trade = _six_pip_trades().iloc[[0]].assign(Pullback=3.5, TP=0.0)
-    result = calculate_half_sl_statistics(trade)
-    limit = result[result['Entry'] == 'Limit order on half']
-    assert set(limit['Notation']) == {'0W - 0M - 1L'}
-
-
-def test_half_sl_handles_empty_data():
-    result = calculate_half_sl_statistics(get_empty_data())
-    assert set(result['Notation']) == {'0W - 0M - 0L'}
-    assert set(result['Win Rate']) == {'0.0%'}
