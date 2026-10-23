@@ -379,7 +379,7 @@ def _section_html(anchor, df=None):
 
 
 def test_every_section_up_to_max_sl_puts_a_chart_below_its_table():
-    for anchor in ('weekday', 'sl-range', 'sl-fixed', 'sl-max'):
+    for anchor in ('weekday', 'sl-range', 'sl-fixed'):
         html = _section_html(anchor)
         assert html.count('class="wr-chart"') == 1, anchor
         assert html.index('<table') < html.index('class="wr-chart"'), anchor
@@ -422,7 +422,7 @@ def test_every_table_pins_its_first_column_to_30_percent():
 
 
 def test_grouping_tables_carry_both_readings():
-    for anchor in ('weekday', 'sl-range', 'sl-fixed', 'sl-max'):
+    for anchor in ('weekday', 'sl-range', 'sl-fixed'):
         html = _section_html(anchor)
         assert '>Signal<' in html or 'Signal ↓' in html, anchor
         assert '>Strategy<' in html or 'Strategy ↓' in html, anchor
@@ -441,7 +441,7 @@ def test_stop_tables_are_not_sortable_but_others_are():
     Fixed SL is the exception - its rows are stop sizes to compare."""
     for anchor in ('sl-range', 'sl-buffer'):
         assert 'class="sortable"' not in _section_html(anchor), anchor
-    for anchor in ('sl-fixed', 'sl-max'):
+    for anchor in ('sl-fixed',):
         assert 'class="sortable"' in _section_html(anchor), anchor
 
 
@@ -468,8 +468,8 @@ def test_strategies_tables_carry_no_rrr_column():
 
 
 def test_strategies_tables_name_the_cap_column_cap_sl():
-    """Same name as the Cap SL Analysis table, which caps the stop the same
-    way."""
+    """Cap SL, not Max SL: the column caps the stop at min(SL + buffer,
+    cap)."""
     for rrr in RRR_RATIOS:
         html = _section_html(f'strategies-1-{rrr}')
         table = html[html.index('<table'):html.index('</table>')]
@@ -530,9 +530,12 @@ def test_strategies_tables_close_the_page():
     assert 'three-setups' not in anchors
 
 
-def test_max_sl_section_sits_below_fixed_sl():
+def test_cap_sl_section_is_gone():
+    """With every stop at 5 pips a cap only repeats Fixed SL, so the page
+    has no Cap SL Analysis."""
     anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
-    assert anchors.index('sl-max') == anchors.index('sl-fixed') + 1
+    assert 'sl-max' not in anchors
+    assert anchors.index('tp-range') == anchors.index('sl-fixed') + 1
 
 
 def test_streaks_table_sits_above_the_strategies_tables():

@@ -549,6 +549,8 @@ export. It differs from 30MCR in the data only:
   equity curves. The 1:2 and 1:3 Strategies tables run each row once.
 - **It has no `Setup Analysis`.** Every trade is a Continuation, so the
   table only repeated Default. Weekday leads straight into `SL Range`.
+- **It has no `Cap SL Analysis`.** With every stop at 5 pips a cap only
+  repeats `Fixed SL`. The Strategies tables keep their `Cap SL` column.
 - **`Scaling` follows `TP`** and is empty so far. The scratch cut drops it
   with the sheet's `Signal` / `WR` columns, which the Default row matches
   (68.5% / 49.3%).

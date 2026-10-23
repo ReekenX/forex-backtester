@@ -23,7 +23,6 @@ from utils.continuation_reversal import (  # noqa: E402
     SETUP_ORDER,
     SL_BUFFER_PIPS,
     SL_FIXED_PIPS,
-    SL_MAX_PIPS,
     SL_RANGES,
     TP_RANGES,
     TYPE_BUFFER_PIPS,
@@ -42,7 +41,6 @@ from utils.continuation_reversal import (  # noqa: E402
     calculate_setup_statistics,
     calculate_sl_buffer_statistics,
     calculate_sl_fixed_statistics,
-    calculate_sl_max_statistics,
     calculate_sl_statistics,
     calculate_streak_statistics,
     calculate_tp_pip_counts,
@@ -381,7 +379,7 @@ def test_setup_buffer_column_pads_the_stop_for_strategy_only():
 def test_every_rate_table_carries_the_three_readings():
     sample = get_sample_data()
     for fn in (calculate_weekday_statistics, calculate_setup_statistics,
-               calculate_sl_statistics, calculate_sl_max_statistics):
+               calculate_sl_statistics):
         result = fn(sample)
         assert list(result.columns)[2:] == RATE_COLUMNS, fn.__name__
         for col in RATE_COLUMNS:
@@ -446,31 +444,6 @@ def test_sl_fixed_statistics_reports_signal_and_strategy():
     assert list(result['Fixed SL'])[1:] == [f'{p} pips' for p in SL_FIXED_PIPS]
 
 
-def test_sl_max_statistics_lists_every_cap():
-    result = calculate_sl_max_statistics(get_sample_data())
-    assert list(result.columns) == ['Cap SL', 'Trades'] + RATE_COLUMNS
-    assert list(result['Cap SL']) == ['Default'] + [f'{p} pips'
-                                                     for p in SL_MAX_PIPS]
-    assert SL_MAX_PIPS == [4, 5, 6, 7, 8, 9]
-    assert result['Signal'].nunique() == 1
-
-
-def test_sl_max_caps_only_wider_stops():
-    """SL 8, Pullback 6, TP 20: a 9 or 7 pip cap still survives the 6 pip
-    pullback and wins; a 6 or 5 pip cap is taken out by it. SL 3 sits inside
-    every cap, so it scores the same on every row."""
-    trades = get_sample_data().iloc[0:2].copy()
-    trades['SL'] = [8.0, 3.0]
-    trades['Pullback'] = [6.0, 1.0]
-    trades['TP'] = [20.0, 3.0]
-    result = calculate_sl_max_statistics(trades).set_index('Cap SL')
-    assert result.loc['Default', 'Strategy'] == '100.0%'
-    assert result.loc['9 pips', 'Strategy'] == '100.0%'
-    assert result.loc['7 pips', 'Strategy'] == '100.0%'
-    assert result.loc['6 pips', 'Strategy'] == '50.0%'
-    assert result.loc['5 pips', 'Strategy'] == '50.0%'
-
-
 def test_fixed_sl_signal_repeats_down_the_table():
     """Signal does not depend on the stop: it is the ceiling no size beats."""
     result = calculate_sl_fixed_statistics(get_sample_data())
@@ -485,7 +458,6 @@ def test_every_stop_table_opens_with_the_same_default_row():
         'SL Range': (calculate_sl_statistics(sample), 'SL Range'),
         'Adding Buffer': (calculate_sl_buffer_statistics(sample), 'SL Buffer'),
         'Fixed SL': (calculate_sl_fixed_statistics(sample), 'Fixed SL'),
-        'Cap SL': (calculate_sl_max_statistics(sample), 'Cap SL'),
         'Pullback': (calculate_pullback_statistics(sample), 'Pullback'),
     }
 
