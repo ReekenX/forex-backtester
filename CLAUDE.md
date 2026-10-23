@@ -546,6 +546,8 @@ export. It differs from 30MCR in the data only:
   filled. A blank `Pullback` beside a real `TP` still loads as 0.
 - **There is no `BE Rule (10 pips)` column**, so the break-even rule reads
   every trade as unchecked.
+- **It has no `Setup Analysis`.** Every trade is a Continuation, so the
+  table only repeated Default. Weekday leads straight into `SL Range`.
 - **`Scaling` follows `TP`** and is empty so far. The scratch cut drops it
   with the sheet's `Signal` / `WR` columns, which the Default row matches
   (68.5% / 49.3%).

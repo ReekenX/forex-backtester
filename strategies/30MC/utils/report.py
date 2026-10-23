@@ -34,7 +34,6 @@ from utils.continuation_reversal import (
     calculate_buffer_statistics,
     calculate_equity_curves,
     calculate_pullback_statistics,
-    calculate_setup_statistics,
     calculate_sl_buffer_statistics,
     calculate_sl_fixed_statistics,
     calculate_sl_max_statistics,
@@ -107,10 +106,6 @@ def _rate_table(stats: pd.DataFrame, table_id: str,
 def _weekday_section(df: pd.DataFrame) -> str:
     return _rate_table(calculate_weekday_statistics(df), "weekday-table",
                        sortable=False)
-
-
-def _setup_section(df: pd.DataFrame) -> str:
-    return _rate_table(calculate_setup_statistics(df), "setup-table")
 
 
 def _sl_section(df: pd.DataFrame) -> str:
@@ -240,17 +235,6 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "Weekday Analysis",
         RATE_COLUMNS_NOTE,
         _weekday_section,
-    ),
-    (
-        "setup",
-        "Setup",
-        "Setup Analysis",
-        "Trades split by what the 30-minute structure did before the signal: "
-        "continuation through the level against reversal off it. The setup "
-        "is known before the trade is taken, so it is a tradeable filter. "
-        "Default is every trade, and the two type rows sum to it. Same three "
-        "readings as the weekday table; every rate header is click-to-sort.",
-        _setup_section,
     ),
     (
         "sl-range",

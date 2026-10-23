@@ -356,11 +356,12 @@ def test_render_error_then_recover(tmp_path):
 
 # --- section order and table conventions ----------------------------------
 
-def test_grouping_sections_lead_the_page_in_order():
-    """Weekday first, then this export's one entry-time filter, then the stop
-    tables - the 15C page's order with 30MC's own filter in the middle."""
+def test_weekday_leads_the_page_straight_into_the_stop_tables():
+    """Every 30MC trade is a Continuation, so there is no Setup table to
+    split them - Weekday is followed by the stop tables."""
     anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
-    assert anchors[:3] == ['weekday', 'setup', 'sl-range']
+    assert anchors[:2] == ['weekday', 'sl-range']
+    assert 'setup' not in anchors
 
 
 def test_nav_order_matches_the_sections():
@@ -378,7 +379,7 @@ def _section_html(anchor, df=None):
 
 
 def test_every_section_up_to_max_sl_puts_a_chart_below_its_table():
-    for anchor in ('weekday', 'setup', 'sl-range', 'sl-fixed', 'sl-max'):
+    for anchor in ('weekday', 'sl-range', 'sl-fixed', 'sl-max'):
         html = _section_html(anchor)
         assert html.count('class="wr-chart"') == 1, anchor
         assert html.index('<table') < html.index('class="wr-chart"'), anchor
@@ -421,7 +422,7 @@ def test_every_table_pins_its_first_column_to_30_percent():
 
 
 def test_grouping_tables_carry_both_readings():
-    for anchor in ('weekday', 'setup', 'sl-range', 'sl-fixed', 'sl-max'):
+    for anchor in ('weekday', 'sl-range', 'sl-fixed', 'sl-max'):
         html = _section_html(anchor)
         assert '>Signal<' in html or 'Signal ↓' in html, anchor
         assert '>Strategy<' in html or 'Strategy ↓' in html, anchor
@@ -440,7 +441,7 @@ def test_stop_tables_are_not_sortable_but_others_are():
     Fixed SL is the exception - its rows are stop sizes to compare."""
     for anchor in ('sl-range', 'sl-buffer'):
         assert 'class="sortable"' not in _section_html(anchor), anchor
-    for anchor in ('setup', 'sl-fixed', 'sl-max'):
+    for anchor in ('sl-fixed', 'sl-max'):
         assert 'class="sortable"' in _section_html(anchor), anchor
 
 
