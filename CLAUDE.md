@@ -600,10 +600,11 @@ export. It differs from 30MCR in the data only:
 - **It has no `Adding Buffer` and no 1 pip buffer anywhere.** A buffer does
   not apply to this strategy: there is no `Strategy + 1 pip` column on any
   table or chart (`RATE_COLUMNS` is `Signal, Strategy`).
-- **The Strategies tables list `All Trades`, `EMA Aligned` and `Fixed SL
-  N`** - one row per mapped stop, columns `Strategy, Trades, Notation, Win
-  Rate`. `EMA Aligned` takes only aligned trades; its equity curve stays
-  flat on the rest. There is no `Buffer`, `Trend` or `Cap SL` column and no
+- **The Strategies tables list `Default`, `EMA Aligned`, `Fixed SL N` and
+  `Fixed SL N & EMA Aligned`** - the last two once per mapped stop, columns
+  `Strategy, Trades, Notation, Win Rate`. An `EMA Aligned` row takes only
+  aligned trades; its equity curve stays flat on the rest. `EMA Against` is
+  never a Strategies row - it does not pay on any stop. There is no `Buffer`, `Trend` or `Cap SL` column and no
   `Reversal` row; the equity chart draws one curve per row.
 - **`Streaks` lists `Default`, `EMA Aligned` and `EMA Against`** - each EMA
   row walks only its own trades. No `+ 1 pip buffer` rows.

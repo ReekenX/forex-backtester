@@ -465,7 +465,7 @@ def test_strategies_tables_carry_no_rrr_column():
         assert '>1:' not in table
 
 
-def test_strategies_tables_list_all_trades_ema_and_fixed_sl_only():
+def test_strategies_tables_list_default_ema_and_fixed_sl_only():
     """No Trend, no Cap SL and no Reversal rows."""
     for rrr in RRR_RATIOS:
         html = _section_html(f'strategies-1-{rrr}')
@@ -473,8 +473,10 @@ def test_strategies_tables_list_all_trades_ema_and_fixed_sl_only():
         for gone in ('>Trend<', '>Cap SL<', 'Reversal', 'Continuation',
                      'Max SL'):
             assert gone not in table, gone
-        assert '>All Trades<' in table and '>Fixed SL 5<' in table
+        assert '>Default<' in table and '>Fixed SL 5<' in table
         assert '>EMA Aligned<' in table
+        assert '>Fixed SL 7 & EMA Aligned<' in table
+        assert 'All Trades' not in table and 'Against' not in table
 
 
 def test_strategies_tables_carry_no_be_rule():

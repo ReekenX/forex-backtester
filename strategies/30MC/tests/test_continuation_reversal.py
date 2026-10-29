@@ -464,10 +464,33 @@ def test_tp_bands_hold_each_trade_once():
 # --- Strategies tables ----------------------------------------------------
 
 def test_get_buffer_strategies_covers_all_trades_ema_and_fixed_sl():
-    """All Trades, EMA Aligned and one Fixed SL N row per mapped stop."""
+    """Default, EMA Aligned, then per mapped stop Fixed SL N and Fixed SL N
+    & EMA Aligned. Nothing is ever scored against the EMA."""
     names = [name for name, _ in get_buffer_strategies()]
-    assert names == (['All Trades', 'EMA Aligned']
-                     + [f'Fixed SL {n}' for n in MAPPED_SL_PIPS])
+    expected = ['Default', 'EMA Aligned']
+    for n in MAPPED_SL_PIPS:
+        expected += [f'Fixed SL {n}', f'Fixed SL {n} & EMA Aligned']
+    assert names == expected
+    assert not any('Against' in name for name in names)
+
+
+def test_fixed_sl_and_ema_aligned_strategy_combines_both():
+    """Aligned sample rows 1, 3, 5, 8, 9 on a 7-pip stop: the 1R target is
+    7.8 pips, so TP 16 (1) and TP 9 (9) win; rows 3, 5, 8 miss."""
+    result = calculate_buffer_statistics(get_sample_data(),
+                                         ['Fixed SL 7 & EMA Aligned'])
+    row = result[result['RRR'] == '1:1'].iloc[0]
+    assert row['Trades'] == 5
+    assert row['Notation'] == '2W \u2013 3L'
+
+
+def test_fixed_sl_and_ema_aligned_equity_curve_stays_flat_on_trades_against():
+    df = get_sample_data()
+    curve = {c['label']: c for c in calculate_equity_curves(df, 1)}[
+        'Fixed SL 7 & EMA Aligned']
+    assert curve['trades'] == 5
+    assert len(curve['curve']) == len(df) + 1
+    assert curve['outcome'] == 2 - 3
 
 
 def test_ema_aligned_strategy_takes_only_aligned_trades():
@@ -479,7 +502,7 @@ def test_ema_aligned_strategy_takes_only_aligned_trades():
 
 
 def test_buffer_statistics_scores_every_rrr():
-    result = calculate_buffer_statistics(get_sample_data(), ['All Trades'])
+    result = calculate_buffer_statistics(get_sample_data(), ['Default'])
     assert set(result['RRR']) == {f'1:{r}' for r in RRR_RATIOS}
     assert 'Buffer' not in result.columns
 
@@ -493,8 +516,8 @@ def test_buffer_statistics_carry_no_trend_or_cap():
     assert list(result.columns) == ['Strategy', 'RRR', 'Trades', 'Notation',
                                     'Win Rate']
     assert not result.duplicated(['Strategy', 'RRR']).any()
-    assert len(result) == (2 + len(MAPPED_SL_PIPS)) * len(RRR_RATIOS)
-    every_trade = result[result['Strategy'] != 'EMA Aligned']
+    assert len(result) == (2 + 2 * len(MAPPED_SL_PIPS)) * len(RRR_RATIOS)
+    every_trade = result[~result['Strategy'].str.contains('EMA Aligned')]
     assert (every_trade['Trades'] == len(sample)).all()
 
 
@@ -506,9 +529,9 @@ def test_buffer_statistics_carry_no_be_rule():
 
 
 def test_buffer_statistics_score_every_trade_on_its_stop():
-    """All Trades at 1:1: rows 1, 4, 5, 7, 9, 10 survive their stop and reach
+    """Default at 1:1: rows 1, 4, 5, 7, 9, 10 survive their stop and reach
     their 1R target."""
-    result = calculate_buffer_statistics(get_sample_data(), ['All Trades'])
+    result = calculate_buffer_statistics(get_sample_data(), ['Default'])
     row = result[result['RRR'] == '1:1'].iloc[0]
     assert row['Trades'] == 10
     assert row['Notation'] == '6W – 4L'
@@ -726,7 +749,7 @@ def test_equity_curves_walk_trades_in_date_order():
         'SL': [5.0, 5.0], 'Pullback': [1.0, 5.0], 'TP': [10.0, 0.0],
     })
     curves = {c['label']: c for c in calculate_equity_curves(df, 1)}
-    assert curves['All Trades']['curve'] == [0.0, -1.0, 0.0]
+    assert curves['Default']['curve'] == [0.0, -1.0, 0.0]
 
 
 def test_equity_curves_empty_dataset():

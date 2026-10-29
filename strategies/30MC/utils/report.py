@@ -241,9 +241,10 @@ SECTIONS.extend(
         f"strategies-1-{rrr}",
         f"Strategies 1:{rrr}",
         f"Strategies (1:{rrr} RRR)",
-        "<b>All Trades</b> on their recorded stops, <b>EMA Aligned</b> "
-        "taking only the trades with the EMA(50) trend, and <b>Fixed SL N</b> "
-        "with every stop replaced by N pips. "
+        "<b>Default</b> on the recorded stops, <b>EMA Aligned</b> "
+        "taking only the trades with the EMA(50) trend, <b>Fixed SL N</b> "
+        "with every stop replaced by N pips, and <b>Fixed SL N &amp; EMA "
+        "Aligned</b> doing both. "
         f"Ranked by win rate. Breakeven at 1:{rrr} is {100 / (1 + rrr):.1f}%. "
         "The chart under the table walks every row trade by trade in date "
         "order and plots its cumulative R.",
@@ -273,7 +274,7 @@ def _summary_cards(df: pd.DataFrame) -> List[Tuple[str, str, str]]:
     if df.empty:
         return [("Trades", "0", "neutral")]
 
-    baseline = _calculate_stats_with_buffer(df, "All Trades", 1)
+    baseline = _calculate_stats_with_buffer(df, "Default", 1)
     win_rate = float(baseline["Win Rate"].rstrip("%"))
     dates = df["Date"].astype(str)
     # Signal: the idea was right and price reached a target, whatever the

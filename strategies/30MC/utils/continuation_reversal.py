@@ -913,21 +913,29 @@ def _fixed_sl_filter(x: int) -> Callable[[pd.DataFrame], pd.DataFrame]:
     return _filter
 
 
+def _ema_aligned(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only the trades taken with the EMA(50) trend."""
+    return df[df["EMA"] == EMA_ORDER[0]]
+
+
 def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]]:
     """
     Strategies the ranked tables test.
 
-    "All Trades" keeps every trade's recorded stop; "EMA Aligned" keeps only
+    "Default" keeps every trade's recorded stop; "EMA Aligned" keeps only
     the trades taken with the EMA(50) trend; "Fixed SL X" replaces every stop
-    with X.
+    with X, and "Fixed SL X & EMA Aligned" does both. Trades against the EMA
+    are never a row of their own - they did not pay on any stop.
     """
     strategies: List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]] = [
-        ("All Trades", lambda df: df),
-        ("EMA Aligned", lambda df: df[df["EMA"] == EMA_ORDER[0]]),
+        ("Default", lambda df: df),
+        ("EMA Aligned", _ema_aligned),
     ]
-    strategies.extend(
-        (f"Fixed SL {x}", _fixed_sl_filter(x)) for x in FIXED_SL_STRATEGY_VALUES
-    )
+    for x in FIXED_SL_STRATEGY_VALUES:
+        fixed = _fixed_sl_filter(x)
+        strategies.append((f"Fixed SL {x}", fixed))
+        strategies.append((f"Fixed SL {x} & EMA Aligned",
+                           lambda df, fixed=fixed: fixed(_ema_aligned(df))))
     return strategies
 
 
