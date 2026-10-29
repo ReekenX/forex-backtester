@@ -590,7 +590,7 @@ export. It differs from 30MCR in the data only:
   `Weekday`: `Default`, `Aligned`, `Against` (`calculate_ema_statistics`),
   with the Signal/Strategy chart under it.
 - **It has no `SL Range Analysis`.** Every stop is 5 pips, so every trade sat
-  in one band. Weekday leads straight into `Fixed SL`.
+  in one band. `EMA Alignment` leads straight into `Fixed SL`.
 - **It has no `Cap SL Analysis`.** With every stop at 5 pips a cap only
   repeats `Fixed SL`. The Strategies tables keep their `Cap SL` column.
 - **It has no `Pullback Analysis`.** `calculate_pullback_statistics` and
