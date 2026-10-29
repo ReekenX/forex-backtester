@@ -30,6 +30,7 @@ from utils.continuation_reversal import (
     RATE_COLUMNS,
     _calculate_stats_with_buffer,
     calculate_buffer_statistics,
+    calculate_ema_statistics,
     calculate_equity_curves,
     calculate_sl_fixed_statistics,
     calculate_streak_statistics,
@@ -97,6 +98,11 @@ def _rate_table(stats: pd.DataFrame, table_id: str,
 
 def _weekday_section(df: pd.DataFrame) -> str:
     return _rate_table(calculate_weekday_statistics(df), "weekday-table",
+                       sortable=False)
+
+
+def _ema_section(df: pd.DataFrame) -> str:
+    return _rate_table(calculate_ema_statistics(df), "ema-table",
                        sortable=False)
 
 
@@ -177,6 +183,16 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         _weekday_section,
     ),
     (
+        "ema",
+        "EMA",
+        "EMA Alignment Analysis",
+        "<b>Aligned</b> = the trade went the way the EMA(50) trend pointed "
+        "(EMA(50) column equals Direction); <b>Against</b> = it did not. The "
+        "trend is read at entry, so this is a tradeable filter. Default is "
+        "every trade; the two rows split it. " + RATE_COLUMNS_NOTE,
+        _ema_section,
+    ),
+    (
         "sl-fixed",
         "Fixed SL",
         "Fixed SL Analysis",
@@ -213,8 +229,8 @@ SECTIONS: List[Tuple[str, str, str, str, Callable[[pd.DataFrame], str]]] = [
         "order (win = Pullback &lt; SL AND TP &gt;= the 1R target, so a "
         "stopped-out "
         "trade breaks a winning run). Each cell gives the run's length and "
-        "the dates of its first and last trade. <b>Continuation</b> runs "
-        "through only its own trades.",
+        "the dates of its first and last trade. The <b>EMA</b> rows run "
+        "through only their own trades.",
         _streaks_section,
     ),
 ]
@@ -225,7 +241,8 @@ SECTIONS.extend(
         f"strategies-1-{rrr}",
         f"Strategies 1:{rrr}",
         f"Strategies (1:{rrr} RRR)",
-        "<b>All Trades</b> on their recorded stops, and <b>Fixed SL N</b> "
+        "<b>All Trades</b> on their recorded stops, <b>EMA Aligned</b> "
+        "taking only the trades with the EMA(50) trend, and <b>Fixed SL N</b> "
         "with every stop replaced by N pips. "
         f"Ranked by win rate. Breakeven at 1:{rrr} is {100 / (1 + rrr):.1f}%. "
         "The chart under the table walks every row trade by trade in date "

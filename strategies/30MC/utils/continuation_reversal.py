@@ -5,7 +5,7 @@ Backs the static HTML page rendered by utils.report: every table on that page
 is computed here, and nothing here needs a Jupyter kernel.
 
 CSV columns (strategies/30MC/trades.csv):
-    Date, Weekday, Trade, Direction, 30M, SL, Pullback, TP
+    Date, Weekday, Trade, Direction, EMA(50), SL, Pullback, TP
 
 SL is a 5-pip placeholder on every trade for now; Pullback and TP are real.
 There is no BE Rule column, so there is no break-even rule either.
@@ -26,11 +26,10 @@ Three things about this export shape the loader:
 A blank TP and a TP of 0 both mean the trade was not profitable, so both load
 as 0 and `TP > 0` is the Signal rule here exactly as it is on the other pages.
 
-The 30M column names the 30-minute level the signal formed at - "High" or
-"Low". The setup is that level read against Direction: buying a High or selling
-a Low is a Continuation, the other two are Reversals. Both are known before the
-trade is taken, so the setup is a tradeable filter. Its Continuation/Reversal half is pooled in the same table, so the
-setup can be read with the level and without it.
+The EMA(50) column is the trend the 50-period EMA showed at entry - "Buy" or
+"Sell". Read against Direction it gives the EMA column: "Aligned" when the
+trade went with the trend, "Against" when it did not. The EMA is known before
+the trade is taken, so the alignment is a tradeable filter.
 """
 
 import math
@@ -45,24 +44,11 @@ RRR_RATIOS = [1, 2, 3]
 
 WEEKDAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 
-# Column naming the 30-minute level (High or Low) the signal formed at.
-SETUP_COLUMN = '30M'
+# Column naming the trend (Buy or Sell) the 50-period EMA showed at entry.
+EMA_TREND_COLUMN = 'EMA(50)'
 
-# (level, direction) pairs that continue through the level. Every other
-# pairing is a Reversal.
-CONTINUATIONS = {('High', 'Buy'), ('Low', 'Sell')}
-
-# The four setups this strategy trades, in the order the tables list them.
-# A label outside this list is still shown - appended in sorted order - so a
-# new setup in the export cannot vanish silently.
-SETUP_ORDER = [
-    'High Continuation',
-    'High Reversal',
-    'Low Continuation',
-    'Low Reversal',
-]
-
-TYPE_ORDER = ['Continuation', 'Reversal']
+# The derived alignment of that trend with Direction, in table order.
+EMA_ORDER = ['Aligned', 'Against']
 
 # The last trade column. Everything right of it is the spreadsheet's scratch
 # work, whose headers change between exports ("Signal", "Signal All") and can
@@ -160,13 +146,13 @@ def _drop_scratch_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def load_data(filepath: str = DEFAULT_CSV) -> pd.DataFrame:
     """
-    Load 30MC data from CSV, clean it and derive the R and setup columns.
+    Load 30MC data from CSV, clean it and derive the R and EMA columns.
 
     Args:
         filepath: Path to the CSV file
 
     Returns:
-        Cleaned DataFrame with added R, Setup and Type columns
+        Cleaned DataFrame with added R and EMA columns
     """
     df = pd.read_csv(filepath)
     df.columns = [_normalise_header(col) for col in df.columns]
@@ -196,14 +182,12 @@ def load_data(filepath: str = DEFAULT_CSV) -> pd.DataFrame:
     stopped_out = df["Pullback"] >= df["SL"]
     df["R"] = reach.where(~stopped_out, -reach)
 
-    level = (df[SETUP_COLUMN].astype(str).str.strip()
-             if SETUP_COLUMN in df.columns else pd.Series("", index=df.index))
+    trend = (df[EMA_TREND_COLUMN].astype(str).str.strip()
+             if EMA_TREND_COLUMN in df.columns
+             else pd.Series("", index=df.index))
     direction = df["Direction"].astype(str).str.strip()
-    df["Type"] = [
-        "Continuation" if (lvl, d) in CONTINUATIONS else "Reversal"
-        for lvl, d in zip(level, direction)
-    ]
-    df["Setup"] = level + " " + df["Type"]
+    df["EMA"] = [EMA_ORDER[0] if t == d else EMA_ORDER[1]
+                 for t, d in zip(trend, direction)]
 
     return df
 # ---------------------------------------------------------------------------
@@ -506,7 +490,7 @@ def _signal_strategy_rows(groups: List[Tuple[str, pd.DataFrame]],
 
     Args:
         groups: (label, trades) tuples, one per row of the table
-        column: Name for the leading column (e.g. 'Day', 'Setup')
+        column: Name for the leading column (e.g. 'Day', 'EMA')
 
     Returns:
         DataFrame with columns: <column>, Trades, then RATE_COLUMNS
@@ -651,38 +635,24 @@ def create_signal_strategy_chart(stats: pd.DataFrame) -> str:
 
 
 
-def _ordered_labels(values: pd.Series, preferred: List[str]) -> List[str]:
+def calculate_ema_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    List `preferred` first, then any other label present in the data.
+    Signal and Strategy win rates for trades with the EMA(50) trend against
+    trades taken against it.
 
-    A setup the export starts recording tomorrow still gets a row rather than
-    being dropped for not being on the list.
-    """
-    present = {str(v) for v in values.dropna().unique() if str(v).strip()}
-    extras = sorted(present - set(preferred))
-    return [label for label in preferred if label in present] + extras
-
-
-def calculate_setup_statistics(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Signal and Strategy win rates for Continuation against Reversal.
-
-    The type - continuation through the 30-minute level or reversal off it -
-    is known at entry, so it is a tradeable filter. "Default" is every trade;
-    the two type rows split it, so they sum to it. The four level-specific
-    setups ("High Continuation" and so on) are not listed: the level alone
-    says nothing, only the type it forms with Direction does.
+    The EMA is read at entry, so the alignment is a tradeable filter.
+    "Default" is every trade; the Aligned and Against rows split it, so they
+    sum to it. Both rows are always listed, even when one is empty.
 
     Args:
-        df: DataFrame with trading data, including a Type column
+        df: DataFrame with trading data, including an EMA column
 
     Returns:
-        DataFrame with columns: Setup, Trades, then RATE_COLUMNS
+        DataFrame with columns: EMA, Trades, then RATE_COLUMNS
     """
-    types = _ordered_labels(df['Type'], TYPE_ORDER)
     groups: List[Tuple] = [('Default', df)]
-    groups.extend((label, df[df['Type'] == label]) for label in types)
-    return _signal_strategy_rows(groups, 'Setup')
+    groups.extend((label, df[df['EMA'] == label]) for label in EMA_ORDER)
+    return _signal_strategy_rows(groups, 'EMA')
 
 
 # ---------------------------------------------------------------------------
@@ -891,18 +861,18 @@ def _longest_run(won: pd.Series, dates: pd.Series, value: bool) -> str:
 
 def calculate_streak_statistics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Longest winning and losing runs at 1:1, for every trade and for
-    Continuation trades.
+    Longest winning and losing runs at 1:1, for every trade and for each EMA
+    alignment.
 
     A trade is a win under the family's rule - Pullback < SL AND TP >= the 1R
     target for SL (target_pips) - and anything else breaks a winning run, so the stopped-out
     winner-that-wasn't counts as a loss here. Trades are read in date order;
-    the export's own order breaks ties within a day. The Continuation row runs
-    through only its own trades. Every 30MC trade is a Continuation, so there
-    is no Reversal row.
+    the export's own order breaks ties within a day. The EMA rows run through
+    only their own trades, so a loss against the trend does not break an
+    aligned run.
 
     Args:
-        df: DataFrame with trading data, including a Type column
+        df: DataFrame with trading data, including an EMA column
 
     Returns:
         DataFrame with columns: Trend, Trades, Longest Wins, Longest Losses
@@ -910,8 +880,9 @@ def calculate_streak_statistics(df: pd.DataFrame) -> pd.DataFrame:
     ordered = df.sort_values('Date', kind='stable') if len(df) else df
     groups: List[Tuple[str, pd.Series]] = [
         ('Default', pd.Series(True, index=ordered.index)),
-        ('Continuation', ordered['Type'] == 'Continuation'),
     ]
+    groups.extend((f'EMA {label}', ordered['EMA'] == label)
+                  for label in EMA_ORDER)
 
     won = _strategy_wins(ordered, ordered['SL'])
     results = []
@@ -946,11 +917,13 @@ def get_buffer_strategies() -> List[Tuple[str, Callable[[pd.DataFrame], pd.DataF
     """
     Strategies the ranked tables test.
 
-    "All Trades" keeps every trade's recorded stop; "Fixed SL X" replaces it
+    "All Trades" keeps every trade's recorded stop; "EMA Aligned" keeps only
+    the trades taken with the EMA(50) trend; "Fixed SL X" replaces every stop
     with X.
     """
     strategies: List[Tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]] = [
         ("All Trades", lambda df: df),
+        ("EMA Aligned", lambda df: df[df["EMA"] == EMA_ORDER[0]]),
     ]
     strategies.extend(
         (f"Fixed SL {x}", _fixed_sl_filter(x)) for x in FIXED_SL_STRATEGY_VALUES
@@ -1145,7 +1118,8 @@ def calculate_equity_curves(df: pd.DataFrame, rrr: float = 1) -> List[Dict]:
     a day. A win adds the RRR in R and a loss takes 1R, under the same rule as
     calculate_buffer_statistics (_strategy_row_wins). Every curve runs over
     every trade, so the curves line up in time. Commissions are already
-    inside the targets (target_pips).
+    inside the targets (target_pips). A trade the row does not take - one
+    against the EMA on the EMA Aligned row - leaves its curve flat.
 
     Args:
         df: DataFrame with trading data
@@ -1159,13 +1133,15 @@ def calculate_equity_curves(df: pd.DataFrame, rrr: float = 1) -> List[Dict]:
     ordered = df.sort_values('Date', kind='stable') if len(df) else df
     curves = []
     for strategy_name, filter_func in get_buffer_strategies():
-        won = _strategy_row_wins(filter_func(ordered), rrr)
-        per_trade = pd.Series(-1.0, index=ordered.index)
-        per_trade[won] = float(rrr)
+        taken = filter_func(ordered)
+        won = _strategy_row_wins(taken, rrr)
+        per_trade = pd.Series(0.0, index=ordered.index)
+        per_trade[taken.index] = -1.0
+        per_trade[won[won].index] = float(rrr)
         curve = [0.0] + per_trade.cumsum().round(6).tolist()
         curves.append({
             'label': strategy_name,
-            'trades': len(ordered),
+            'trades': len(taken),
             'outcome': curve[-1],
             'curve': curve,
         })

@@ -14,13 +14,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 
 from utils.continuation_reversal import (  # noqa: E402
     MAPPED_SL_PIPS,
+    EMA_ORDER,
     RATE_COLUMNS,
     RRR_TARGET_TICKS,
     RRR_RATIOS,
-    SETUP_ORDER,
     SL_FIXED_PIPS,
     TP_RANGES,
-    TYPE_ORDER,
     WEEKDAY_ORDER,
     _calculate_stats_with_buffer,
     _drop_scratch_columns,
@@ -29,7 +28,7 @@ from utils.continuation_reversal import (  # noqa: E402
     calculate_buffer_statistics,
     calculate_equity_curves,
     calculate_r_counts,
-    calculate_setup_statistics,
+    calculate_ema_statistics,
     calculate_sl_fixed_statistics,
     calculate_streak_statistics,
     calculate_tp_range_counts,
@@ -58,26 +57,26 @@ def get_sample_data():
 
     Every stop has an RRR target mapping, and so does every stop padded by
     a pip. Row 2 is the stopped-out winner-that-wasn't: Pullback 6.0 >= SL
-    5.0 with a TP of 20, so Signal counts it and Strategy does not. All four setups are
-    present so the setup and type tables each have every group.
+    5.0 with a TP of 20, so Signal counts it and Strategy does not. Both EMA
+    alignments are present, five trades each.
     """
-    setups = ['High Continuation', 'High Reversal', 'Low Continuation',
-              'Low Reversal', 'High Continuation', 'Low Reversal',
-              'High Reversal', 'Low Continuation', 'High Continuation',
-              'Low Reversal']
+    ema = ['Aligned', 'Against', 'Aligned', 'Against', 'Aligned', 'Against',
+           'Against', 'Aligned', 'Aligned', 'Against']
+    direction = ['Buy', 'Sell', 'Buy', 'Sell',
+                 'Buy', 'Sell', 'Buy', 'Sell', 'Buy', 'Sell']
+    opposite = {'Buy': 'Sell', 'Sell': 'Buy'}
     return pd.DataFrame({
         'Date': ['2025-02-03'] * 4 + ['2025-02-04'] * 3 + ['2025-02-05'] * 3,
         'Weekday': ['Monday'] * 4 + ['Tuesday'] * 3 + ['Wednesday'] * 3,
         'Trade': ['#1', '#2', '#3', '#4', '#1', '#2', '#3', '#1', '#2', '#3'],
-        'Direction': ['Buy', 'Sell', 'Buy', 'Sell',
-                      'Buy', 'Sell', 'Buy', 'Sell', 'Buy', 'Sell'],
-        '30M': [s.split()[0] for s in setups],
+        'Direction': direction,
+        'EMA(50)': [d if e == 'Aligned' else opposite[d]
+                    for d, e in zip(direction, ema)],
         'SL': [4.0, 5.0, 3.0, 6.0, 3.0, 6.0, 6.0, 3.0, 5.0, 5.0],
         'Pullback': [1.0, 6.0, 3.0, 3.5, 0.5, 6.0, 2.0, 3.0, 4.0, 1.5],
         'TP': [16.0, 20.0, 0.0, 25.0, 4.0, 0.0, 35.0, 0.0, 9.0, 12.0],
         'R': [3.0, -3.0, 0.0, 3.0, 1.0, 0.0, 5.0, 0.0, 1.0, 2.0],
-        'Setup': setups,
-        'Type': [s.split()[-1] for s in setups],
+        'EMA': ema,
     })
 
 
@@ -90,7 +89,7 @@ def get_empty_data():
 def test_load_data_reads_the_project_csv():
     df = load_data(CSV_PATH)
     assert len(df) > 0
-    for col in ('Date', 'Weekday', 'Trade', 'Direction', '30M',
+    for col in ('Date', 'Weekday', 'Trade', 'Direction', 'EMA(50)',
                 'SL', 'Pullback', 'TP'):
         assert col in df.columns
 
@@ -135,7 +134,7 @@ def test_load_data_keeps_every_trade_column():
     df = load_data(CSV_PATH)
     assert len(df) == raw['Date'].notna().sum()
     assert list(df.columns)[:8] == ['Date', 'Weekday', 'Trade', 'Direction',
-                                    '30M', 'SL', 'Pullback', 'TP']
+                                    'EMA(50)', 'SL', 'Pullback', 'TP']
 
 
 def test_load_data_fills_blank_numbers_with_zero():
@@ -153,10 +152,10 @@ def test_load_data_derives_r_from_the_rrr_targets(tmp_path):
     (16.6) but not 4R (22.0); 5.7 is short of 1R (5.8). A stopped-out trade
     keeps its reach, signed negative."""
     csv = tmp_path / 'trades.csv'
-    csv.write_text('Date,Weekday,Trade,Direction,30M,SL,Pullback,TP\n'
-                   '2026-09-28,Monday,#1,Buy,High,5.0,1.0,18\n'
-                   '2026-09-28,Monday,#2,Buy,High,5.0,1.0,5.7\n'
-                   '2026-09-28,Monday,#3,Buy,High,5.0,6.0,18\n')
+    csv.write_text('Date,Weekday,Trade,Direction,EMA(50),SL,Pullback,TP\n'
+                   '2026-09-28,Monday,#1,Buy,Buy,5.0,1.0,18\n'
+                   '2026-09-28,Monday,#2,Buy,Buy,5.0,1.0,5.7\n'
+                   '2026-09-28,Monday,#3,Buy,Buy,5.0,6.0,18\n')
     assert list(load_data(str(csv))['R']) == [3.0, 0.0, -3.0]
 
 
@@ -198,37 +197,34 @@ def test_load_data_signs_r_negative_when_the_stop_was_hit():
     assert (stopped['R'] < 0).all()
 
 
-def test_load_data_derives_the_setup_from_level_and_direction():
-    """30M holds only the level; Type comes from reading it against
-    Direction, and Setup joins the two."""
+def test_load_data_derives_the_ema_alignment_from_the_project_csv():
+    """EMA(50) holds the trend; EMA reads it against Direction."""
     df = load_data(CSV_PATH)
-    assert set(df['30M']) <= {'High', 'Low'}
-    assert set(df['Setup']) <= set(SETUP_ORDER)
-    assert set(df['Type']) <= set(TYPE_ORDER)
-    row = df.iloc[0]
-    assert row['Setup'] == f"{row['30M']} {row['Type']}"
+    assert set(df['EMA(50)']) <= {'Buy', 'Sell'}
+    assert set(df['EMA']) <= set(EMA_ORDER)
+    aligned = df['EMA(50)'] == df['Direction']
+    assert (df.loc[aligned, 'EMA'] == 'Aligned').all()
+    assert (df.loc[~aligned, 'EMA'] == 'Against').all()
 
 
-@pytest.mark.parametrize('level, direction, setup', [
-    ('High', 'Buy', 'High Continuation'),
-    ('High', 'Sell', 'High Reversal'),
-    ('Low', 'Sell', 'Low Continuation'),
-    ('Low', 'Buy', 'Low Reversal'),
+@pytest.mark.parametrize('trend, direction, alignment', [
+    ('Buy', 'Buy', 'Aligned'),
+    ('Sell', 'Sell', 'Aligned'),
+    ('Sell', 'Buy', 'Against'),
+    ('Buy', 'Sell', 'Against'),
 ])
-def test_load_data_maps_each_level_and_direction(tmp_path, level, direction,
-                                                 setup):
+def test_load_data_maps_each_trend_and_direction(tmp_path, trend, direction,
+                                                 alignment):
     csv = tmp_path / 'trades.csv'
-    csv.write_text('Date,Weekday,Trade,Direction,30M,SL,Pullback,TP\n'
-                   f'2025-02-03,Monday,#1,{direction},{level},4,1,8\n')
-    row = load_data(str(csv)).iloc[0]
-    assert row['Setup'] == setup
-    assert row['Type'] == setup.split()[-1]
+    csv.write_text('Date,Weekday,Trade,Direction,EMA(50),SL,Pullback,TP\n'
+                   f'2025-02-03,Monday,#1,{direction},{trend},4,1,8\n')
+    assert load_data(str(csv)).iloc[0]['EMA'] == alignment
 
 
 def test_load_data_drops_rows_without_a_date(tmp_path):
     csv = tmp_path / 'trades.csv'
-    csv.write_text('Date,Weekday,Trade,Direction,30M,SL,Pullback,TP\n'
-                   '2025-02-03,Monday,#1,Buy,High,4,1,12\n'
+    csv.write_text('Date,Weekday,Trade,Direction,EMA(50),SL,Pullback,TP\n'
+                   '2025-02-03,Monday,#1,Buy,Buy,4,1,12\n'
                    ',,,,,,,\n'
                    ',,,,,,,\n')
     df = load_data(str(csv))
@@ -241,9 +237,9 @@ def test_load_data_matches_the_sheets_own_headline_rates():
     cross-check. The sheet scores 1:1 on TP >= SL, this page on the 5.8 pip
     commission-adjusted target - no trade lands between the two, so the
     figures still agree."""
-    default = calculate_setup_statistics(load_data(CSV_PATH)).iloc[0]
-    assert default['Signal'] == '68.5%'
-    assert default['Strategy'] == '49.3%'
+    default = calculate_ema_statistics(load_data(CSV_PATH)).iloc[0]
+    assert default['Signal'] == '65.6%'
+    assert default['Strategy'] == '47.8%'
 
 
 def test_load_data_reads_a_blank_pullback_loser_as_stopped_out(tmp_path):
@@ -251,9 +247,9 @@ def test_load_data_reads_a_blank_pullback_loser_as_stopped_out(tmp_path):
     so it loses on every stop scenario, never as a clean run off the entry.
     A blank Pullback beside a real TP still loads as 0."""
     csv = tmp_path / 'trades.csv'
-    csv.write_text('Date,Weekday,Trade,Direction,30M,SL,Pullback,TP\n'
-                   '2026-09-28,Monday,#1,Buy,High,5.0,,\n'
-                   '2026-09-28,Monday,#2,Buy,High,5.0,,12\n')
+    csv.write_text('Date,Weekday,Trade,Direction,EMA(50),SL,Pullback,TP\n'
+                   '2026-09-28,Monday,#1,Buy,Buy,5.0,,\n'
+                   '2026-09-28,Monday,#2,Buy,Buy,5.0,,12\n')
     df = load_data(str(csv))
     assert list(df['Pullback']) == [5.0, 0.0]
     assert list(df['TP']) == [0.0, 12.0]
@@ -290,7 +286,7 @@ def test_chart_has_a_legend_breakeven_and_tooltips():
 
 
 def test_chart_draws_every_row_of_any_signal_strategy_table():
-    for stats in (calculate_setup_statistics(get_sample_data()),
+    for stats in (calculate_ema_statistics(get_sample_data()),
                   calculate_sl_fixed_statistics(get_sample_data())):
         html = create_signal_strategy_chart(stats)
         assert html.count('class="wr-row"') == len(stats)
@@ -334,51 +330,47 @@ def test_weekday_statistics_carries_only_win_rates():
         assert result[col].str.fullmatch(r'\d+\.\d%').all(), col
 
 
-def test_setup_statistics_lists_default_then_types_only():
-    """Every trade, then Continuation and Reversal - no per-level setup rows,
-    as the level alone says nothing."""
-    result = calculate_setup_statistics(get_sample_data())
-    assert list(result['Setup']) == ['Default'] + TYPE_ORDER
+def test_ema_statistics_lists_default_then_both_alignments():
+    result = calculate_ema_statistics(get_sample_data())
+    assert list(result['EMA']) == ['Default'] + EMA_ORDER
     assert result.iloc[0]['Trades'] == 10
-    assert list(result.columns) == ['Setup', 'Trades'] + RATE_COLUMNS
-    assert not set(result['Setup']) & set(SETUP_ORDER)
+    assert list(result.columns) == ['EMA', 'Trades'] + RATE_COLUMNS
 
 
-def test_setup_type_rows_sum_to_the_default_row():
-    result = calculate_setup_statistics(get_sample_data()).set_index('Setup')
-    assert (result.loc[TYPE_ORDER, 'Trades'].sum()
+def test_ema_rows_sum_to_the_default_row():
+    result = calculate_ema_statistics(get_sample_data()).set_index('EMA')
+    assert (result.loc[EMA_ORDER, 'Trades'].sum()
             == result.loc['Default', 'Trades'])
 
 
-def test_setup_statistics_keeps_an_unlisted_type():
-    """A type the data starts carrying tomorrow still gets a row, after the
-    known ones."""
+def test_ema_statistics_keeps_an_empty_alignment():
+    """Against stays listed when no trade was taken against the trend."""
     sample = get_sample_data()
-    sample.loc[0, 'Type'] = 'Sweep'
-    labels = list(calculate_setup_statistics(sample)['Setup'])
-    assert labels == ['Default'] + TYPE_ORDER + ['Sweep']
+    sample['EMA'] = 'Aligned'
+    result = calculate_ema_statistics(sample).set_index('EMA')
+    assert result.loc['Against', 'Trades'] == 0
 
 
-def test_setup_type_rows_score_their_own_trades():
-    """Continuation is sample rows 1, 3, 5, 8, 9 - Strategy wins 1, 5 and 9
-    (row 5's TP 4 clears the 3.8 pip 1R of its 3-pip stop). Reversal is rows
+def test_ema_rows_score_their_own_trades():
+    """Aligned is sample rows 1, 3, 5, 8, 9 - Strategy wins 1, 5 and 9
+    (row 5's TP 4 clears the 3.8 pip 1R of its 3-pip stop). Against is rows
     2, 4, 6, 7, 10 - wins 4, 7, 10."""
-    result = calculate_setup_statistics(get_sample_data()).set_index('Setup')
-    assert result.loc['Continuation', 'Strategy'] == '60.0%'
-    assert result.loc['Reversal', 'Strategy'] == '60.0%'
+    result = calculate_ema_statistics(get_sample_data()).set_index('EMA')
+    assert result.loc['Aligned', 'Strategy'] == '60.0%'
+    assert result.loc['Against', 'Strategy'] == '60.0%'
 
 
 def test_rate_tables_carry_no_one_pip_column():
     """A 1 pip buffer does not apply to this strategy."""
     assert RATE_COLUMNS == ['Signal', 'Strategy']
-    for fn in (calculate_weekday_statistics, calculate_setup_statistics,
+    for fn in (calculate_weekday_statistics, calculate_ema_statistics,
                calculate_sl_fixed_statistics):
         assert 'Strategy + 1 pip' not in fn(get_sample_data()).columns
 
 
 def test_every_rate_table_carries_both_readings():
     sample = get_sample_data()
-    for fn in (calculate_weekday_statistics, calculate_setup_statistics):
+    for fn in (calculate_weekday_statistics, calculate_ema_statistics):
         result = fn(sample)
         assert list(result.columns)[2:] == RATE_COLUMNS, fn.__name__
         for col in RATE_COLUMNS:
@@ -393,7 +385,7 @@ def test_fixed_sl_chart_draws_two_bars_a_row():
 
 def test_grouping_tables_handle_an_empty_dataset():
     empty = get_empty_data()
-    for fn in (calculate_weekday_statistics, calculate_setup_statistics):
+    for fn in (calculate_weekday_statistics, calculate_ema_statistics):
         result = fn(empty)
         assert (result['Trades'] == 0).all()
         assert (result[RATE_COLUMNS] == '0.0%').all().all()
@@ -419,10 +411,10 @@ def test_fixed_sl_default_row_keeps_the_recorded_stops():
     Default row of every other table."""
     sample = get_sample_data()
     fixed = calculate_sl_fixed_statistics(sample).iloc[0]
-    setup = calculate_setup_statistics(sample).iloc[0]
+    ema = calculate_ema_statistics(sample).iloc[0]
     assert fixed['Fixed SL'] == 'Default'
     assert (fixed['Trades'], fixed['Strategy']) == (len(sample),
-                                                    setup['Strategy'])
+                                                    ema['Strategy'])
 
 
 # --- TP distribution -----------------------------------------------------
@@ -471,10 +463,19 @@ def test_tp_bands_hold_each_trade_once():
 
 # --- Strategies tables ----------------------------------------------------
 
-def test_get_buffer_strategies_covers_all_trades_and_fixed_sl():
-    """Only All Trades and one Fixed SL N row per mapped stop."""
+def test_get_buffer_strategies_covers_all_trades_ema_and_fixed_sl():
+    """All Trades, EMA Aligned and one Fixed SL N row per mapped stop."""
     names = [name for name, _ in get_buffer_strategies()]
-    assert names == ['All Trades'] + [f'Fixed SL {n}' for n in MAPPED_SL_PIPS]
+    assert names == (['All Trades', 'EMA Aligned']
+                     + [f'Fixed SL {n}' for n in MAPPED_SL_PIPS])
+
+
+def test_ema_aligned_strategy_takes_only_aligned_trades():
+    """Aligned sample rows 1, 3, 5, 8, 9: wins 1, 5 and 9 at 1:1."""
+    result = calculate_buffer_statistics(get_sample_data(), ['EMA Aligned'])
+    row = result[result['RRR'] == '1:1'].iloc[0]
+    assert row['Trades'] == 5
+    assert row['Notation'] == '3W \u2013 2L'
 
 
 def test_buffer_statistics_scores_every_rrr():
@@ -484,15 +485,17 @@ def test_buffer_statistics_scores_every_rrr():
 
 
 def test_buffer_statistics_carry_no_trend_or_cap():
-    """Each strategy and RRR appears once, over every trade - there is no
-    Trend and no Cap SL column, and no Reversal rows."""
+    """Each strategy and RRR appears once, every row but EMA Aligned over
+    every trade - there is no Trend and no Cap SL column, and no Reversal
+    rows."""
     sample = get_sample_data()
     result = calculate_buffer_statistics(sample)
     assert list(result.columns) == ['Strategy', 'RRR', 'Trades', 'Notation',
                                     'Win Rate']
     assert not result.duplicated(['Strategy', 'RRR']).any()
-    assert len(result) == (1 + len(MAPPED_SL_PIPS)) * len(RRR_RATIOS)
-    assert (result['Trades'] == len(sample)).all()
+    assert len(result) == (2 + len(MAPPED_SL_PIPS)) * len(RRR_RATIOS)
+    every_trade = result[result['Strategy'] != 'EMA Aligned']
+    assert (every_trade['Trades'] == len(sample)).all()
 
 
 def test_buffer_statistics_carry_no_be_rule():
@@ -558,15 +561,15 @@ def test_cumulative_histogram_never_falls_below_the_exact_one():
 # --- table rendering ------------------------------------------------------
 
 def test_create_html_table_marks_percentage_columns_sortable():
-    stats = calculate_setup_statistics(get_sample_data())
-    html = create_html_table(stats, sort_id='setup-table')
-    assert 'id="setup-table"' in html
-    assert "sortAnalysisTable('setup-table'" in html
+    stats = calculate_ema_statistics(get_sample_data())
+    html = create_html_table(stats, sort_id='ema-table')
+    assert 'id="ema-table"' in html
+    assert "sortAnalysisTable('ema-table'" in html
     assert 'class="sortable"' in html
 
 
 def test_create_html_table_without_a_sort_id_is_not_sortable():
-    html = create_html_table(calculate_setup_statistics(get_sample_data()))
+    html = create_html_table(calculate_ema_statistics(get_sample_data()))
     assert 'class="sortable"' not in html
 
 
@@ -594,14 +597,15 @@ def test_tables_render_no_data_when_empty():
 # Streaks
 # ---------------------------------------------------------------------------
 
-def test_streak_statistics_lists_default_then_continuation():
-    """No Reversal row and no + 1 pip buffer rows."""
+def test_streak_statistics_lists_default_then_each_alignment():
+    """No + 1 pip buffer rows."""
     result = calculate_streak_statistics(get_sample_data())
-    assert list(result['Trend']) == ['Default', 'Continuation']
+    assert list(result['Trend']) == ['Default', 'EMA Aligned', 'EMA Against']
     assert list(result.columns) == [
         'Trend', 'Trades', 'Longest Wins', 'Longest Losses']
     assert result.iloc[0]['Trades'] == 10
     assert result.iloc[1]['Trades'] == 5
+    assert result.iloc[2]['Trades'] == 5
 
 
 def test_streak_statistics_uses_the_strategy_win_rule():
@@ -617,7 +621,7 @@ def test_streak_statistics_counts_longest_runs_with_their_dates():
     df = pd.DataFrame({
         'Date': ['2025-02-03', '2025-02-03', '2025-02-04', '2025-02-05',
                  '2025-02-05', '2025-02-06', '2025-02-07'],
-        'Type': ['Continuation'] * 7,
+        'EMA': ['Aligned'] * 7,
         'SL': [5.0] * 7,
         'Pullback': [1.0, 1.0, 1.0, 5.0, 5.0, 1.0, 5.0],
         'TP': [10.0, 10.0, 10.0, 0.0, 0.0, 10.0, 0.0],
@@ -625,14 +629,14 @@ def test_streak_statistics_counts_longest_runs_with_their_dates():
     result = calculate_streak_statistics(df).set_index('Trend')
     assert result.loc['Default', 'Longest Wins'] == '3 (2025-02-03 - 2025-02-04)'
     assert result.loc['Default', 'Longest Losses'] == '2 (2025-02-05 - 2025-02-05)'
-    assert result.loc['Continuation', 'Longest Wins'] == '3 (2025-02-03 - 2025-02-04)'
+    assert result.loc['EMA Aligned', 'Longest Wins'] == '3 (2025-02-03 - 2025-02-04)'
 
 
 def test_streak_statistics_reads_trades_in_date_order():
     """Two wins separated in the file but adjacent by date form one run."""
     df = pd.DataFrame({
         'Date': ['2025-02-04', '2025-02-03', '2025-02-05'],
-        'Type': ['Reversal'] * 3,
+        'EMA': ['Against'] * 3,
         'SL': [5.0] * 3,
         'Pullback': [1.0, 5.0, 1.0],
         'TP': [10.0, 0.0, 10.0],
@@ -641,26 +645,27 @@ def test_streak_statistics_reads_trades_in_date_order():
     assert result.loc['Default', 'Longest Wins'] == '2 (2025-02-04 - 2025-02-05)'
 
 
-def test_streak_statistics_type_rows_skip_the_other_type():
-    """A Reversal loss between two Continuation wins does not break the
-    Continuation run - that type alone would have won twice running."""
+def test_streak_statistics_ema_rows_skip_the_other_alignment():
+    """A loss against the trend between two aligned wins does not break the
+    aligned run - that filter alone would have won twice running."""
     df = pd.DataFrame({
         'Date': ['2025-02-03', '2025-02-04', '2025-02-05'],
-        'Type': ['Continuation', 'Reversal', 'Continuation'],
+        'EMA': ['Aligned', 'Against', 'Aligned'],
         'SL': [5.0] * 3,
         'Pullback': [1.0, 5.0, 1.0],
         'TP': [10.0, 0.0, 10.0],
     })
     result = calculate_streak_statistics(df).set_index('Trend')
     assert result.loc['Default', 'Longest Wins'].startswith('1 (')
-    assert result.loc['Continuation', 'Longest Wins'] == '2 (2025-02-03 - 2025-02-05)'
-    assert result.loc['Continuation', 'Longest Losses'] == '0'
+    assert result.loc['EMA Aligned', 'Longest Wins'] == '2 (2025-02-03 - 2025-02-05)'
+    assert result.loc['EMA Aligned', 'Longest Losses'] == '0'
+    assert result.loc['EMA Against', 'Longest Losses'] == '1 (2025-02-04 - 2025-02-04)'
 
 
 def test_streak_statistics_empty_dataset():
     result = calculate_streak_statistics(get_empty_data())
-    assert list(result['Trend']) == ['Default', 'Continuation']
-    assert list(result['Trades']) == [0] * 2
+    assert list(result['Trend']) == ['Default', 'EMA Aligned', 'EMA Against']
+    assert list(result['Trades']) == [0] * 3
     assert set(result['Longest Wins']) == {'0'}
     assert set(result['Longest Losses']) == {'0'}
 
@@ -694,6 +699,18 @@ def test_equity_curve_outcome_matches_the_table_notation():
         assert curve['trades'] == wins + losses == row['Trades']
 
 
+def test_ema_aligned_equity_curve_stays_flat_on_trades_against():
+    """Sample row 2 is Against: the EMA Aligned curve does not move on it.
+    The curve still spans every trade so it lines up with the others."""
+    df = get_sample_data()
+    curve = {c['label']: c
+             for c in calculate_equity_curves(df, 1)}['EMA Aligned']
+    assert len(curve['curve']) == len(df) + 1
+    assert curve['trades'] == 5
+    assert curve['curve'][1:3] == [1.0, 1.0]
+    assert curve['outcome'] == 3 - 2
+
+
 def test_equity_curves_carry_no_be_rule_rows():
     df = load_data(CSV_PATH)
     curves = {c['label']: c for c in calculate_equity_curves(df, 2)}
@@ -705,7 +722,7 @@ def test_equity_curves_carry_no_be_rule_rows():
 def test_equity_curves_walk_trades_in_date_order():
     df = pd.DataFrame({
         'Date': ['2025-02-04', '2025-02-03'],
-        'Type': ['Continuation', 'Continuation'],
+        'EMA': ['Aligned', 'Aligned'],
         'SL': [5.0, 5.0], 'Pullback': [1.0, 5.0], 'TP': [10.0, 0.0],
     })
     curves = {c['label']: c for c in calculate_equity_curves(df, 1)}

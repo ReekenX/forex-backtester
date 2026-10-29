@@ -47,8 +47,7 @@ CSV_PATH = os.path.join(
 
 def get_sample_data():
     """Six trades over three days, with one stopped-out winner-that-wasn't."""
-    setups = ['High Continuation', 'High Reversal', 'Low Continuation',
-              'Low Reversal', 'High Continuation', 'Low Reversal']
+    ema = ['Aligned', 'Against', 'Aligned', 'Against', 'Aligned', 'Against']
     return pd.DataFrame({
         'Date': ['2025-02-03', '2025-02-03', '2025-02-04',
                  '2025-02-04', '2025-02-05', '2025-02-05'],
@@ -56,13 +55,12 @@ def get_sample_data():
                     'Tuesday', 'Wednesday', 'Wednesday'],
         'Trade': ['#1', '#2', '#1', '#2', '#1', '#2'],
         'Direction': ['Buy', 'Sell', 'Buy', 'Sell', 'Buy', 'Sell'],
-        '30M': [s.split()[0] for s in setups],
+        'EMA(50)': ['Buy', 'Buy', 'Buy', 'Buy', 'Buy', 'Buy'],
         'SL': [4.0, 6.0, 3.0, 3.0, 4.0, 5.0],
         'Pullback': [0.7, 6.0, 3.1, 0.0, 0.9, 2.4],
         'TP': [34.0, 0.0, 31.0, 9.0, 17.0, 7.0],
         'R': [7.0, 0.0, -8.0, 2.0, 3.0, 1.0],
-        'Setup': setups,
-        'Type': [s.split()[-1] for s in setups],
+        'EMA': ema,
     })
 
 
@@ -127,8 +125,8 @@ def test_build_report_names_the_strategy_and_its_source():
 def test_build_report_renders_data_values():
     html = build_report(get_sample_data(), '2025-02-06 10:00:00', 'abc123')
     assert 'Monday' in html
-    assert 'Continuation' in html
-    assert 'High Continuation' not in html
+    assert 'EMA Aligned' in html
+    assert 'Continuation' not in html
     assert '2025-02-03' in html
 
 
@@ -355,11 +353,12 @@ def test_render_error_then_recover(tmp_path):
 
 # --- section order and table conventions ----------------------------------
 
-def test_weekday_leads_the_page_straight_into_the_stop_tables():
-    """Every 30MC trade is a Continuation and every stop is 5 pips, so there
-    is no Setup or SL Range table - Weekday is followed by Fixed SL."""
+def test_weekday_and_ema_lead_the_page_into_the_stop_tables():
+    """Every stop is 5 pips, so there is no SL Range table, and the 30M
+    column is gone, so there is no Setup table - Weekday and EMA are
+    followed by Fixed SL."""
     anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
-    assert anchors[:2] == ['weekday', 'sl-fixed']
+    assert anchors[:3] == ['weekday', 'ema', 'sl-fixed']
     assert 'setup' not in anchors and 'sl-range' not in anchors
 
 
@@ -378,7 +377,7 @@ def _section_html(anchor, df=None):
 
 
 def test_every_section_up_to_max_sl_puts_a_chart_below_its_table():
-    for anchor in ('weekday', 'sl-fixed'):
+    for anchor in ('weekday', 'ema', 'sl-fixed'):
         html = _section_html(anchor)
         assert html.count('class="wr-chart"') == 1, anchor
         assert html.index('<table') < html.index('class="wr-chart"'), anchor
@@ -392,6 +391,14 @@ def test_adding_buffer_section_is_gone():
 def test_pullback_section_is_gone():
     anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
     assert 'pullback' not in anchors
+
+
+def test_ema_section_lists_default_then_both_alignments():
+    html = _section_html('ema')
+    table = html[html.index('<table'):html.index('</table>')]
+    assert 'id="ema-table"' in table
+    assert (table.index('>Default<') < table.index('>Aligned<')
+            < table.index('>Against<'))
 
 
 def test_tp_range_carries_no_win_rate_chart():
@@ -458,7 +465,7 @@ def test_strategies_tables_carry_no_rrr_column():
         assert '>1:' not in table
 
 
-def test_strategies_tables_list_all_trades_and_fixed_sl_only():
+def test_strategies_tables_list_all_trades_ema_and_fixed_sl_only():
     """No Trend, no Cap SL and no Reversal rows."""
     for rrr in RRR_RATIOS:
         html = _section_html(f'strategies-1-{rrr}')
@@ -467,6 +474,7 @@ def test_strategies_tables_list_all_trades_and_fixed_sl_only():
                      'Max SL'):
             assert gone not in table, gone
         assert '>All Trades<' in table and '>Fixed SL 5<' in table
+        assert '>EMA Aligned<' in table
 
 
 def test_strategies_tables_carry_no_be_rule():
@@ -530,7 +538,7 @@ def test_streaks_table_sits_above_the_strategies_tables():
     assert html.index('id="streaks"') > html.index('id="r-distribution"')
     assert 'R Distribution (Exact)' not in html
     assert html.index('id="streaks"') < html.index('id="strategies-1-1"')
-    for label in ('Default', 'Continuation'):
+    for label in ('Default', 'EMA Aligned', 'EMA Against'):
         assert label in html
     assert 'Longest Wins' in html and 'Longest Losses' in html
 

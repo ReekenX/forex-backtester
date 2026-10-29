@@ -582,8 +582,13 @@ export. It differs from 30MCR in the data only:
 - **There is no `BE Rule (10 pips)` column**, so the break-even rule is
   gone: no `break_even_outcomes`, no `BE Rule Applied` column or `/ BE`
   equity curves. The 1:2 and 1:3 Strategies tables run each row once.
-- **It has no `Setup Analysis`.** Every trade is a Continuation, so the
-  table only repeated Default.
+- **`30M` is replaced by `EMA(50)`** - the trend (`Buy` or `Sell`) the
+  50-period EMA showed at entry. `load_data` reads it against `Direction`
+  into `EMA`: `Aligned` when they match, `Against` otherwise. It is known at
+  entry, so it is a tradeable filter. There is no `Type` or `Setup` column.
+- **`EMA Alignment Analysis` replaces `Setup Analysis`**, right below
+  `Weekday`: `Default`, `Aligned`, `Against` (`calculate_ema_statistics`),
+  with the Signal/Strategy chart under it.
 - **It has no `SL Range Analysis`.** Every stop is 5 pips, so every trade sat
   in one band. Weekday leads straight into `Fixed SL`.
 - **It has no `Cap SL Analysis`.** With every stop at 5 pips a cap only
@@ -595,21 +600,21 @@ export. It differs from 30MCR in the data only:
 - **It has no `Adding Buffer` and no 1 pip buffer anywhere.** A buffer does
   not apply to this strategy: there is no `Strategy + 1 pip` column on any
   table or chart (`RATE_COLUMNS` is `Signal, Strategy`).
-- **The Strategies tables list `All Trades` and `Fixed SL N` only** - one
-  row per mapped stop, every trade scored, columns `Strategy, Trades,
-  Notation, Win Rate`. There is no `Buffer`, `Trend` or `Cap SL` column and
-  no `Reversal` row; the equity chart draws one curve per row.
-- **`Streaks` lists `Default` and `Continuation` only** - no `Reversal`
-  row and no `+ 1 pip buffer` rows.
+- **The Strategies tables list `All Trades`, `EMA Aligned` and `Fixed SL
+  N`** - one row per mapped stop, columns `Strategy, Trades, Notation, Win
+  Rate`. `EMA Aligned` takes only aligned trades; its equity curve stays
+  flat on the rest. There is no `Buffer`, `Trend` or `Cap SL` column and no
+  `Reversal` row; the equity chart draws one curve per row.
+- **`Streaks` lists `Default`, `EMA Aligned` and `EMA Against`** - each EMA
+  row walks only its own trades. No `+ 1 pip buffer` rows.
 - **Every RRR target is commission-adjusted** - see "Commission-Adjusted
   RRR Targets". `Fixed SL` and the Strategies `Fixed SL X` rows cover the
   mapped stops only (3-7 pips).
 - **`TP Range Analysis` uses six bands** - `0-10`, `10-15`, `15-20`,
   `20-25`, `25-30` and `30+ pips` - and its chart draws one column per band
   (`calculate_tp_range_counts`), not one per pip.
-- **`Scaling` follows `TP`** and is empty so far. The scratch cut drops it
-  with the sheet's `Signal` / `WR` columns, which the Default row matches
-  (68.5% / 49.3%).
+- **The scratch cut drops the sheet's `Signal` / `WR` columns** right of
+  `TP`, which the Default row matches (65.6% / 47.8%).
 
 Sidecars are `build-id-30mc.txt` / `build-id-30mc.js`, storage keys
 `30mc-scroll` / `30mc-sorts`.
