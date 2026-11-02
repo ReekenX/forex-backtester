@@ -36,6 +36,7 @@ from utils.continuation_reversal import (
     calculate_streak_statistics,
     calculate_tp_statistics,
     calculate_weekday_statistics,
+    calculate_winning_trades,
     create_html_table,
     create_equity_chart,
     create_r_histogram_combined,
@@ -119,6 +120,13 @@ def _tp_section(df: pd.DataFrame) -> str:
 def _streaks_section(df: pd.DataFrame) -> str:
     return create_sortable_table(
         calculate_streak_statistics(df), "streaks-table", sortable=False,
+        first_col_width=FIRST_COL_WIDTH
+    )
+
+
+def _winning_trades_section(df: pd.DataFrame) -> str:
+    return create_sortable_table(
+        calculate_winning_trades(df), "winning-trades-table", sortable=False,
         first_col_width=FIRST_COL_WIDTH
     )
 
@@ -252,6 +260,16 @@ SECTIONS.extend(
     )
     for rrr in RRR_RATIOS
 )
+
+SECTIONS.append((
+    "winning-trades",
+    "Winning Trades",
+    "Winning Trades",
+    "Every trade that won at 1:1 on its recorded stop (Pullback &lt; SL AND "
+    "TP &gt;= the 1R target), sorted by Pullback, shallowest first. R is the "
+    "whole RRR levels TP reached on the commission-adjusted targets.",
+    _winning_trades_section,
+))
 
 
 def compute_build_id(df: pd.DataFrame) -> str:

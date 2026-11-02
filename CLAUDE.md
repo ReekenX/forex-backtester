@@ -615,7 +615,12 @@ export. It differs from 30MCR in the data only:
   `20-25`, `25-30` and `30+ pips` - and its chart draws one column per band
   (`calculate_tp_range_counts`), not one per pip.
 - **The scratch cut drops the sheet's `Signal` / `WR` columns** right of
-  `TP`, which the Default row matches (65.6% / 47.8%).
+  `TP`, which the Default row matches (64.6% / 45.8%).
+- **`Winning Trades` closes the page**, below `Strategies (1:3 RRR)`: every
+  trade with `R > 0` (the 1:1 win rule on the recorded stop), columns
+  `Trade` (`2026-11-02 #2`), `SL`, `Pullback`, `R`, sorted by `Pullback`
+  ascending, ties in date order (`calculate_winning_trades`). Not
+  click-to-sort - the order is the point.
 
 Sidecars are `build-id-30mc.txt` / `build-id-30mc.js`, storage keys
 `30mc-scroll` / `30mc-sorts`.

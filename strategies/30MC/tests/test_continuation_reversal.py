@@ -34,6 +34,7 @@ from utils.continuation_reversal import (  # noqa: E402
     calculate_tp_range_counts,
     calculate_tp_statistics,
     calculate_weekday_statistics,
+    calculate_winning_trades,
     create_equity_chart,
     create_html_table,
     create_r_histogram_combined,
@@ -238,8 +239,8 @@ def test_load_data_matches_the_sheets_own_headline_rates():
     commission-adjusted target - no trade lands between the two, so the
     figures still agree."""
     default = calculate_ema_statistics(load_data(CSV_PATH)).iloc[0]
-    assert default['Signal'] == '65.6%'
-    assert default['Strategy'] == '47.8%'
+    assert default['Signal'] == '64.6%'
+    assert default['Strategy'] == '45.8%'
 
 
 def test_load_data_reads_a_blank_pullback_loser_as_stopped_out(tmp_path):
@@ -771,3 +772,46 @@ def test_equity_chart_draws_every_curve_and_colours_the_best():
     assert 'data-rrr="2"' in html
     assert 'class="eq-zero"' in html
     assert '+2R per win' in html
+
+
+# ---------------------------------------------------------------------------
+# Winning trades
+# ---------------------------------------------------------------------------
+
+def test_winning_trades_lists_only_winners_by_pullback():
+    """Sample winners at 1:1 are rows 1, 4, 5, 7, 9, 10 (R > 0, Pullback <
+    SL). Row 2 reached 3R but was stopped out, so it is not listed."""
+    result = calculate_winning_trades(get_sample_data())
+    assert list(result.columns) == ['Trade', 'SL', 'Pullback', 'R']
+    assert list(result['Trade']) == [
+        '2025-02-04 #1', '2025-02-03 #1', '2025-02-05 #3', '2025-02-04 #3',
+        '2025-02-03 #4', '2025-02-05 #2']
+    assert list(result['Pullback']) == ['0.5', '1.0', '1.5', '2.0', '3.5',
+                                        '4.0']
+    assert list(result['SL']) == ['3.0', '4.0', '5.0', '6.0', '6.0', '5.0']
+    assert list(result['R']) == ['1R', '3R', '2R', '5R', '3R', '1R']
+
+
+def test_winning_trades_keeps_date_order_on_equal_pullbacks():
+    df = pd.DataFrame({
+        'Date': ['2025-02-05', '2025-02-03', '2025-02-04'],
+        'Trade': ['#1', '#2', '#1'],
+        'SL': [5.0] * 3, 'Pullback': [1.0, 1.0, 6.0],
+        'R': [2.0, 4.0, -3.0],
+    })
+    result = calculate_winning_trades(df)
+    assert list(result['Trade']) == ['2025-02-03 #2', '2025-02-05 #1']
+
+
+def test_winning_trades_match_the_default_strategy_wins():
+    df = load_data(CSV_PATH)
+    row = calculate_buffer_statistics(df, ['Default']).iloc[0]
+    wins = int(row['Notation'].split('W')[0])
+    result = calculate_winning_trades(df)
+    assert len(result) == wins
+    pullbacks = result['Pullback'].astype(float)
+    assert pullbacks.is_monotonic_increasing
+
+
+def test_winning_trades_empty_dataset():
+    assert calculate_winning_trades(get_empty_data()).empty

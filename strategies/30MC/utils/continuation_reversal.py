@@ -897,6 +897,35 @@ def calculate_streak_statistics(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Winning trades
+# ---------------------------------------------------------------------------
+
+def calculate_winning_trades(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Every trade that won on its recorded stop, shallowest pullback first.
+
+    A winner is R > 0: the trade survived its stop and reached at least the
+    1R target - the family's 1:1 win rule. Trades with the same pullback keep
+    date order.
+
+    Args:
+        df: DataFrame with trading data, including the derived R column
+
+    Returns:
+        DataFrame with columns: Trade ("2026-11-02 #2"), SL, Pullback, R
+    """
+    ordered = df.sort_values('Date', kind='stable') if len(df) else df
+    winners = ordered[ordered['R'] > 0].sort_values('Pullback', kind='stable')
+    return pd.DataFrame({
+        'Trade': [f"{date} {trade}" for date, trade
+                  in zip(winners['Date'], winners['Trade'])],
+        'SL': [f"{sl:.1f}" for sl in winners['SL']],
+        'Pullback': [f"{pb:.1f}" for pb in winners['Pullback']],
+        'R': [f"{r:.0f}R" for r in winners['R']],
+    })
+
+
+# ---------------------------------------------------------------------------
 # Strategies tables
 # ---------------------------------------------------------------------------
 

@@ -518,11 +518,8 @@ def test_buffer_statistics_feed_the_strategies_tables():
     assert set(stats['Strategy']) == set(names)
 
 
-def test_strategies_tables_close_the_page():
-    """The Three Setups trade log was removed, so the last Strategies table
-    is the final section."""
+def test_three_setups_trade_log_is_gone():
     anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
-    assert anchors[-1] == f'strategies-1-{RRR_RATIOS[-1]}'
     assert 'three-setups' not in anchors
 
 
@@ -568,3 +565,13 @@ def test_weekday_table_colours_every_rate_against_breakeven():
     assert 'class="positive-edge"' in table
     assert 'class="negative-edge"' in table
     assert '<td>50.0%</td>' in table
+
+
+def test_winning_trades_table_closes_the_page():
+    anchors = [anchor for anchor, _, _, _, _ in SECTIONS]
+    assert anchors[-1] == 'winning-trades'
+    assert anchors[-2] == 'strategies-1-3'
+    html = _section_html('winning-trades')
+    assert 'id="winning-trades-table"' in html
+    assert 'class="sortable"' not in html
+    assert '>2025-02-03 #1<' in html
