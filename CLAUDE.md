@@ -620,7 +620,9 @@ export. It differs from 30MCR in the data only:
   trade with `R > 0` (the 1:1 win rule on the recorded stop), columns
   `Trade` (`2026-11-02 #2`), `SL`, `Pullback`, `R`, sorted by `Pullback`
   ascending, ties in date order (`calculate_winning_trades`). Not
-  click-to-sort - the order is the point.
+  click-to-sort - the order is the point. Its heading carries the row count,
+  `Winning Trades (44)`, through `report.py`'s `HEADING_ROW_COUNTS`; the nav
+  label stays bare.
 
 Sidecars are `build-id-30mc.txt` / `build-id-30mc.js`, storage keys
 `30mc-scroll` / `30mc-sorts`.

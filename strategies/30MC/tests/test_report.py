@@ -575,3 +575,16 @@ def test_winning_trades_table_closes_the_page():
     assert 'id="winning-trades-table"' in html
     assert 'class="sortable"' not in html
     assert '>2025-02-03 #1<' in html
+
+
+def test_winning_trades_heading_counts_its_rows():
+    """Sample winners at 1:1 are rows 1, 3, 5 and 6 (R > 0)."""
+    html = build_report(get_sample_data(), '2025-02-06 10:00:00', 'abc123')
+    rows = html.count('<td>', html.index('id="winning-trades-table"')) // 4
+    assert '>Winning Trades (4)</h2>' in html
+    assert rows == 4
+
+
+def test_winning_trades_heading_counts_zero_on_an_empty_dataset():
+    html = build_report(get_empty_data(), '2025-02-06 10:00:00', 'abc123')
+    assert '>Winning Trades (0)</h2>' in html

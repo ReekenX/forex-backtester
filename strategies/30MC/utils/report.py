@@ -21,7 +21,7 @@ this page rather than reusing the 15C or 5OB names.
 
 import hashlib
 import html
-from typing import Callable, List, Tuple
+from typing import Callable, Dict, List, Tuple
 
 import pandas as pd
 
@@ -272,6 +272,19 @@ SECTIONS.append((
 ))
 
 
+# Sections whose heading carries the row count of their table, as
+# "Winning Trades (44)". Keyed by anchor; each returns that count.
+HEADING_ROW_COUNTS: Dict[str, Callable[[pd.DataFrame], int]] = {
+    "winning-trades": lambda df: len(calculate_winning_trades(df)),
+}
+
+
+def _heading_for(anchor: str, heading: str, df: pd.DataFrame) -> str:
+    """The section heading, with its table's row count where one is kept."""
+    count = HEADING_ROW_COUNTS.get(anchor)
+    return f"{heading} ({count(df)})" if count else heading
+
+
 def compute_build_id(df: pd.DataFrame) -> str:
     """
     Short digest of the loaded data, used to decide whether to reload the page.
@@ -482,7 +495,8 @@ def build_report(df: pd.DataFrame, generated_at: str, build_id: str,
         Complete self-contained HTML document
     """
     sections = "".join(
-        _render_section(anchor, heading, note, builder(df))
+        _render_section(anchor, _heading_for(anchor, heading, df), note,
+                        builder(df))
         for anchor, _, heading, note, builder in SECTIONS
     )
 
